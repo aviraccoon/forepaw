@@ -14,6 +14,12 @@ struct Click: AsyncParsableCommand {
     @Option(name: .long, help: "Target application name")
     var app: String
 
+    @Flag(name: .long, help: "Right-click (context menu)")
+    var right: Bool = false
+
+    @Flag(name: .long, help: "Double-click")
+    var double: Bool = false
+
     @Flag(name: .long, help: "JSON output")
     var json: Bool = false
 
@@ -21,8 +27,12 @@ struct Click: AsyncParsableCommand {
         guard let elementRef = ElementRef.parse(ref) else {
             throw ValidationError("Invalid ref: \(ref). Expected format: @e1, @e2, etc.")
         }
+        let options = ClickOptions(
+            button: right ? .right : .left,
+            clickCount: double ? 2 : 1
+        )
         let provider = DarwinProvider()
-        let result = try await provider.click(ref: elementRef, app: app)
+        let result = try await provider.click(ref: elementRef, app: app, options: options)
         let formatter = OutputFormatter(json: json)
         print(formatter.format(success: result.success, command: "click", data: ["text": result.message ?? "clicked"]))
     }
@@ -129,12 +139,23 @@ struct OCRClick: AsyncParsableCommand {
     @Option(name: .long, help: "Window title or ID (e.g. 'Hacker News' or 'w-7290')")
     var window: String?
 
+    @Flag(name: .long, help: "Right-click (context menu)")
+    var right: Bool = false
+
+    @Flag(name: .long, help: "Double-click")
+    var double: Bool = false
+
     @Flag(name: .long, help: "JSON output")
     var json: Bool = false
 
     mutating func run() async throws {
+        let options = ClickOptions(
+            button: right ? .right : .left,
+            clickCount: double ? 2 : 1
+        )
         let provider = DarwinProvider()
-        let result = try await provider.ocrClick(text: text, app: app, window: window)
+        let result = try await provider.ocrClick(
+            text: text, app: app, window: window, options: options)
         let formatter = OutputFormatter(json: json)
         print(
             formatter.format(success: result.success, command: "ocr-click", data: ["text": result.message ?? "clicked"])

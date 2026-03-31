@@ -104,6 +104,27 @@ public struct ActionResult: Sendable {
     }
 }
 
+/// Mouse button for click actions.
+public enum MouseButton: String, Sendable {
+    case left
+    case right
+}
+
+/// Click behavior modifiers.
+public struct ClickOptions: Sendable {
+    public let button: MouseButton
+    public let clickCount: Int
+
+    public init(button: MouseButton = .left, clickCount: Int = 1) {
+        self.button = button
+        self.clickCount = clickCount
+    }
+
+    public static let normal = ClickOptions()
+    public static let rightClick = ClickOptions(button: .right)
+    public static let doubleClick = ClickOptions(clickCount: 2)
+}
+
 public struct KeyCombo: Sendable {
     public let key: String
     public let modifiers: [Modifier]

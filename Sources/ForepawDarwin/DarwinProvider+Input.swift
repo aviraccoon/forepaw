@@ -13,22 +13,30 @@ extension DarwinProvider {
     }
 
     /// Click with an app name, resolving the ref by re-walking the tree.
-    public func click(ref: ElementRef, app: String) async throws -> ActionResult {
+    public func click(
+        ref: ElementRef, app: String, options: ClickOptions = .normal
+    ) async throws -> ActionResult {
         let runningApp = try findApp(named: app)
         let element = try resolveRef(ref, app: app)
         // Activate the app before mouse clicks -- CGEvent targets whatever
         // is under the cursor, so the app must be frontmost.
         runningApp.activate()
         try await Task.sleep(nanoseconds: 300_000_000)  // 300ms for activation
-        return try clickElement(element)
+        return try clickElement(element, options: options)
     }
 
-    internal func clickElement(_ element: AXUIElement) throws -> ActionResult {
+    internal func clickElement(
+        _ element: AXUIElement, options: ClickOptions = .normal
+    ) throws -> ActionResult {
         let role = getAttribute(element, kAXRoleAttribute) as? String ?? ""
+        let button: CGMouseButton = options.button == .right ? .right : .left
+        let isRightClick = options.button == .right
+        let isDoubleClick = options.clickCount > 1
 
         // For web content links, prefer mouse click -- AXPress often doesn't
         // trigger navigation in browsers.
-        let preferMouse = role == "AXLink"
+        // For right-click/double-click, always use mouse (AXPress can't do these).
+        let preferMouse = role == "AXLink" || isRightClick || isDoubleClick
 
         if !preferMouse {
             // Try AXPress first (accessibility action)
@@ -41,12 +49,13 @@ extension DarwinProvider {
         // Mouse click at element center
         if let position = getPosition(of: element), let size = getSize(of: element) {
             let point = CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2)
-            try performMouseClick(at: point)
-            return ActionResult(success: true, message: "clicked at \(Int(point.x)),\(Int(point.y))")
+            let label = isRightClick ? "right-clicked" : isDoubleClick ? "double-clicked" : "clicked"
+            try performMouseClick(at: point, button: button, clickCount: Int64(options.clickCount))
+            return ActionResult(success: true, message: "\(label) at \(Int(point.x)),\(Int(point.y))")
         }
 
-        // Last resort for links: try AXPress anyway
-        if preferMouse {
+        // Last resort for links: try AXPress anyway (only for regular left click)
+        if !isRightClick && !isDoubleClick && preferMouse {
             let pressResult = AXUIElementPerformAction(element, kAXPressAction as CFString)
             if pressResult == .success {
                 return ActionResult(success: true, message: "pressed via AX (fallback)")
@@ -197,17 +206,29 @@ extension DarwinProvider {
             message: "scrolled \(direction) \(amount) ticks at \(Int(scrollPoint.x)),\(Int(scrollPoint.y))")
     }
 
-    internal func performMouseClick(at point: CGPoint) throws {
-        guard
-            let mouseDown = CGEvent(
-                mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left),
-            let mouseUp = CGEvent(
-                mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
-        else {
-            throw ForepawError.actionFailed("Failed to create mouse events")
+    internal func performMouseClick(
+        at point: CGPoint, button: CGMouseButton = .left, clickCount: Int64 = 1
+    ) throws {
+        let downType: CGEventType = button == .right ? .rightMouseDown : .leftMouseDown
+        let upType: CGEventType = button == .right ? .rightMouseUp : .leftMouseUp
+
+        for i in 1...clickCount {
+            guard
+                let mouseDown = CGEvent(
+                    mouseEventSource: nil, mouseType: downType, mouseCursorPosition: point, mouseButton: button),
+                let mouseUp = CGEvent(
+                    mouseEventSource: nil, mouseType: upType, mouseCursorPosition: point, mouseButton: button)
+            else {
+                throw ForepawError.actionFailed("Failed to create mouse events")
+            }
+            mouseDown.setIntegerValueField(.mouseEventClickState, value: i)
+            mouseUp.setIntegerValueField(.mouseEventClickState, value: i)
+            mouseDown.post(tap: .cghidEventTap)
+            mouseUp.post(tap: .cghidEventTap)
+            if i < clickCount {
+                Thread.sleep(forTimeInterval: 0.01)  // small delay between clicks
+            }
         }
-        mouseDown.post(tap: .cghidEventTap)
-        mouseUp.post(tap: .cghidEventTap)
     }
 
     internal func typeViaKeyboard(_ text: String) throws {

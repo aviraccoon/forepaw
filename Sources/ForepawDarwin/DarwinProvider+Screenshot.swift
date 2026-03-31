@@ -30,7 +30,10 @@ extension DarwinProvider {
     }
 
     /// OCR-click: screenshot, find text, click at its position (with window offset).
-    public func ocrClick(text: String, app: String, window: String? = nil) async throws -> ActionResult {
+    public func ocrClick(
+        text: String, app: String, window: String? = nil,
+        options: ClickOptions = .normal
+    ) async throws -> ActionResult {
         let matches = try await ocr(app: app, window: window, find: text)
         guard let match = matches.first else {
             throw ForepawError.actionFailed("No text matching '\(text)' found on screen")
@@ -49,11 +52,16 @@ extension DarwinProvider {
             y: match.center.y / scaleFactor + resolved.origin.y
         )
 
+        let isRightClick = options.button == .right
+        let isDoubleClick = options.clickCount > 1
+        let label = isRightClick ? "right-clicked" : isDoubleClick ? "double-clicked" : "clicked"
+        let cgButton: CGMouseButton = isRightClick ? .right : .left
+
         runningApp.activate()
         try await Task.sleep(nanoseconds: 300_000_000)
-        try performMouseClick(at: screenPoint)
+        try performMouseClick(at: screenPoint, button: cgButton, clickCount: Int64(options.clickCount))
         return ActionResult(
-            success: true, message: "clicked '\(match.text)' at \(Int(screenPoint.x)),\(Int(screenPoint.y))")
+            success: true, message: "\(label) '\(match.text)' at \(Int(screenPoint.x)),\(Int(screenPoint.y))")
     }
 
     /// Find a window for an app, optionally matching by title or window ID.

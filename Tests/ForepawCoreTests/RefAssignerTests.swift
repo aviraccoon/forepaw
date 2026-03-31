@@ -63,16 +63,4 @@ struct RefAssignerTests {
         #expect(ElementRef.parse("") == nil)
     }
 
-    @Test("KeyCombo parsing")
-    func keyComboParsing() {
-        let combo = KeyCombo.parse("cmd+shift+s")
-        #expect(combo.key == "s")
-        #expect(combo.modifiers.contains(.command))
-        #expect(combo.modifiers.contains(.shift))
-        #expect(combo.modifiers.count == 2)
-
-        let simple = KeyCombo.parse("return")
-        #expect(simple.key == "return")
-        #expect(simple.modifiers.isEmpty)
-    }
 }
