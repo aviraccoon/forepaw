@@ -17,7 +17,7 @@ xcrun swift-format format -i -r Sources/ Tests/  # Auto-format
 
 | Task | Location |
 |------|----------|
-| Add/modify CLI commands | `Sources/Forepaw/Forepaw.swift` |
+| Add/modify CLI commands | `Sources/Forepaw/Commands+*.swift` |
 | Platform-agnostic types & logic | `Sources/ForepawCore/` |
 | macOS AX/OCR/input implementation | `Sources/ForepawDarwin/` |
 | Core tests | `Tests/ForepawCoreTests/` |
@@ -54,3 +54,4 @@ xcrun swift-format format -i -r Sources/ Tests/  # Auto-format
 - Output is plain text by default, `--json` for structured JSON.
 - Element names: check `AXTitle`, then `AXDescription`, then `AXTitleUIElement` (points to a label element), then first `AXStaticText` child's `AXValue`. This chain (`computedName`) handles cells, rows, and other container elements.
 - Keystroke simulation needs inter-character delay (~8ms) for Electron apps. Without it, characters get dropped.
+- **Every feature or behavior change must update the agent skill** (`.agents/skills/forepaw/SKILL.md`) and `README.md`. The skill is how agents learn to use forepaw -- if a capability isn't documented there, it doesn't exist to them.

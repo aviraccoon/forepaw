@@ -58,13 +58,19 @@ Returns a PNG path. Use when you need to see what's on screen (debugging visual 
 
 ```bash
 forepaw click @e3 --app "App Name"
+forepaw click @e3 --app "App Name" --right    # right-click (context menu)
+forepaw click @e3 --app "App Name" --double   # double-click
 ```
 
 ### Click by text (from OCR)
 
 ```bash
 forepaw ocr-click "Button Label" --app Discord
+forepaw ocr-click "file.txt" --app Finder --double   # double-click
+forepaw ocr-click "item" --app "App Name" --right    # right-click
 ```
+
+`--right` and `--double` work on both `click` and `ocr-click`. Right-click opens context menus. Double-click for selecting words, opening files, etc.
 
 ### Type into element (from snapshot)
 

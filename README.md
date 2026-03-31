@@ -74,9 +74,9 @@ swift run forepaw list-apps
 
 | Command | Description |
 |---------|-------------|
-| `click <@ref> --app <name>` | Click element (AX action first, mouse fallback) |
+| `click <@ref> --app <name> [--right] [--double]` | Click element (AX action first, mouse fallback) |
 | `type <@ref> <text> --app <name>` | Set element value / type into element |
-| `ocr-click <text> --app <name> [--window <title\|id>]` | Find text via OCR and click it |
+| `ocr-click <text> --app <name> [--window <title\|id>] [--right] [--double]` | Find text via OCR and click it |
 | `keyboard-type <text> [--app <name>]` | Type into focused element |
 | `press <combo> [--app <name>]` | Keyboard shortcut (e.g. `cmd+s`, `ctrl+shift+z`) |
 | `scroll <direction> --app <name> [--window <title\|id>] [--amount <n>]` | Scroll up/down/left/right |
@@ -126,7 +126,7 @@ OCR uses the macOS Vision framework (`VNRecognizeTextRequest`). No external depe
 
 ## Action strategies
 
-**Click**: For elements found via `snapshot`, tries `AXPress` (accessibility action) first. For web content links in browsers, prefers mouse click (AXPress doesn't trigger navigation). Falls back to CGEvent mouse click at element center.
+**Click**: For elements found via `snapshot`, tries `AXPress` (accessibility action) first. For web content links in browsers, prefers mouse click (AXPress doesn't trigger navigation). Falls back to CGEvent mouse click at element center. `--right` for context menus, `--double` for double-click (file open, word select). Both flags always use mouse events (AXPress can't express these).
 
 **Type**: Tries `AXSetAttributeValue` on the element's value first. Falls back to focusing the element and simulating keystrokes via CGEvent. Inter-keystroke delay (8ms) prevents character dropping in Electron apps.
 
