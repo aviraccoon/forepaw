@@ -7,7 +7,7 @@ import Foundation
 struct Forepaw: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "forepaw",
-        abstract: "Desktop automation CLI for AI agents",
+        abstract: "A raccoon's paws on your UI. Desktop automation for AI agents. (\(forepawVersion))",
         version: forepawVersion,
         subcommands: [
             Snapshot.self,
