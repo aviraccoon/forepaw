@@ -2,6 +2,25 @@ import ApplicationServices
 import Cocoa
 import ForepawCore
 
+/// A resolved CGWindowList window with its ID, title, and bounds.
+public struct ResolvedWindow: Sendable {
+    public let windowID: CGWindowID
+    public let title: String
+    public let bounds: [String: Double]
+
+    public var origin: CGPoint {
+        CGPoint(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0)
+    }
+
+    public var size: CGSize {
+        CGSize(width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0)
+    }
+
+    public var center: CGPoint {
+        CGPoint(x: origin.x + size.width / 2, y: origin.y + size.height / 2)
+    }
+}
+
 /// macOS implementation of `DesktopProvider` using Accessibility APIs.
 public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
     // Current snapshot's ref table, keyed by ref ID.
@@ -196,8 +215,8 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
     }
 
     /// Screenshot + OCR, returning recognized text with screen coordinates.
-    public func ocr(app: String?, find: String? = nil) async throws -> [OCRResult] {
-        let screenshotResult = try await screenshot(app: app, annotate: false)
+    public func ocr(app: String?, window: String? = nil, find: String? = nil) async throws -> [OCRResult] {
+        let screenshotResult = try await screenshot(app: app, window: window, annotate: false)
         guard let image = NSImage(contentsOfFile: screenshotResult.path),
             let rep = image.representations.first
         else {
@@ -221,8 +240,8 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
     }
 
     /// OCR-click: screenshot, find text, click at its position (with window offset).
-    public func ocrClick(text: String, app: String) async throws -> ActionResult {
-        let matches = try await ocr(app: app, find: text)
+    public func ocrClick(text: String, app: String, window: String? = nil) async throws -> ActionResult {
+        let matches = try await ocr(app: app, window: window, find: text)
         guard let match = matches.first else {
             throw ForepawError.actionFailed("No text matching '\(text)' found on screen")
         }
@@ -233,11 +252,11 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
 
         // Also offset by window position (screen-space).
         let runningApp = try findApp(named: app)
-        let windowOrigin = getWindowOrigin(pid: runningApp.processIdentifier)
+        let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
 
         let screenPoint = CGPoint(
-            x: match.center.x / scaleFactor + windowOrigin.x,
-            y: match.center.y / scaleFactor + windowOrigin.y
+            x: match.center.x / scaleFactor + resolved.origin.x,
+            y: match.center.y / scaleFactor + resolved.origin.y
         )
 
         runningApp.activate()
@@ -247,18 +266,23 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
             success: true, message: "clicked '\(match.text)' at \(Int(screenPoint.x)),\(Int(screenPoint.y))")
     }
 
-    /// Get the screen-space origin of an app's main (largest) window.
-    private func getWindowOrigin(pid: Int32) -> CGPoint {
-        let bounds = getMainWindowBounds(pid: pid)
-        return CGPoint(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0)
-    }
-
-    /// Get the main (largest) window bounds dict for an app by PID.
-    /// Skips phantom/tiny windows (< 10px in either dimension).
-    private func getMainWindowBounds(pid: Int32) -> [String: Double] {
+    /// Find a window for an app, optionally matching by title or window ID.
+    ///
+    /// Resolution order:
+    /// 1. If `window` starts with "w-", match by CGWindowID
+    /// 2. If `window` is provided, substring match against window titles
+    /// 3. Otherwise, pick the largest non-phantom window (>= 10px)
+    ///
+    /// - Parameters:
+    ///   - pid: The app's process identifier
+    ///   - window: Optional window title substring or "w-<id>" identifier
+    /// - Returns: The resolved window
+    /// - Throws: `ForepawError.windowNotFound` if no matching window exists
+    public func findWindow(pid: Int32, window: String? = nil) throws -> ResolvedWindow {
         let windowList = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
-        var best: [String: Double]?
-        var bestArea: Double = 0
+
+        // Collect all real windows for this app (skip phantoms)
+        var appWindows: [(id: CGWindowID, title: String, bounds: [String: Double])] = []
         for info in windowList {
             guard let ownerPID = info[kCGWindowOwnerPID as String] as? Int32,
                 ownerPID == pid,
@@ -266,14 +290,47 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
             else { continue }
             let w = bounds["Width"] ?? 0
             let h = bounds["Height"] ?? 0
-            guard w >= 10 && h >= 10 else { continue }  // skip phantom windows
-            let area = w * h
-            if area > bestArea {
-                bestArea = area
-                best = bounds
-            }
+            guard w >= 10 && h >= 10 else { continue }
+            let windowID = (info[kCGWindowNumber as String] as? Int).map { CGWindowID($0) } ?? 0
+            let title = info[kCGWindowName as String] as? String ?? ""
+            appWindows.append((id: windowID, title: title, bounds: bounds))
         }
-        return best ?? [:]
+
+        guard !appWindows.isEmpty else {
+            throw ForepawError.windowNotFound(window ?? "any")
+        }
+
+        if let window = window {
+            // Match by window ID: "w-1234"
+            if window.hasPrefix("w-"), let idNum = UInt32(window.dropFirst(2)) {
+                if let match = appWindows.first(where: { $0.id == CGWindowID(idNum) }) {
+                    return ResolvedWindow(windowID: match.id, title: match.title, bounds: match.bounds)
+                }
+                throw ForepawError.windowNotFound(window)
+            }
+
+            // Substring match on title (case-insensitive)
+            let matches = appWindows.filter {
+                $0.title.localizedCaseInsensitiveContains(window)
+            }
+            if matches.count == 1 {
+                let m = matches[0]
+                return ResolvedWindow(windowID: m.id, title: m.title, bounds: m.bounds)
+            }
+            if matches.count > 1 {
+                let titles = matches.map { "  w-\($0.id)  \($0.title)" }.joined(separator: "\n")
+                throw ForepawError.ambiguousWindow(window, titles)
+            }
+            throw ForepawError.windowNotFound(window)
+        }
+
+        // Default: largest window by area
+        let best = appWindows.max(by: {
+            let a1 = ($0.bounds["Width"] ?? 0) * ($0.bounds["Height"] ?? 0)
+            let a2 = ($1.bounds["Width"] ?? 0) * ($1.bounds["Height"] ?? 0)
+            return a1 < a2
+        })!
+        return ResolvedWindow(windowID: best.id, title: best.title, bounds: best.bounds)
     }
 
     /// Press with app activation -- ensures keystrokes go to the right app.
@@ -285,7 +342,7 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
         return ActionResult(success: true)
     }
 
-    public func screenshot(app: String?, annotate: Bool) async throws -> ScreenshotResult {
+    public func screenshot(app: String?, window: String? = nil, annotate: Bool) async throws -> ScreenshotResult {
         guard CGPreflightScreenCaptureAccess() else {
             throw ForepawError.screenRecordingDenied
         }
@@ -294,20 +351,12 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
 
         if let appName = app {
             let runningApp = try findApp(named: appName)
-            // Get window ID for app-specific capture
-            let windowList = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
-            let appWindow = windowList.first {
-                ($0[kCGWindowOwnerPID as String] as? Int32) == runningApp.processIdentifier
-            }
-            if let windowID = appWindow?[kCGWindowNumber as String] as? CGWindowID {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-                process.arguments = ["-x", "-l", String(windowID), path]
-                try process.run()
-                process.waitUntilExit()
-            } else {
-                throw ForepawError.appNotFound(appName)
-            }
+            let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            process.arguments = ["-x", "-l", String(resolved.windowID), path]
+            try process.run()
+            process.waitUntilExit()
         } else {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -330,6 +379,13 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
             else { return nil }
 
             if let filter = appName, name != filter { return nil }
+
+            // Skip phantom/tiny windows
+            if let boundsDict = info[kCGWindowBounds as String] as? [String: Double] {
+                let w = boundsDict["Width"] ?? 0
+                let h = boundsDict["Height"] ?? 0
+                if w < 10 || h < 10 { return nil }
+            }
 
             var bounds: Rect?
             if let boundsDict = info[kCGWindowBounds as String] as? [String: Double] {
@@ -506,9 +562,10 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
     ///   - direction: "up", "down", "left", "right"
     ///   - amount: Number of scroll ticks (default 3)
     ///   - app: Target application name
+    ///   - window: Optional window title or ID to target
     ///   - ref: Optional element ref to scroll within (scrolls at element center)
     public func scroll(
-        direction: String, amount: Int = 3, app: String, ref: ElementRef? = nil
+        direction: String, amount: Int = 3, app: String, window: String? = nil, ref: ElementRef? = nil
     ) async throws
         -> ActionResult
     {
@@ -526,13 +583,9 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
             }
             scrollPoint = CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
         } else {
-            // Scroll at the center of the app's main window
-            let windowOrigin = getWindowOrigin(pid: runningApp.processIdentifier)
-            let windowSize = getWindowSize(pid: runningApp.processIdentifier)
-            scrollPoint = CGPoint(
-                x: windowOrigin.x + windowSize.width / 2,
-                y: windowOrigin.y + windowSize.height / 2
-            )
+            // Scroll at the center of the targeted window
+            let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
+            scrollPoint = resolved.center
         }
 
         let deltaY: Int32
@@ -558,12 +611,6 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
         return ActionResult(
             success: true,
             message: "scrolled \(direction) \(amount) ticks at \(Int(scrollPoint.x)),\(Int(scrollPoint.y))")
-    }
-
-    /// Get the size of an app's main (largest) window.
-    private func getWindowSize(pid: Int32) -> CGSize {
-        let bounds = getMainWindowBounds(pid: pid)
-        return CGSize(width: bounds["Width"] ?? 800, height: bounds["Height"] ?? 600)
     }
 
     private func performMouseClick(at point: CGPoint) throws {

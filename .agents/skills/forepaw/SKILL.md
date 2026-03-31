@@ -86,6 +86,17 @@ forepaw press cmd+s --app "App Name"   # activates app first
 forepaw press opt+space                 # global hotkey (no --app)
 ```
 
+### Scroll
+
+```bash
+forepaw scroll down --app Orion              # scroll down 3 ticks (default)
+forepaw scroll up --app Orion --amount 10    # scroll up 10 ticks
+forepaw scroll left --app Finder             # horizontal scroll
+forepaw scroll down --app Orion --ref @e5    # scroll within a specific element
+```
+
+Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks.
+
 ### Newlines in text input
 
 Use `press shift+return` between lines:
@@ -95,6 +106,26 @@ forepaw press shift+return --app Discord
 forepaw keyboard-type "second line" --app Discord
 forepaw press return --app Discord    # send
 ```
+
+## Window targeting
+
+When an app has multiple windows, use `--window` to target a specific one:
+
+```bash
+forepaw list-windows --app Zed
+# w-1234  Zed  "my-project"
+# w-1235  Zed  "other-project"
+
+forepaw screenshot --app Zed --window "my-project"   # by title substring
+forepaw screenshot --app Zed --window w-1234         # by window ID
+forepaw scroll down --app Zed --window "my-project"  # works with scroll too
+forepaw ocr --app Zed --window "my-project"           # and OCR
+forepaw ocr-click "text" --app Zed --window "my-project"  # and ocr-click
+```
+
+Without `--window`, commands target the largest window for that app.
+
+The title shown in quotes in `list-windows` output is what you pass to `--window`. If the title matches multiple windows, forepaw returns an error listing all matches with their IDs.
 
 ## When to use --app
 
@@ -122,11 +153,11 @@ Two permissions needed:
 - **Accessibility** (System Settings > Privacy & Security > Accessibility) -- for snapshot, click, type
 - **Screen Recording** (System Settings > Privacy & Security > Screen & System Audio Recording) -- for screenshot, ocr, ocr-click
 
-## Discovering apps
+## Discovering apps and windows
 
 ```bash
-forepaw list-apps            # running GUI apps with bundle IDs
+forepaw list-apps                  # running GUI apps with bundle IDs
 forepaw list-windows --app Finder  # windows for an app
 ```
 
-Use the exact app name from `list-apps` in `--app` flags.
+Use the exact app name from `list-apps` in `--app` flags. Use `list-windows` to find window titles/IDs for `--window`.

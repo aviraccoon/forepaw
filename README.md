@@ -20,7 +20,9 @@ forepaw ocr-click "Settings" --app Discord  # find text and click it
 forepaw keyboard-type "hello" --app Notes   # type into focused element
 forepaw press cmd+s --app Finder    # keyboard shortcut
 forepaw press opt+space             # global hotkey (no --app)
+forepaw scroll down --app Finder    # scroll down 3 ticks
 forepaw screenshot --app Finder     # take a screenshot
+forepaw screenshot --app Zed --window "my-project"  # target specific window
 ```
 
 The agent loop: **observe -> decide -> act -> observe**
@@ -63,10 +65,10 @@ swift run forepaw list-apps
 | Command | Description |
 |---------|-------------|
 | `snapshot --app <name> [-i] [-c]` | Accessibility tree with `@e` refs |
-| `screenshot [--app <name>]` | Take a screenshot (PNG) |
-| `ocr [--app <name>] [--find <text>]` | Screenshot + OCR, returns text with coordinates |
+| `screenshot [--app <name>] [--window <title\|id>]` | Take a screenshot (PNG) |
+| `ocr [--app <name>] [--window <title\|id>] [--find <text>]` | Screenshot + OCR, returns text with coordinates |
 | `list-apps [--json]` | Running GUI applications |
-| `list-windows [--app <name>]` | Visible windows |
+| `list-windows [--app <name>]` | Visible windows with titles and IDs |
 
 ### Interaction
 
@@ -74,9 +76,10 @@ swift run forepaw list-apps
 |---------|-------------|
 | `click <@ref> --app <name>` | Click element (AX action first, mouse fallback) |
 | `type <@ref> <text> --app <name>` | Set element value / type into element |
-| `ocr-click <text> --app <name>` | Find text via OCR and click it |
+| `ocr-click <text> --app <name> [--window <title\|id>]` | Find text via OCR and click it |
 | `keyboard-type <text> [--app <name>]` | Type into focused element |
 | `press <combo> [--app <name>]` | Keyboard shortcut (e.g. `cmd+s`, `ctrl+shift+z`) |
+| `scroll <direction> --app <name> [--window <title\|id>] [--amount <n>]` | Scroll up/down/left/right |
 
 ### Snapshot flags
 
@@ -86,10 +89,22 @@ swift run forepaw list-apps
 | `-c`, `--compact` | Remove empty structural nodes |
 | `-d`, `--depth <n>` | Maximum tree depth (default: 15) |
 
-## `--app` behavior
+## `--app` and `--window` behavior
 
 - **With `--app`**: activates the app before acting. Required for `click`, `type`, `ocr-click`. Mouse clicks and keystrokes go to the right window.
 - **Without `--app`**: sends input globally. Use for system-wide hotkeys (e.g. `press opt+space` for Raycast) or typing into whatever is currently focused.
+- **With `--window`**: targets a specific window by title substring or window ID (from `list-windows`). Without it, commands target the largest window for the app.
+
+```bash
+forepaw list-windows --app Orion
+# w-7290  Orion  "Hacker News"
+# w-7291  Orion  "GitHub"
+
+forepaw scroll down --app Orion --window "Hacker News"  # by title
+forepaw screenshot --app Orion --window w-7290          # by ID
+```
+
+If a title substring matches multiple windows, forepaw reports the ambiguity and lists all matches with their IDs.
 
 ## Ref system
 
@@ -116,6 +131,8 @@ OCR uses the macOS Vision framework (`VNRecognizeTextRequest`). No external depe
 **Type**: Tries `AXSetAttributeValue` on the element's value first. Falls back to focusing the element and simulating keystrokes via CGEvent. Inter-keystroke delay (8ms) prevents character dropping in Electron apps.
 
 **OCR-click**: Screenshots the window, runs OCR, finds the text, converts pixel coordinates to screen points (accounting for Retina scale factor and window offset), then clicks via CGEvent.
+
+**Scroll**: Moves the mouse to the target position (window center by default, or element center with `--ref`), then fires CGEvent scroll wheel events. Amount is in "ticks" (lines), default 3.
 
 ## Design decisions
 

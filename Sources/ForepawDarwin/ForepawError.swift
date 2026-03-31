@@ -6,6 +6,8 @@ public enum ForepawError: Error, CustomStringConvertible {
     case actionFailed(String)
     case permissionDenied
     case screenRecordingDenied
+    case windowNotFound(String)
+    case ambiguousWindow(String, String)
 
     public var description: String {
         switch self {
@@ -19,6 +21,10 @@ public enum ForepawError: Error, CustomStringConvertible {
             "Accessibility permission not granted. Run 'forepaw permissions' to check."
         case .screenRecordingDenied:
             "Screen recording permission not granted. Run 'forepaw permissions' to check."
+        case .windowNotFound(let query):
+            "Window not found: \(query). Run 'forepaw list-windows --app <name>' to see windows."
+        case .ambiguousWindow(let query, let matches):
+            "Multiple windows match '\(query)'. Use --window with a more specific title or window ID:\n\(matches)"
         }
     }
 }

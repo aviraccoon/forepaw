@@ -32,6 +32,9 @@ struct GlobalOptions: ParsableArguments {
     @Option(name: .long, help: "Target application name")
     var app: String?
 
+    @Option(name: .long, help: "Window title or ID (e.g. 'Hacker News' or 'w-7290')")
+    var window: String?
+
     @Flag(name: .long, help: "JSON output")
     var json: Bool = false
 }
@@ -193,7 +196,7 @@ struct Screenshot: AsyncParsableCommand {
 
     mutating func run() async throws {
         let provider = DarwinProvider()
-        let result = try await provider.screenshot(app: global.app, annotate: annotate)
+        let result = try await provider.screenshot(app: global.app, window: global.window, annotate: annotate)
         print(result.path)
         if let legend = result.legend {
             print(legend)
@@ -239,7 +242,7 @@ struct ListWindows: AsyncParsableCommand {
         let provider = DarwinProvider()
         let windows = try await provider.listWindows(app: global.app)
         for window in windows {
-            print("\(window.id)  \(window.app) - \(window.title)")
+            print("\(window.id)  \(window.app)  \"\(window.title)\"")
         }
     }
 }
@@ -257,7 +260,7 @@ struct OCR: AsyncParsableCommand {
 
     mutating func run() async throws {
         let provider = DarwinProvider()
-        let results = try await provider.ocr(app: global.app, find: find)
+        let results = try await provider.ocr(app: global.app, window: global.window, find: find)
 
         if global.json {
             for r in results {
@@ -289,12 +292,15 @@ struct OCRClick: AsyncParsableCommand {
     @Option(name: .long, help: "Target application name")
     var app: String
 
+    @Option(name: .long, help: "Window title or ID (e.g. 'Hacker News' or 'w-7290')")
+    var window: String?
+
     @Flag(name: .long, help: "JSON output")
     var json: Bool = false
 
     mutating func run() async throws {
         let provider = DarwinProvider()
-        let result = try await provider.ocrClick(text: text, app: app)
+        let result = try await provider.ocrClick(text: text, app: app, window: window)
         let formatter = OutputFormatter(json: json)
         print(
             formatter.format(success: result.success, command: "ocr-click", data: ["text": result.message ?? "clicked"])
@@ -312,6 +318,9 @@ struct Scroll: AsyncParsableCommand {
 
     @Option(name: .long, help: "Target application name")
     var app: String
+
+    @Option(name: .long, help: "Window title or ID (e.g. 'Hacker News' or 'w-7290')")
+    var window: String?
 
     @Option(name: .shortAndLong, help: "Number of scroll ticks (default 3)")
     var amount: Int = 3
@@ -337,7 +346,8 @@ struct Scroll: AsyncParsableCommand {
         }
 
         let provider = DarwinProvider()
-        let result = try await provider.scroll(direction: direction, amount: amount, app: app, ref: elementRef)
+        let result = try await provider.scroll(
+            direction: direction, amount: amount, app: app, window: window, ref: elementRef)
         let formatter = OutputFormatter(json: json)
         print(
             formatter.format(success: result.success, command: "scroll", data: ["text": result.message ?? "scrolled"]))

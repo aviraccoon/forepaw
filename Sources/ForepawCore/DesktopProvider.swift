@@ -22,7 +22,8 @@ public protocol DesktopProvider: Sendable {
     func press(keys: KeyCombo) async throws -> ActionResult
 
     /// Take a screenshot. If `app` is nil, captures full screen.
-    func screenshot(app: String?, annotate: Bool) async throws -> ScreenshotResult
+    /// If `window` is provided, targets a specific window by title or ID.
+    func screenshot(app: String?, window: String?, annotate: Bool) async throws -> ScreenshotResult
 
     /// List windows for an app, or all visible windows.
     func listWindows(app: String?) async throws -> [WindowInfo]
