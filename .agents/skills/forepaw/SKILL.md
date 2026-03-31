@@ -146,6 +146,10 @@ The title shown in quotes in `list-windows` output is what you pass to `--window
 - **App activation.** `--app` brings the app to the foreground. This means the user's screen will change. Warn them before switching apps if they didn't explicitly ask.
 - **Mouse clicks are physical.** OCR-click and mouse-fallback clicks move the actual cursor and click on screen. The user will see this happening.
 - **Keystroke delay.** Typing is not instant (~8ms per character). Long text takes a moment.
+- **Text starting with dashes.** If text for `keyboard-type`, `type`, or `ocr-click` starts with `-` or `--`, put all options before `--` to prevent it being parsed as a flag:
+  ```bash
+  forepaw keyboard-type --app Notes -- "--this starts with dashes"
+  ```
 
 ## Permissions
 
