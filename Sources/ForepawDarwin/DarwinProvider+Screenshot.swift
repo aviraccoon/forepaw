@@ -5,6 +5,8 @@ import ForepawCore
 // MARK: - Screenshot & OCR
 
 extension DarwinProvider {
+    /// Screenshot + OCR, returning recognized text with screen coordinates.
+    /// When `find` is provided, uses word-level bounding boxes for precise targeting.
     public func ocr(app: String?, window: String? = nil, find: String? = nil) async throws -> [OCRResult] {
         let screenshotResult = try await screenshot(app: app, window: window, annotate: false)
         guard let image = NSImage(contentsOfFile: screenshotResult.path),
@@ -13,11 +15,8 @@ extension DarwinProvider {
             throw ForepawError.actionFailed("Failed to load screenshot at \(screenshotResult.path)")
         }
         let engine = OCREngine()
-        let results = try engine.recognize(imagePath: screenshotResult.path, imageHeight: Double(rep.pixelsHigh))
-        if let query = find {
-            return engine.find(query, in: results)
-        }
-        return results
+        return try engine.recognize(
+            imagePath: screenshotResult.path, imageHeight: Double(rep.pixelsHigh), find: find)
     }
 
     /// Click at a specific screen coordinate with app activation.
@@ -88,7 +87,7 @@ extension DarwinProvider {
             let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            process.arguments = ["-x", "-l", String(resolved.windowID), path]
+            process.arguments = ["-x", "-o", "-l", String(resolved.windowID), path]
             try process.run()
             process.waitUntilExit()
         } else {

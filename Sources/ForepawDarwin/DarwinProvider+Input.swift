@@ -209,6 +209,19 @@ extension DarwinProvider {
     internal func performMouseClick(
         at point: CGPoint, button: CGMouseButton = .left, clickCount: Int64 = 1
     ) throws {
+        // Move the physical cursor to the click target first.
+        // CGEvent mouseDown at a position doesn't always route to the right window
+        // unless the cursor is actually there.
+        guard
+            let moveEvent = CGEvent(
+                mouseEventSource: nil, mouseType: .mouseMoved,
+                mouseCursorPosition: point, mouseButton: .left)
+        else {
+            throw ForepawError.actionFailed("Failed to create mouse move event")
+        }
+        moveEvent.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.05)
+
         let downType: CGEventType = button == .right ? .rightMouseDown : .leftMouseDown
         let upType: CGEventType = button == .right ? .rightMouseUp : .leftMouseUp
 
