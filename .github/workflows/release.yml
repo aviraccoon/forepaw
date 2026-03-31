@@ -16,6 +16,8 @@ jobs:
 
       - name: Build
         run: swift build -c release
+        env:
+          FOREPAW_VERSION: ${{ github.ref_name }}
 
       - name: Test
         run: swift test

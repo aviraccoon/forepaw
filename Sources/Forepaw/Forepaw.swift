@@ -8,7 +8,7 @@ struct Forepaw: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "forepaw",
         abstract: "Desktop automation CLI for AI agents",
-        version: "0.1.0",
+        version: forepawVersion,
         subcommands: [
             Snapshot.self,
             Click.self,
