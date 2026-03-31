@@ -20,6 +20,7 @@ struct Forepaw: AsyncParsableCommand {
             ListWindows.self,
             OCR.self,
             OCRClick.self,
+            Scroll.self,
             Permissions.self,
         ]
     )
@@ -298,6 +299,48 @@ struct OCRClick: AsyncParsableCommand {
         print(
             formatter.format(success: result.success, command: "ocr-click", data: ["text": result.message ?? "clicked"])
         )
+    }
+}
+
+struct Scroll: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Scroll within an app window"
+    )
+
+    @Argument(help: "Direction: up, down, left, right")
+    var direction: String
+
+    @Option(name: .long, help: "Target application name")
+    var app: String
+
+    @Option(name: .shortAndLong, help: "Number of scroll ticks (default 3)")
+    var amount: Int = 3
+
+    @Option(name: .long, help: "Element ref to scroll within (e.g. @e5)")
+    var ref: String?
+
+    @Flag(name: .long, help: "JSON output")
+    var json: Bool = false
+
+    mutating func run() async throws {
+        let validDirections = ["up", "down", "left", "right"]
+        guard validDirections.contains(direction) else {
+            throw ValidationError("Invalid direction '\(direction)'. Use: \(validDirections.joined(separator: ", "))")
+        }
+
+        var elementRef: ElementRef?
+        if let refStr = ref {
+            guard let parsed = ElementRef.parse(refStr) else {
+                throw ValidationError("Invalid ref: \(refStr). Expected format: @e1, @e2, etc.")
+            }
+            elementRef = parsed
+        }
+
+        let provider = DarwinProvider()
+        let result = try await provider.scroll(direction: direction, amount: amount, app: app, ref: elementRef)
+        let formatter = OutputFormatter(json: json)
+        print(
+            formatter.format(success: result.success, command: "scroll", data: ["text": result.message ?? "scrolled"]))
     }
 }
 

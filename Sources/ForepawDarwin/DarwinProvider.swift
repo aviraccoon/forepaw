@@ -247,17 +247,33 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
             success: true, message: "clicked '\(match.text)' at \(Int(screenPoint.x)),\(Int(screenPoint.y))")
     }
 
-    /// Get the screen-space origin of an app's main window.
+    /// Get the screen-space origin of an app's main (largest) window.
     private func getWindowOrigin(pid: Int32) -> CGPoint {
+        let bounds = getMainWindowBounds(pid: pid)
+        return CGPoint(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0)
+    }
+
+    /// Get the main (largest) window bounds dict for an app by PID.
+    /// Skips phantom/tiny windows (< 10px in either dimension).
+    private func getMainWindowBounds(pid: Int32) -> [String: Double] {
         let windowList = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+        var best: [String: Double]?
+        var bestArea: Double = 0
         for info in windowList {
             guard let ownerPID = info[kCGWindowOwnerPID as String] as? Int32,
                 ownerPID == pid,
                 let bounds = info[kCGWindowBounds as String] as? [String: Double]
             else { continue }
-            return CGPoint(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0)
+            let w = bounds["Width"] ?? 0
+            let h = bounds["Height"] ?? 0
+            guard w >= 10 && h >= 10 else { continue }  // skip phantom windows
+            let area = w * h
+            if area > bestArea {
+                bestArea = area
+                best = bounds
+            }
         }
-        return .zero
+        return best ?? [:]
     }
 
     /// Press with app activation -- ensures keystrokes go to the right app.
@@ -454,6 +470,100 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
         // swiftlint:disable:next force_cast
         AXValueGetValue(value as! AXValue, .cgSize, &size)
         return size
+    }
+
+    /// Scroll at a screen point using CGEvent scroll wheel events.
+    ///
+    /// - Parameters:
+    ///   - point: Screen-space point to position the mouse before scrolling.
+    ///   - deltaY: Vertical scroll amount in "lines". Positive = up, negative = down.
+    ///   - deltaX: Horizontal scroll amount. Positive = left, negative = right.
+    public func scroll(at point: CGPoint, deltaY: Int32, deltaX: Int32 = 0) throws {
+        // Move mouse to the scroll target so the scroll event hits the right element.
+        guard
+            let moveEvent = CGEvent(
+                mouseEventSource: nil, mouseType: .mouseMoved,
+                mouseCursorPosition: point, mouseButton: .left)
+        else {
+            throw ForepawError.actionFailed("Failed to create mouse move event")
+        }
+        moveEvent.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.05)  // let the move settle
+
+        guard
+            let scrollEvent = CGEvent(
+                scrollWheelEvent2Source: nil, units: .line,
+                wheelCount: 2, wheel1: deltaY, wheel2: deltaX, wheel3: 0)
+        else {
+            throw ForepawError.actionFailed("Failed to create scroll event")
+        }
+        scrollEvent.post(tap: .cghidEventTap)
+    }
+
+    /// Scroll within an app's main window.
+    ///
+    /// - Parameters:
+    ///   - direction: "up", "down", "left", "right"
+    ///   - amount: Number of scroll ticks (default 3)
+    ///   - app: Target application name
+    ///   - ref: Optional element ref to scroll within (scrolls at element center)
+    public func scroll(
+        direction: String, amount: Int = 3, app: String, ref: ElementRef? = nil
+    ) async throws
+        -> ActionResult
+    {
+        let runningApp = try findApp(named: app)
+        runningApp.activate()
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        let scrollPoint: CGPoint
+
+        if let ref = ref {
+            // Scroll at the center of the referenced element
+            let element = try resolveRef(ref, app: app)
+            guard let pos = getPosition(of: element), let size = getSize(of: element) else {
+                throw ForepawError.actionFailed("Cannot determine position of \(ref)")
+            }
+            scrollPoint = CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
+        } else {
+            // Scroll at the center of the app's main window
+            let windowOrigin = getWindowOrigin(pid: runningApp.processIdentifier)
+            let windowSize = getWindowSize(pid: runningApp.processIdentifier)
+            scrollPoint = CGPoint(
+                x: windowOrigin.x + windowSize.width / 2,
+                y: windowOrigin.y + windowSize.height / 2
+            )
+        }
+
+        let deltaY: Int32
+        let deltaX: Int32
+        switch direction {
+        case "up":
+            deltaY = Int32(amount)
+            deltaX = 0
+        case "down":
+            deltaY = -Int32(amount)
+            deltaX = 0
+        case "left":
+            deltaY = 0
+            deltaX = Int32(amount)
+        case "right":
+            deltaY = 0
+            deltaX = -Int32(amount)
+        default:
+            throw ForepawError.actionFailed("Unknown direction '\(direction)'. Use up, down, left, or right.")
+        }
+
+        try scroll(at: scrollPoint, deltaY: deltaY, deltaX: deltaX)
+        return ActionResult(
+            success: true,
+            message: "scrolled \(direction) \(amount) ticks at \(Int(scrollPoint.x)),\(Int(scrollPoint.y))")
+    }
+
+    /// Get the size of an app's main (largest) window.
+    private func getWindowSize(pid: Int32) -> CGSize {
+        let bounds = getMainWindowBounds(pid: pid)
+        return CGSize(width: bounds["Width"] ?? 800, height: bounds["Height"] ?? 600)
     }
 
     private func performMouseClick(at point: CGPoint) throws {
