@@ -1,6 +1,5 @@
 import ArgumentParser
 import ForepawCore
-import ForepawDarwin
 import Foundation
 
 struct Click: AsyncParsableCommand {
@@ -28,7 +27,6 @@ struct Click: AsyncParsableCommand {
             button: right ? .right : .left,
             clickCount: double ? 2 : 1
         )
-        let provider = DarwinProvider()
         let result: ActionResult
 
         if let elementRef = ElementRef.parse(target) {
@@ -72,7 +70,6 @@ struct Type: AsyncParsableCommand {
         guard let elementRef = ElementRef.parse(ref) else {
             throw ValidationError("Invalid ref: \(ref). Expected format: @e1, @e2, etc.")
         }
-        let provider = DarwinProvider()
         let result = try await provider.type(ref: elementRef, text: text, app: app)
         let formatter = OutputFormatter(json: json)
         print(formatter.format(success: result.success, command: "type", data: ["text": result.message ?? "typed"]))
@@ -95,7 +92,6 @@ struct KeyboardType: AsyncParsableCommand {
     var json: Bool = false
 
     mutating func run() async throws {
-        let provider = DarwinProvider()
         let result: ActionResult
         if let app {
             result = try await provider.keyboardType(text: text, app: app)
@@ -125,7 +121,6 @@ struct Press: AsyncParsableCommand {
 
     mutating func run() async throws {
         let keyCombo = KeyCombo.parse(combo)
-        let provider = DarwinProvider()
         let result: ActionResult
         if let app {
             result = try await provider.press(keys: keyCombo, app: app)
@@ -169,7 +164,6 @@ struct OCRClick: AsyncParsableCommand {
             button: right ? .right : .left,
             clickCount: double ? 2 : 1
         )
-        let provider = DarwinProvider()
         let result = try await provider.ocrClick(
             text: text, app: app, window: window, options: options, index: index)
         let formatter = OutputFormatter(json: json)
@@ -197,7 +191,6 @@ struct Hover: AsyncParsableCommand {
     var json: Bool = false
 
     mutating func run() async throws {
-        let provider = DarwinProvider()
         let result: ActionResult
 
         if let elementRef = ElementRef.parse(target) {
@@ -211,7 +204,7 @@ struct Hover: AsyncParsableCommand {
             guard let app else {
                 throw ValidationError("--app is required for text-based hover")
             }
-            result = try await provider.ocrHover(text: target, app: app, window: window)
+            result = try await provider.ocrHover(text: target, app: app, window: window, index: nil)
         }
 
         let formatter = OutputFormatter(json: json)
@@ -243,7 +236,6 @@ struct Wait: AsyncParsableCommand {
     var json: Bool = false
 
     mutating func run() async throws {
-        let provider = DarwinProvider()
         let result = try await provider.wait(
             text: text, app: app, window: window,
             timeout: timeout, interval: interval)
@@ -284,7 +276,6 @@ struct Batch: AsyncParsableCommand {
             throw ValidationError("No actions provided. Separate actions with ;;")
         }
 
-        let provider = DarwinProvider()
         let formatter = OutputFormatter(json: json)
         var results: [(String, ActionResult)] = []
 
@@ -302,7 +293,7 @@ struct Batch: AsyncParsableCommand {
         }
     }
 
-    private func executeAction(_ action: String, provider: DarwinProvider) async throws -> ActionResult {
+    private func executeAction(_ action: String, provider: any DesktopProvider) async throws -> ActionResult {
         let parts = shellSplit(action)
         guard let command = parts.first else {
             throw ForepawError.actionFailed("Empty action")
@@ -352,7 +343,7 @@ struct Batch: AsyncParsableCommand {
                     throw ForepawError.actionFailed("hover requires --app (on action or batch)")
                 }
                 let win = parseOption("--window", from: actionArgs) ?? window
-                return try await provider.ocrHover(text: target, app: appName, window: win)
+                return try await provider.ocrHover(text: target, app: appName, window: win, index: nil)
             }
 
         case "type":
@@ -399,8 +390,9 @@ struct Batch: AsyncParsableCommand {
             }
             let amount = parseOption("--amount", from: actionArgs).flatMap { Int($0) } ?? 3
             let win = parseOption("--window", from: actionArgs) ?? window
+            let scrollRef = parseOption("--ref", from: actionArgs).flatMap { ElementRef.parse($0) }
             return try await provider.scroll(
-                direction: direction, amount: amount, app: appName, window: win)
+                direction: direction, amount: amount, app: appName, window: win, ref: scrollRef)
 
         case "ocr-click":
             guard let text = actionArgs.first else {
@@ -560,7 +552,6 @@ struct Drag: AsyncParsableCommand {
     var json: Bool = false
 
     mutating func run() async throws {
-        let provider = DarwinProvider()
         let options = buildDragOptions()
         let result: ActionResult
 
@@ -615,8 +606,8 @@ struct Drag: AsyncParsableCommand {
 
     /// Read coordinates from stdin. Accepts space-separated or newline-separated x,y pairs.
     private func readCoordsFromStdin() throws -> [Point] {
-        guard let data = try? FileHandle.standardInput.availableData,
-            let input = String(data: data, encoding: .utf8)
+        let data = FileHandle.standardInput.availableData
+        guard let input = String(data: data, encoding: .utf8)
         else {
             throw ValidationError("Failed to read from stdin")
         }
@@ -641,7 +632,7 @@ struct Drag: AsyncParsableCommand {
             rightButton: right, closePath: close)
     }
 
-    private func resolveDragTarget(_ target: String, provider: DarwinProvider, app: String?) throws -> Point {
+    private func resolveDragTarget(_ target: String, provider: any DesktopProvider, app: String?) throws -> Point {
         if let point = parseCoordinate(target) {
             return point
         }
@@ -702,7 +693,6 @@ struct Scroll: AsyncParsableCommand {
             elementRef = parsed
         }
 
-        let provider = DarwinProvider()
         let result = try await provider.scroll(
             direction: direction, amount: amount, app: app, window: window, ref: elementRef)
         let formatter = OutputFormatter(json: json)

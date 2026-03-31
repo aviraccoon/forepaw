@@ -2,31 +2,82 @@
 ///
 /// macOS: implemented via AXUIElement + CGEvent (ForepawDarwin)
 /// Linux: future implementation via AT-SPI2/DBus
+///
+/// The CLI target talks exclusively through this protocol. Any new public
+/// method on a platform provider (e.g. DarwinProvider) must be added here
+/// first -- the compiler enforces this because the CLI never imports the
+/// platform target directly.
 public protocol DesktopProvider: Sendable {
+
+    // MARK: - Observation
+
     /// List running GUI applications.
     func listApps() async throws -> [AppInfo]
+
+    /// List windows for an app, or all visible windows.
+    func listWindows(app: String?) async throws -> [WindowInfo]
 
     /// Get the accessibility tree for an app window.
     func snapshot(app: String, options: SnapshotOptions) async throws -> ElementTree
 
-    /// Perform an action on an element by ref.
-    func click(ref: ElementRef) async throws -> ActionResult
-
-    /// Type text into an element.
-    func type(ref: ElementRef, text: String) async throws -> ActionResult
-
-    /// Set an element's value directly (bypasses keystroke simulation).
-    func setValue(ref: ElementRef, value: String) async throws -> ActionResult
-
-    /// Press a keyboard shortcut.
-    func press(keys: KeyCombo) async throws -> ActionResult
-
     /// Take a screenshot. If `app` is nil, captures full screen.
-    /// If `window` is provided, targets a specific window by title or ID.
     func screenshot(app: String?, window: String?, annotate: Bool) async throws -> ScreenshotResult
 
-    /// List windows for an app, or all visible windows.
-    func listWindows(app: String?) async throws -> [WindowInfo]
+    /// Screenshot + OCR, returning recognized text with screen coordinates.
+    func ocr(app: String?, window: String?, find: String?) async throws -> [OCRResult]
+
+    // MARK: - Actions (element-based)
+
+    /// Click an element by ref, re-walking the tree in the target app.
+    func click(ref: ElementRef, app: String, options: ClickOptions) async throws -> ActionResult
+
+    /// Click at a screen coordinate.
+    func clickAtPoint(_ point: Point, app: String, options: ClickOptions) async throws -> ActionResult
+
+    /// Type text into an element (focuses via AX, then types).
+    func type(ref: ElementRef, text: String, app: String) async throws -> ActionResult
+
+    /// Set an element's value directly (bypasses keystroke simulation).
+    func setValue(ref: ElementRef, value: String, app: String) async throws -> ActionResult
+
+    // MARK: - Actions (text input)
+
+    /// Type text into whatever is currently focused (no app activation).
+    func keyboardType(text: String) async throws -> ActionResult
+
+    /// Type text into the focused element in the target app.
+    func keyboardType(text: String, app: String) async throws -> ActionResult
+
+    /// Press a keyboard shortcut (global -- no app activation).
+    func press(keys: KeyCombo) async throws -> ActionResult
+
+    /// Press a keyboard shortcut in a specific app.
+    func press(keys: KeyCombo, app: String) async throws -> ActionResult
+
+    // MARK: - Actions (mouse)
+
+    /// Hover over an element by ref (triggers tooltips, hover states).
+    func hover(ref: ElementRef, app: String) async throws -> ActionResult
+
+    /// Hover at a screen coordinate.
+    func hoverAtPoint(_ point: Point, app: String?) async throws -> ActionResult
+
+    /// Hover over text found via OCR.
+    func ocrHover(
+        text: String, app: String, window: String?, index: Int?
+    ) async throws -> ActionResult
+
+    /// Find text on screen via OCR and click it.
+    func ocrClick(
+        text: String, app: String, window: String?,
+        options: ClickOptions, index: Int?
+    ) async throws -> ActionResult
+
+    /// Scroll within an app window.
+    func scroll(
+        direction: String, amount: Int, app: String,
+        window: String?, ref: ElementRef?
+    ) async throws -> ActionResult
 
     /// Drag along a path of screen coordinates.
     func drag(path: [Point], options: DragOptions, app: String?) async throws -> ActionResult
@@ -34,8 +85,34 @@ public protocol DesktopProvider: Sendable {
     /// Drag from one element to another.
     func drag(
         fromRef: ElementRef, toRef: ElementRef, app: String, options: DragOptions
-    ) async throws
-        -> ActionResult
+    ) async throws -> ActionResult
+
+    // MARK: - Actions (waiting)
+
+    /// Wait for text to appear on screen via OCR polling.
+    func wait(
+        text: String, app: String, window: String?,
+        timeout: Double, interval: Double
+    ) async throws -> ActionResult
+
+    // MARK: - Utility
+
+    /// Resolve a ref to its center point in screen coordinates.
+    func resolveRefPosition(_ ref: ElementRef, app: String) throws -> Point
+
+    // MARK: - Permissions
+
+    /// Check if accessibility permission is granted.
+    func hasPermissions() -> Bool
+
+    /// Check if screen recording permission is granted.
+    func hasScreenRecordingPermission() -> Bool
+
+    /// Request accessibility permission (shows system dialog).
+    func requestPermissions() -> Bool
+
+    /// Request screen recording permission (shows system dialog).
+    func requestScreenRecordingPermission() -> Bool
 }
 
 // MARK: - Supporting types

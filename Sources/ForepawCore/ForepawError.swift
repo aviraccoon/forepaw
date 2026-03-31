@@ -1,5 +1,3 @@
-import ForepawCore
-
 public enum ForepawError: Error, CustomStringConvertible {
     case appNotFound(String)
     case staleRef(ElementRef)

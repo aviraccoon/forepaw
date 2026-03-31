@@ -2,16 +2,6 @@ import Cocoa
 import ForepawCore
 import Vision
 
-/// OCR result: recognized text with its bounding box in screen coordinates.
-public struct OCRResult: Sendable {
-    public let text: String
-    public let bounds: Rect
-    /// Center point for clicking.
-    public var center: (x: Double, y: Double) {
-        (x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2)
-    }
-}
-
 /// Runs macOS Vision framework OCR on a screenshot.
 public struct OCREngine: Sendable {
     public init() {}

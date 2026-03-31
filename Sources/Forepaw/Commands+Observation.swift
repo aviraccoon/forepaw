@@ -1,6 +1,5 @@
 import ArgumentParser
 import ForepawCore
-import ForepawDarwin
 import Foundation
 
 struct Snapshot: AsyncParsableCommand {
@@ -23,7 +22,6 @@ struct Snapshot: AsyncParsableCommand {
         guard let app = global.app else {
             throw ValidationError("--app is required")
         }
-        let provider = DarwinProvider()
         let options = SnapshotOptions(
             interactiveOnly: interactive,
             maxDepth: depth,
@@ -46,7 +44,6 @@ struct Screenshot: AsyncParsableCommand {
     var annotate: Bool = false
 
     mutating func run() async throws {
-        let provider = DarwinProvider()
         let result = try await provider.screenshot(app: global.app, window: global.window, annotate: annotate)
         print(result.path)
         if let legend = result.legend {
@@ -65,7 +62,6 @@ struct ListApps: AsyncParsableCommand {
     var json: Bool = false
 
     mutating func run() async throws {
-        let provider = DarwinProvider()
         let apps = try await provider.listApps()
         if json {
             let encoder = JSONEncoder()
@@ -90,7 +86,6 @@ struct ListWindows: AsyncParsableCommand {
     @OptionGroup var global: GlobalOptions
 
     mutating func run() async throws {
-        let provider = DarwinProvider()
         let windows = try await provider.listWindows(app: global.app)
         for window in windows {
             print("\(window.id)  \(window.app)  \"\(window.title)\"")
@@ -110,7 +105,6 @@ struct OCR: AsyncParsableCommand {
     var find: String?
 
     mutating func run() async throws {
-        let provider = DarwinProvider()
         let results = try await provider.ocr(app: global.app, window: global.window, find: find)
 
         if global.json {

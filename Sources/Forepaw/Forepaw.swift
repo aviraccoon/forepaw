@@ -1,6 +1,5 @@
 import ArgumentParser
 import ForepawCore
-import ForepawDarwin
 import Foundation
 
 @main

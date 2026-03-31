@@ -1,6 +1,5 @@
 import ArgumentParser
 import ForepawCore
-import ForepawDarwin
 import Foundation
 
 struct Permissions: AsyncParsableCommand {
@@ -30,7 +29,6 @@ struct Permissions: AsyncParsableCommand {
         """
 
     mutating func run() async throws {
-        let provider = DarwinProvider()
         var failed = false
 
         if request {
