@@ -100,4 +100,47 @@ struct TreeRendererTests {
 
         #expect(output == "app: App\ngroup")
     }
+
+    @Test("renders bounds as (x,y WxH)")
+    func rendersBounds() {
+        let tree = ElementTree(
+            app: "App",
+            root: ElementNode(
+                role: "AXWindow",
+                name: "Main",
+                bounds: Rect(x: 100, y: 200, width: 800, height: 600),
+                children: [
+                    ElementNode(
+                        role: "AXButton",
+                        name: "OK",
+                        ref: ElementRef(1),
+                        bounds: Rect(x: 150, y: 250, width: 80, height: 30)
+                    )
+                ]
+            ),
+            refs: [:]
+        )
+
+        let renderer = TreeRenderer()
+        let output = renderer.render(tree: tree)
+        let lines = output.split(separator: "\n").map(String.init)
+
+        #expect(lines[1] == "window \"Main\" (100,200 800x600)")
+        #expect(lines[2] == "  button @e1 \"OK\" (150,250 80x30)")
+    }
+
+    @Test("omits bounds when nil")
+    func omitsMissingBounds() {
+        let tree = ElementTree(
+            app: "App",
+            root: ElementNode(role: "AXButton", name: "OK", ref: ElementRef(1)),
+            refs: [:]
+        )
+
+        let renderer = TreeRenderer()
+        let output = renderer.render(tree: tree)
+
+        #expect(!output.contains("("))
+        #expect(output.contains("button @e1 \"OK\""))
+    }
 }

@@ -23,6 +23,10 @@ public struct ResolvedWindow: Sendable {
 
 /// macOS implementation of `DesktopProvider` using Accessibility APIs.
 public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
+    /// Default depth for AX tree walks, from SnapshotOptions.defaultDepth.
+    /// Used by resolveRef to match snapshot's ref assignment.
+    static let defaultDepth = SnapshotOptions.defaultDepth
+
     // Current snapshot's ref table, keyed by ref ID.
     // Stores AXUIElement handles for action dispatch.
     internal var refTable: [ElementRef: AXUIElement] = [:]

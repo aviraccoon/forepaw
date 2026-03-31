@@ -5,14 +5,14 @@ import Foundation
 
 struct Click: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Click an element by ref"
+        abstract: "Click an element by ref or at coordinates"
     )
 
-    @Argument(help: "Element ref (e.g. @e3)")
-    var ref: String
+    @Argument(help: "Element ref (e.g. @e3) or coordinates (e.g. 500,300)")
+    var target: String
 
     @Option(name: .long, help: "Target application name")
-    var app: String
+    var app: String?
 
     @Flag(name: .long, help: "Right-click (context menu)")
     var right: Bool = false
@@ -24,15 +24,28 @@ struct Click: AsyncParsableCommand {
     var json: Bool = false
 
     mutating func run() async throws {
-        guard let elementRef = ElementRef.parse(ref) else {
-            throw ValidationError("Invalid ref: \(ref). Expected format: @e1, @e2, etc.")
-        }
         let options = ClickOptions(
             button: right ? .right : .left,
             clickCount: double ? 2 : 1
         )
         let provider = DarwinProvider()
-        let result = try await provider.click(ref: elementRef, app: app, options: options)
+        let result: ActionResult
+
+        if let elementRef = ElementRef.parse(target) {
+            guard let app else {
+                throw ValidationError("--app is required for ref-based click")
+            }
+            result = try await provider.click(ref: elementRef, app: app, options: options)
+        } else if let point = parseCoordinate(target) {
+            guard let app else {
+                throw ValidationError("--app is required for coordinate-based click")
+            }
+            result = try await provider.clickAtPoint(point, app: app, options: options)
+        } else {
+            throw ValidationError(
+                "Invalid target: \(target). Expected a ref (@e1) or coordinates (500,300).")
+        }
+
         let formatter = OutputFormatter(json: json)
         print(formatter.format(success: result.success, command: "click", data: ["text": result.message ?? "clicked"]))
     }
@@ -145,6 +158,9 @@ struct OCRClick: AsyncParsableCommand {
     @Flag(name: .long, help: "Double-click")
     var double: Bool = false
 
+    @Option(name: .long, help: "Which match to click (1-based) when multiple found")
+    var index: Int?
+
     @Flag(name: .long, help: "JSON output")
     var json: Bool = false
 
@@ -155,12 +171,315 @@ struct OCRClick: AsyncParsableCommand {
         )
         let provider = DarwinProvider()
         let result = try await provider.ocrClick(
-            text: text, app: app, window: window, options: options)
+            text: text, app: app, window: window, options: options, index: index)
         let formatter = OutputFormatter(json: json)
         print(
             formatter.format(success: result.success, command: "ocr-click", data: ["text": result.message ?? "clicked"])
         )
     }
+}
+
+struct Hover: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Move mouse to an element without clicking (triggers tooltips/hover states)"
+    )
+
+    @Argument(help: "Element ref (e.g. @e3), text to find via OCR, or coordinates (e.g. 500,300)")
+    var target: String
+
+    @Option(name: .long, help: "Target application name")
+    var app: String?
+
+    @Option(name: .long, help: "Window title or ID (e.g. 'Hacker News' or 'w-7290')")
+    var window: String?
+
+    @Flag(name: .long, help: "JSON output")
+    var json: Bool = false
+
+    mutating func run() async throws {
+        let provider = DarwinProvider()
+        let result: ActionResult
+
+        if let elementRef = ElementRef.parse(target) {
+            guard let app else {
+                throw ValidationError("--app is required for ref-based hover")
+            }
+            result = try await provider.hover(ref: elementRef, app: app)
+        } else if let point = parseCoordinate(target) {
+            result = try await provider.hoverAtPoint(point, app: app)
+        } else {
+            guard let app else {
+                throw ValidationError("--app is required for text-based hover")
+            }
+            result = try await provider.ocrHover(text: target, app: app, window: window)
+        }
+
+        let formatter = OutputFormatter(json: json)
+        print(formatter.format(success: result.success, command: "hover", data: ["text": result.message ?? "hovered"]))
+    }
+}
+
+struct Wait: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Wait for text to appear on screen (OCR polling)"
+    )
+
+    @Argument(help: "Text to wait for")
+    var text: String
+
+    @Option(name: .long, help: "Target application name")
+    var app: String
+
+    @Option(name: .long, help: "Window title or ID (e.g. 'Hacker News' or 'w-7290')")
+    var window: String?
+
+    @Option(name: .long, help: "Maximum seconds to wait (default 10)")
+    var timeout: Double = 10
+
+    @Option(name: .long, help: "Seconds between polls (default 1)")
+    var interval: Double = 1
+
+    @Flag(name: .long, help: "JSON output")
+    var json: Bool = false
+
+    mutating func run() async throws {
+        let provider = DarwinProvider()
+        let result = try await provider.wait(
+            text: text, app: app, window: window,
+            timeout: timeout, interval: interval)
+        let formatter = OutputFormatter(json: json)
+        print(formatter.format(success: result.success, command: "wait", data: ["text": result.message ?? "found"]))
+    }
+}
+
+struct Batch: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Execute multiple actions in one invocation"
+    )
+
+    @Argument(
+        parsing: .remaining, help: "Actions separated by ;; (e.g. 'click @e3 ;; press cmd+s ;; keyboard-type hello')")
+    var args: [String]
+
+    @Option(name: .long, help: "Target application name (applies to all actions unless overridden)")
+    var app: String?
+
+    @Option(name: .long, help: "Window title or ID")
+    var window: String?
+
+    @Option(name: .long, help: "Delay in milliseconds between actions (default 100)")
+    var delay: Int = 100
+
+    @Flag(name: .long, help: "JSON output")
+    var json: Bool = false
+
+    mutating func run() async throws {
+        // Join all args and split on ;;
+        let joined = args.joined(separator: " ")
+        let actions = joined.components(separatedBy: ";;")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        guard !actions.isEmpty else {
+            throw ValidationError("No actions provided. Separate actions with ;;")
+        }
+
+        let provider = DarwinProvider()
+        let formatter = OutputFormatter(json: json)
+        var results: [(String, ActionResult)] = []
+
+        for (i, action) in actions.enumerated() {
+            let result = try await executeAction(action, provider: provider)
+            results.append((action, result))
+            print(
+                formatter.format(
+                    success: result.success, command: action,
+                    data: ["text": result.message ?? "ok"]))
+
+            if i < actions.count - 1 {
+                try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000)
+            }
+        }
+    }
+
+    private func executeAction(_ action: String, provider: DarwinProvider) async throws -> ActionResult {
+        let parts = shellSplit(action)
+        guard let command = parts.first else {
+            throw ForepawError.actionFailed("Empty action")
+        }
+        let actionArgs = Array(parts.dropFirst())
+
+        switch command {
+        case "click":
+            guard let target = actionArgs.first else {
+                throw ForepawError.actionFailed("click requires a ref or coordinates (e.g. click @e3 or click 500,300)")
+            }
+            let appName = parseOption("--app", from: actionArgs) ?? app
+            let options = ClickOptions(
+                button: actionArgs.contains("--right") ? .right : .left,
+                clickCount: actionArgs.contains("--double") ? 2 : 1
+            )
+            if let ref = ElementRef.parse(target) {
+                guard let appName else {
+                    throw ForepawError.actionFailed("click requires --app (on action or batch)")
+                }
+                return try await provider.click(ref: ref, app: appName, options: options)
+            } else if let point = parseCoordinate(target) {
+                guard let appName else {
+                    throw ForepawError.actionFailed("click requires --app (on action or batch)")
+                }
+                return try await provider.clickAtPoint(point, app: appName, options: options)
+            } else {
+                throw ForepawError.actionFailed(
+                    "Invalid click target: \(target). Use a ref (@e3) or coordinates (500,300)")
+            }
+
+        case "hover":
+            guard let target = actionArgs.first else {
+                throw ForepawError.actionFailed(
+                    "hover requires a ref, text, or coordinates (e.g. hover @e3 or hover 500,300)")
+            }
+            let appName = parseOption("--app", from: actionArgs) ?? app
+            if let ref = ElementRef.parse(target) {
+                guard let appName else {
+                    throw ForepawError.actionFailed("hover requires --app (on action or batch)")
+                }
+                return try await provider.hover(ref: ref, app: appName)
+            } else if let point = parseCoordinate(target) {
+                return try await provider.hoverAtPoint(point, app: appName)
+            } else {
+                guard let appName else {
+                    throw ForepawError.actionFailed("hover requires --app (on action or batch)")
+                }
+                let win = parseOption("--window", from: actionArgs) ?? window
+                return try await provider.ocrHover(text: target, app: appName, window: win)
+            }
+
+        case "type":
+            guard actionArgs.count >= 2,
+                let ref = ElementRef.parse(actionArgs[0])
+            else {
+                throw ForepawError.actionFailed("type requires ref and text (e.g. type @e3 hello)")
+            }
+            let text = actionArgs[1]
+            let appName = parseOption("--app", from: actionArgs) ?? app
+            guard let appName else {
+                throw ForepawError.actionFailed("type requires --app (on action or batch)")
+            }
+            return try await provider.type(ref: ref, text: text, app: appName)
+
+        case "keyboard-type":
+            guard let text = actionArgs.first else {
+                throw ForepawError.actionFailed("keyboard-type requires text")
+            }
+            let appName = parseOption("--app", from: actionArgs) ?? app
+            if let appName {
+                return try await provider.keyboardType(text: text, app: appName)
+            }
+            return try await provider.keyboardType(text: text)
+
+        case "press":
+            guard let comboStr = actionArgs.first else {
+                throw ForepawError.actionFailed("press requires a key combo (e.g. press cmd+s)")
+            }
+            let keyCombo = KeyCombo.parse(comboStr)
+            let appName = parseOption("--app", from: actionArgs) ?? app
+            if let appName {
+                return try await provider.press(keys: keyCombo, app: appName)
+            }
+            return try await provider.press(keys: keyCombo)
+
+        case "scroll":
+            guard let direction = actionArgs.first else {
+                throw ForepawError.actionFailed("scroll requires a direction (up/down/left/right)")
+            }
+            let appName = parseOption("--app", from: actionArgs) ?? app
+            guard let appName else {
+                throw ForepawError.actionFailed("scroll requires --app (on action or batch)")
+            }
+            let amount = parseOption("--amount", from: actionArgs).flatMap { Int($0) } ?? 3
+            let win = parseOption("--window", from: actionArgs) ?? window
+            return try await provider.scroll(
+                direction: direction, amount: amount, app: appName, window: win)
+
+        case "ocr-click":
+            guard let text = actionArgs.first else {
+                throw ForepawError.actionFailed("ocr-click requires text")
+            }
+            let appName = parseOption("--app", from: actionArgs) ?? app
+            guard let appName else {
+                throw ForepawError.actionFailed("ocr-click requires --app (on action or batch)")
+            }
+            let win = parseOption("--window", from: actionArgs) ?? window
+            let options = ClickOptions(
+                button: actionArgs.contains("--right") ? .right : .left,
+                clickCount: actionArgs.contains("--double") ? 2 : 1
+            )
+            let ocrIndex = parseOption("--index", from: actionArgs).flatMap { Int($0) }
+            return try await provider.ocrClick(
+                text: text, app: appName, window: win, options: options, index: ocrIndex)
+
+        case "wait":
+            guard let text = actionArgs.first else {
+                throw ForepawError.actionFailed("wait requires text to search for")
+            }
+            let appName = parseOption("--app", from: actionArgs) ?? app
+            guard let appName else {
+                throw ForepawError.actionFailed("wait requires --app (on action or batch)")
+            }
+            let win = parseOption("--window", from: actionArgs) ?? window
+            let timeout = parseOption("--timeout", from: actionArgs).flatMap { Double($0) } ?? 10
+            let interval = parseOption("--interval", from: actionArgs).flatMap { Double($0) } ?? 1
+            return try await provider.wait(
+                text: text, app: appName, window: win,
+                timeout: timeout, interval: interval)
+
+        default:
+            throw ForepawError.actionFailed(
+                "Unknown action '\(command)'. Supported: click, hover, type, keyboard-type, press, scroll, ocr-click, wait"
+            )
+        }
+    }
+
+    /// Parse a named option value from an argument list.
+    private func parseOption(_ name: String, from args: [String]) -> String? {
+        guard let idx = args.firstIndex(of: name), idx + 1 < args.count else { return nil }
+        return args[idx + 1]
+    }
+
+    /// Split a string into shell-like tokens, respecting double quotes.
+    private func shellSplit(_ input: String) -> [String] {
+        var tokens: [String] = []
+        var current = ""
+        var inQuotes = false
+
+        for char in input {
+            if char == "\"" {
+                inQuotes.toggle()
+            } else if char == " " && !inQuotes {
+                if !current.isEmpty {
+                    tokens.append(current)
+                    current = ""
+                }
+            } else {
+                current.append(char)
+            }
+        }
+        if !current.isEmpty {
+            tokens.append(current)
+        }
+        return tokens
+    }
+}
+
+/// Parse "x,y" coordinate string into a CGPoint.
+func parseCoordinate(_ string: String) -> CGPoint? {
+    let parts = string.split(separator: ",")
+    guard parts.count == 2,
+        let x = Double(parts[0].trimmingCharacters(in: .whitespaces)),
+        let y = Double(parts[1].trimmingCharacters(in: .whitespaces))
+    else { return nil }
+    return CGPoint(x: x, y: y)
 }
 
 struct Scroll: AsyncParsableCommand {

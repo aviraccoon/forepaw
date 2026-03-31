@@ -21,18 +21,20 @@ Always snapshot or screenshot before acting. Never assume UI state from a previo
 forepaw snapshot --app "App Name" -i   # interactive elements only
 ```
 
-Returns structured text with `@e` refs:
+Returns structured text with `@e` refs and screen positions:
 ```
 app: Finder
-window "Documents"
-  button @e1 "Back"
-  textfield @e2 "Search" value=""
-  list
-    cell @e3 "README.md"
-    cell @e4 "src"
+window "Documents" (0,46 1200x800)
+  button @e1 "Back" (10,50 60x30)
+  textfield @e2 "Search" value="" (200,50 300x30)
+  list (10,90 1180x700)
+    cell @e3 "README.md" (10,90 1180x25)
+    cell @e4 "src" (10,115 1180x25)
 ```
 
-Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' chrome).
+Every element includes `(x,y WxH)` screen coordinates. These match what action commands use -- you can verify click targets or use coordinate-based click/hover for precision.
+
+Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' chrome). For browsers, the full tree (without `-i`) includes web content elements like links, headings, and text -- useful for clicking small targets like footnote links.
 
 ### 2. OCR (fallback for Electron apps)
 
@@ -62,6 +64,15 @@ forepaw click @e3 --app "App Name" --right    # right-click (context menu)
 forepaw click @e3 --app "App Name" --double   # double-click
 ```
 
+### Click by coordinates (from snapshot bounds)
+
+```bash
+forepaw click 500,300 --app "App Name"    # click at screen position
+forepaw hover 500,300 --app "App Name"    # hover at screen position
+```
+
+Use when you have coordinates from snapshot bounds but no ref (e.g. static text, or when refs shift). Read the `(x,y WxH)` from snapshot output and compute the center: `x + W/2, y + H/2`.
+
 ### Click by text (from OCR)
 
 ```bash
@@ -72,11 +83,22 @@ forepaw ocr-click "item" --app "App Name" --right    # right-click
 
 `--right` and `--double` work on both `click` and `ocr-click`. Right-click opens context menus. Double-click for selecting words, opening files, etc.
 
-### Type into element (from snapshot)
+When multiple matches are found, `ocr-click` errors with a listing:
+```
+Multiple matches for 'Shelter':
+  --index 1: 'Shelter' at 608,138
+  --index 2: 'Shelter' at 323,423
+Use --index N to pick one.
+```
+Use `--index N` to click a specific match. Single matches click without needing `--index`. Prefer `click @ref` when available -- it's unambiguous.
+
+### Type into element (from snapshot) -- preferred
 
 ```bash
 forepaw type @e2 "search query" --app "App Name"
 ```
+
+Focuses the element via AX, then types. More reliable than `keyboard-type` because it ensures the right element receives input -- some text fields need AX focus, not just a mouse click.
 
 ### Type into current focus (no ref needed)
 
@@ -84,6 +106,8 @@ forepaw type @e2 "search query" --app "App Name"
 forepaw keyboard-type "hello world" --app "App Name"  # activates app first
 forepaw keyboard-type "hello world"                     # types into current focus
 ```
+
+Use when there's no AX ref for the target (e.g. inside batch after a coordinate click). Prefer `type @ref` when a ref is available.
 
 ### Keyboard shortcuts
 
@@ -102,6 +126,48 @@ forepaw scroll down --app Orion --ref @e5    # scroll within a specific element
 ```
 
 Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks.
+
+### Hover (trigger tooltips/hover states)
+
+```bash
+forepaw hover @e5 --app "App Name"              # by ref (from snapshot)
+forepaw hover "Submit" --app "App Name"          # by text (OCR lookup)
+forepaw hover "8 comments" --app Orion           # hover over a link
+```
+
+Moves the mouse without clicking. Accepts either an `@e` ref or text (auto-detected -- if the argument parses as a ref, uses AX; otherwise uses OCR). Useful for triggering tooltips, hover menus, or preview popups.
+
+### Wait (poll for text to appear)
+
+```bash
+forepaw wait "Loading complete" --app "App Name"                # default: 10s timeout, 1s interval
+forepaw wait "Submit" --app "App Name" --timeout 30 --interval 2  # custom timing
+```
+
+Polls via OCR until the text appears on screen. Throws an error on timeout. Use after actions that trigger async UI changes (navigation, loading, dialog appearance).
+
+### Batch (multiple actions in one call)
+
+```bash
+forepaw batch --app Notes "click @e3 ;; keyboard-type hello ;; press return"
+forepaw batch --app Finder --delay 200 "click @e1 ;; wait \"Documents\" ;; click @e5"
+```
+
+Executes actions sequentially, separated by `;;`. The `--app` and `--window` flags apply to all actions unless overridden per-action. Default 100ms delay between actions (configurable with `--delay`).
+
+Supported actions: `click`, `hover`, `type`, `keyboard-type`, `press`, `scroll`, `ocr-click`, `wait`.
+
+Per-action overrides:
+```bash
+forepaw batch "press opt+space ;; keyboard-type --app Raycast search term"
+```
+
+**Use batch for any multi-step interaction.** Separate CLI invocations return control to the terminal between commands, which steals focus from the target app. Batch keeps the app focused throughout the entire sequence. This is essential for workflows like typing into a text field after clicking it, or any click-then-type pattern.
+
+Browser URL bar example:
+```bash
+forepaw batch --app Orion "click 626,72 ;; keyboard-type example.com ;; press return"
+```
 
 ### Newlines in text input
 
@@ -141,11 +207,15 @@ The title shown in quotes in `list-windows` output is what you pass to `--window
 ## Important behaviors
 
 - **Always observe before acting.** Don't guess UI state.
-- **Refs are positional.** `@e3` means "the 3rd interactive element in depth-first order." If the UI changes (menu opens, dialog appears), refs shift. Re-snapshot after any action that changes the UI.
+- **Refs are positional.** `@e3` means "the 3rd interactive element in depth-first order." If the UI changes (menu opens, dialog appears), refs shift. Re-snapshot after any action that changes the UI. Don't use `--depth` with a non-default value and expect refs to work with action commands -- `--depth` controls the tree walk, and action commands use the default depth (15).
+- **Snapshot activates the app.** The snapshot command brings the app to the foreground so the AX tree matches what action commands will see. Some apps (especially browsers) expose different elements when active vs. background.
+- **Prefer `type @ref` over click + keyboard-type.** `type` focuses the element via AX and types into it directly. `keyboard-type` after a click can fail if the click didn't give the element AX focus. Use `keyboard-type` only inside batch (after coordinate clicks) or when no ref is available.
+- **Use batch for multi-step interactions.** Separate CLI invocations return control to the terminal, which steals focus from the target app. Any click-then-type or multi-action sequence should use batch. Even adding `--delay` for slow UI transitions.
 - **AX tree vs OCR.** Try `snapshot -i` first. If the tree is mostly empty (just window buttons and menu bar), the app is Electron -- switch to OCR.
 - **App activation.** `--app` brings the app to the foreground. This means the user's screen will change. Warn them before switching apps if they didn't explicitly ask.
 - **Mouse clicks are physical.** OCR-click and mouse-fallback clicks move the actual cursor and click on screen. The user will see this happening.
 - **Keystroke delay.** Typing is not instant (~8ms per character). Long text takes a moment.
+- **Wait timeout.** `wait` polls via OCR (screenshot + text recognition each poll). Keep intervals reasonable (1s+) to avoid hammering the system. The default 10s timeout covers most UI transitions.
 - **Text starting with dashes.** If text for `keyboard-type`, `type`, or `ocr-click` starts with `-` or `--`, put all options before `--` to prevent it being parsed as a flag:
   ```bash
   forepaw keyboard-type --app Notes -- "--this starts with dashes"

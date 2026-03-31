@@ -16,8 +16,8 @@ struct Snapshot: AsyncParsableCommand {
     @Flag(name: .shortAndLong, help: "Remove empty structural elements")
     var compact: Bool = false
 
-    @Option(name: .shortAndLong, help: "Maximum tree depth")
-    var depth: Int = 15
+    @Option(name: .shortAndLong, help: "Maximum tree depth (default 15)")
+    var depth: Int = SnapshotOptions.defaultDepth
 
     mutating func run() async throws {
         guard let app = global.app else {

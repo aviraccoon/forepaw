@@ -34,6 +34,11 @@ public struct TreeRenderer: Sendable {
             parts.append("value=\"\(display)\"")
         }
 
+        // Bounds
+        if let b = node.bounds {
+            parts.append("(\(Int(b.x)),\(Int(b.y)) \(Int(b.width))x\(Int(b.height)))")
+        }
+
         // Extra attributes
         for (key, val) in node.attributes.sorted(by: { $0.key < $1.key }) {
             parts.append("\(key)=\(val)")

@@ -10,6 +10,12 @@ extension DarwinProvider {
             throw ForepawError.permissionDenied
         }
         let runningApp = try findApp(named: appName)
+
+        // Activate the app so the AX tree matches what action commands will see.
+        // Some apps (e.g. browsers) only expose web content elements when active.
+        runningApp.activate()
+        try await Task.sleep(nanoseconds: 300_000_000)
+
         let appElement = AXUIElementCreateApplication(runningApp.processIdentifier)
 
         let root = buildTree(element: appElement, depth: 0, maxDepth: options.maxDepth)
@@ -22,7 +28,8 @@ extension DarwinProvider {
         var axElements: [Int: AXUIElement] = [:]
         var axCounter = 1
         collectAXElements(
-            element: appElement, depth: 0, maxDepth: options.maxDepth, counter: &axCounter, elements: &axElements)
+            element: appElement, depth: 0, maxDepth: options.maxDepth, counter: &axCounter,
+            elements: &axElements)
 
         for (ref, _) in result.refs {
             if let axElement = axElements[ref.id] {
@@ -42,7 +49,9 @@ extension DarwinProvider {
         let appElement = AXUIElementCreateApplication(runningApp.processIdentifier)
         var elements: [Int: AXUIElement] = [:]
         var resolveCounter = 1
-        collectAXElements(element: appElement, depth: 0, maxDepth: 15, counter: &resolveCounter, elements: &elements)
+        collectAXElements(
+            element: appElement, depth: 0, maxDepth: Self.defaultDepth, counter: &resolveCounter,
+            elements: &elements)
         guard let element = elements[ref.id] else {
             throw ForepawError.staleRef(ref)
         }

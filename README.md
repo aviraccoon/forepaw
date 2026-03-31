@@ -21,6 +21,9 @@ forepaw keyboard-type "hello" --app Notes   # type into focused element
 forepaw press cmd+s --app Finder    # keyboard shortcut
 forepaw press opt+space             # global hotkey (no --app)
 forepaw scroll down --app Finder    # scroll down 3 ticks
+forepaw hover @e5 --app Finder      # move mouse to element (tooltip)
+forepaw wait "Done" --app MyApp     # poll until text appears
+forepaw batch --app Notes "click @e3 ;; keyboard-type hello ;; press return"
 forepaw screenshot --app Finder     # take a screenshot
 forepaw screenshot --app Zed --window "my-project"  # target specific window
 ```
@@ -37,6 +40,8 @@ Sources/
 ```
 
 `ForepawCore` defines a `DesktopProvider` protocol. `ForepawDarwin` implements it for macOS. A future Linux implementation would use AT-SPI2/DBus with the same CLI interface.
+
+Snapshots include screen coordinates for every element (`(x,y WxH)` format), making element positions visible for debugging and precise coordinate-based targeting.
 
 ## Requirements
 
@@ -76,10 +81,13 @@ swift run forepaw list-apps
 |---------|-------------|
 | `click <@ref> --app <name> [--right] [--double]` | Click element (AX action first, mouse fallback) |
 | `type <@ref> <text> --app <name>` | Set element value / type into element |
-| `ocr-click <text> --app <name> [--window <title\|id>] [--right] [--double]` | Find text via OCR and click it |
+| `ocr-click <text> --app <name> [--window <title\|id>] [--right] [--double] [--index N]` | Find text via OCR and click it |
 | `keyboard-type <text> [--app <name>]` | Type into focused element |
 | `press <combo> [--app <name>]` | Keyboard shortcut (e.g. `cmd+s`, `ctrl+shift+z`) |
 | `scroll <direction> --app <name> [--window <title\|id>] [--amount <n>]` | Scroll up/down/left/right |
+| `hover <@ref\|text> --app <name> [--window <title\|id>]` | Move mouse to element or text (triggers tooltips/hover states) |
+| `wait <text> --app <name> [--timeout <s>] [--interval <s>]` | Poll OCR until text appears |
+| `batch <actions> [--app <name>] [--delay <ms>]` | Execute multiple actions (separated by `;;`) |
 
 ### Snapshot flags
 
@@ -110,6 +118,10 @@ If a title substring matches multiple windows, forepaw reports the ambiguity and
 
 `snapshot` assigns `@e1`, `@e2`, `@e3` to interactive elements in depth-first order. Refs are positional -- action commands re-walk the tree to find the element, so refs work across CLI invocations as long as the UI hasn't changed. If a ref is stale, re-snapshot and retry.
 
+`snapshot` activates the target app before reading the AX tree. This ensures refs match what action commands will see -- some apps (especially browsers) expose different elements when active vs. background.
+
+The `--depth` flag controls how deep the AX tree is walked (default 15). Action commands like `click` also walk at depth 15, so refs are consistent at the default. Using a non-default `--depth` may cause ref mismatch with action commands.
+
 Interactive roles: button, text field, text area, checkbox, radio button, slider, combo box, popup button, menu button, link, menu item, tab, switch, incrementor, color well, tree item, cell, dock item.
 
 ## OCR
@@ -128,11 +140,17 @@ OCR uses the macOS Vision framework (`VNRecognizeTextRequest`). No external depe
 
 **Click**: For elements found via `snapshot`, tries `AXPress` (accessibility action) first. For web content links in browsers, prefers mouse click (AXPress doesn't trigger navigation). Falls back to CGEvent mouse click at element center. `--right` for context menus, `--double` for double-click (file open, word select). Both flags always use mouse events (AXPress can't express these).
 
-**Type**: Tries `AXSetAttributeValue` on the element's value first. Falls back to focusing the element and simulating keystrokes via CGEvent. Inter-keystroke delay (8ms) prevents character dropping in Electron apps.
+**Type**: Tries `AXSetAttributeValue` on the element's value first. Falls back to focusing the element via AX (`AXRaise` + `AXFocused`) and simulating keystrokes via CGEvent. More reliable than click + `keyboard-type` for text fields -- AX focus ensures the right element receives input. Inter-keystroke delay (8ms) prevents character dropping in Electron apps.
 
-**OCR-click**: Screenshots the window, runs OCR, finds the text, converts pixel coordinates to screen points (accounting for Retina scale factor and window offset), then clicks via CGEvent.
+**OCR-click**: Screenshots the window, runs OCR, finds the text, converts pixel coordinates to screen points (accounting for Retina scale factor and window offset), then clicks via CGEvent. When multiple matches are found, errors with a listing of all matches and their coordinates -- use `--index N` (1-based) to pick one. Single matches click without needing `--index`.
 
 **Scroll**: Moves the mouse to the target position (window center by default, or element center with `--ref`), then fires CGEvent scroll wheel events. Amount is in "ticks" (lines), default 3.
+
+**Hover**: Moves the mouse to the target without clicking. Accepts either an `@e` ref (from `snapshot`) or text (found via OCR). Triggers tooltips, hover states, dropdown previews.
+
+**Wait**: Polls the screen via OCR (screenshot + text recognition) at a configurable interval until the target text appears or the timeout expires. Default 10s timeout, 1s interval.
+
+**Batch**: Executes multiple actions sequentially in one process invocation. Actions are separated by `;;`. The `--app` and `--window` flags apply to all actions unless overridden per-action. Default 100ms delay between actions. Supported actions: click, hover, type, keyboard-type, press, scroll, ocr-click, wait. **Use batch for any multi-step interaction** -- separate CLI invocations return control to the terminal between commands, which steals focus from the target app. Any click-then-type pattern needs batch.
 
 ## Design decisions
 

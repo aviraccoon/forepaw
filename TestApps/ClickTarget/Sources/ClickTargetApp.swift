@@ -34,6 +34,11 @@ struct ClickTargetView: View {
     @State private var clickLog: [String] = []
     @State private var clickDots: [ClickDot] = []
     @State private var textFieldValue: String = ""
+    @State private var loadingState: LoadingState = .idle
+
+    enum LoadingState {
+        case idle, loading, done
+    }
 
     var body: some View {
         ZStack {
@@ -62,6 +67,39 @@ struct ClickTargetView: View {
                 }
                 .padding(.vertical, 20)
                 .padding(.horizontal, 30)
+
+                // Delayed text for wait command testing
+                HStack(spacing: 12) {
+                    Button("Start Loading") {
+                        loadingState = .loading
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            loadingState = .done
+                        }
+                    }
+                    .disabled(loadingState == .loading)
+
+                    switch loadingState {
+                    case .idle:
+                        Text("Ready")
+                            .foregroundColor(.secondary)
+                    case .loading:
+                        Text("Loading...")
+                            .foregroundColor(.orange)
+                    case .done:
+                        Text("Loading complete")
+                            .foregroundColor(.green)
+                    }
+
+                    Spacer()
+
+                    if loadingState != .idle {
+                        Button("Reset") {
+                            loadingState = .idle
+                        }
+                    }
+                }
+                .padding(.horizontal, 30)
+                .padding(.bottom, 8)
 
                 // Text field for type/keyboard-type testing
                 HStack {
@@ -157,10 +195,11 @@ struct ClickTargetView: View {
             let color: Color = isRight ? .blue : .red
             let size: CGFloat = CGFloat(6 + clickCount * 5)
             let label = "\(isRight ? "R" : "L")x\(clickCount)"
-            clickDots.append(ClickDot(
-                x: flipped.x, y: flipped.y,
-                label: label, color: color, size: size
-            ))
+            clickDots.append(
+                ClickDot(
+                    x: flipped.x, y: flipped.y,
+                    label: label, color: color, size: size
+                ))
 
             return event
         }

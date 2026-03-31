@@ -292,4 +292,89 @@ extension DarwinProvider {
         try pressViaKeyboard(keys)
         return ActionResult(success: true)
     }
+
+    /// Move the mouse to a screen point without clicking.
+    public func moveMouse(to point: CGPoint) throws {
+        guard
+            let moveEvent = CGEvent(
+                mouseEventSource: nil, mouseType: .mouseMoved,
+                mouseCursorPosition: point, mouseButton: .left)
+        else {
+            throw ForepawError.actionFailed("Failed to create mouse move event")
+        }
+        moveEvent.post(tap: .cghidEventTap)
+    }
+
+    /// Move the mouse to a screen point, optionally activating an app first.
+    public func hoverAtPoint(_ point: CGPoint, app: String? = nil) async throws -> ActionResult {
+        if let app {
+            let runningApp = try findApp(named: app)
+            runningApp.activate()
+            try await Task.sleep(nanoseconds: 300_000_000)
+        }
+        try moveMouse(to: point)
+        return ActionResult(success: true, message: "hovered at \(Int(point.x)),\(Int(point.y))")
+    }
+
+    /// Move the mouse to an element's center without clicking.
+    /// Triggers tooltips, hover states, dropdown previews.
+    public func hover(ref: ElementRef, app: String) async throws -> ActionResult {
+        let runningApp = try findApp(named: app)
+        let element = try resolveRef(ref, app: app)
+        runningApp.activate()
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        guard let pos = getPosition(of: element), let size = getSize(of: element) else {
+            throw ForepawError.actionFailed("Cannot determine position of \(ref)")
+        }
+        let point = CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
+        try moveMouse(to: point)
+
+        return ActionResult(success: true, message: "hovered at \(Int(point.x)),\(Int(point.y))")
+    }
+
+    /// Move the mouse to text found via OCR without clicking.
+    public func ocrHover(
+        text: String, app: String, window: String? = nil, index: Int? = nil
+    ) async throws -> ActionResult {
+        let match = try await resolveOCRText(text, app: app, window: window, index: index)
+
+        let runningApp = try findApp(named: app)
+        runningApp.activate()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        try moveMouse(to: match.point)
+
+        return ActionResult(
+            success: true,
+            message: "hovered '\(match.text)' at \(Int(match.point.x)),\(Int(match.point.y))")
+    }
+
+    /// Wait for text to appear on screen via OCR polling.
+    ///
+    /// - Parameters:
+    ///   - text: Text to search for (case-insensitive substring)
+    ///   - app: Target application name
+    ///   - window: Optional window title or ID
+    ///   - timeout: Maximum seconds to wait (default 10)
+    ///   - interval: Seconds between polls (default 1)
+    /// - Returns: ActionResult with the matched text
+    public func wait(
+        text: String, app: String, window: String? = nil,
+        timeout: Double = 10, interval: Double = 1
+    ) async throws -> ActionResult {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            let matches = try await ocr(app: app, window: window, find: text)
+            if let match = matches.first {
+                return ActionResult(success: true, message: "found '\(match.text)' after waiting")
+            }
+            let remaining = deadline.timeIntervalSinceNow
+            if remaining <= 0 { break }
+            let sleepTime = min(interval, remaining)
+            try await Task.sleep(nanoseconds: UInt64(sleepTime * 1_000_000_000))
+        }
+
+        throw ForepawError.actionFailed("Timed out after \(Int(timeout))s waiting for '\(text)'")
+    }
 }

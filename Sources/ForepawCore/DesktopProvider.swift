@@ -72,11 +72,15 @@ public struct Rect: Sendable, Codable {
 }
 
 public struct SnapshotOptions: Sendable {
+    /// Default depth for AX tree walks. Shared between snapshot and resolveRef
+    /// so refs are consistent across CLI invocations.
+    public static let defaultDepth = 15
+
     public let interactiveOnly: Bool
     public let maxDepth: Int
     public let compact: Bool
 
-    public init(interactiveOnly: Bool = false, maxDepth: Int = 10, compact: Bool = false) {
+    public init(interactiveOnly: Bool = false, maxDepth: Int = defaultDepth, compact: Bool = false) {
         self.interactiveOnly = interactiveOnly
         self.maxDepth = maxDepth
         self.compact = compact
