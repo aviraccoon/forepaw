@@ -38,15 +38,16 @@ jobs:
           # Get everything between this version's header and the next ## header (or EOF)
           awk "/^## v${version//./\\.}/{found=1; next} /^## v/{if(found) exit} found" CHANGELOG.md > dist/release-notes.md
           # Append install instructions
-          cat >> dist/release-notes.md << 'INSTALL'
+          tag="${GITHUB_REF_NAME}"
+          cat >> dist/release-notes.md << INSTALL
 
           ### Install
 
-          ```bash
-          curl -L https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-darwin-arm64.tar.gz | tar xz
+          \`\`\`bash
+          curl -L https://github.com/aviraccoon/forepaw/releases/download/${tag}/forepaw-darwin-arm64.tar.gz | tar xz
           mv forepaw /usr/local/bin/
           forepaw permissions --request
-          ```
+          \`\`\`
 
           Requires macOS 14+, Apple Silicon. Needs Accessibility and Screen Recording permissions.
           INSTALL
