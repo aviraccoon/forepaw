@@ -419,6 +419,56 @@ struct Batch: AsyncParsableCommand {
             return try await provider.ocrClick(
                 text: text, app: appName, window: win, options: options, index: ocrIndex)
 
+        case "drag":
+            guard actionArgs.count >= 2 else {
+                throw ForepawError.actionFailed(
+                    "drag requires at least 2 targets (e.g. drag 100,100 500,500)")
+            }
+            let appName = parseOption("--app", from: actionArgs) ?? app
+            let dragSteps = parseOption("--steps", from: actionArgs).flatMap { Int($0) } ?? 30
+            let dragDuration =
+                parseOption("--duration", from: actionArgs).flatMap { Double($0) } ?? 0.3
+            let dragPressure =
+                parseOption("--pressure", from: actionArgs).flatMap { Double($0) }
+
+            // Parse modifier and behavior flags
+            let dragModifiers = KeyCombo.Modifier.parseModifiers(
+                parseOption("--modifiers", from: actionArgs))
+            let dragRight = actionArgs.contains("--right")
+            let dragClose = actionArgs.contains("--close")
+
+            let dragOptions = DragOptions(
+                steps: dragSteps, duration: dragDuration,
+                modifiers: dragModifiers, pressure: dragPressure,
+                rightButton: dragRight, closePath: dragClose)
+
+            // Collect coordinate/ref targets (filter out flags and option values)
+            let knownFlags: Set<String> = [
+                "--right", "--close",
+            ]
+            let dragTargets = actionArgs.filter {
+                !$0.starts(with: "--") && !knownFlags.contains($0)
+                    && parseOption($0, from: actionArgs) == nil
+            }
+            .prefix(while: { parseCoordinate($0) != nil || ElementRef.parse($0) != nil })
+            let coords = dragTargets.compactMap { parseCoordinate($0) }
+            if coords.count == dragTargets.count && coords.count >= 2 {
+                return try await provider.drag(
+                    path: Array(coords), options: dragOptions, app: appName)
+            } else if dragTargets.count == 2,
+                let fromRef = ElementRef.parse(String(dragTargets.first!)),
+                let toRef = ElementRef.parse(String(dragTargets.last!))
+            {
+                guard let appName else {
+                    throw ForepawError.actionFailed("drag requires --app (on action or batch)")
+                }
+                return try await provider.drag(
+                    fromRef: fromRef, toRef: toRef, app: appName, options: dragOptions)
+            } else {
+                throw ForepawError.actionFailed(
+                    "Invalid drag targets. Use coordinates (500,300) or refs (@e3)")
+            }
+
         case "wait":
             guard let text = actionArgs.first else {
                 throw ForepawError.actionFailed("wait requires text to search for")
@@ -436,7 +486,7 @@ struct Batch: AsyncParsableCommand {
 
         default:
             throw ForepawError.actionFailed(
-                "Unknown action '\(command)'. Supported: click, hover, type, keyboard-type, press, scroll, ocr-click, wait"
+                "Unknown action '\(command)'. Supported: click, hover, drag, type, keyboard-type, press, scroll, ocr-click, wait"
             )
         }
     }
@@ -472,14 +522,147 @@ struct Batch: AsyncParsableCommand {
     }
 }
 
-/// Parse "x,y" coordinate string into a CGPoint.
-func parseCoordinate(_ string: String) -> CGPoint? {
+struct Drag: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Drag from one point to another (for drawing, moving, resizing)"
+    )
+
+    @Argument(
+        parsing: .remaining,
+        help: "Drag targets: <from> <to> or path <p1> <p2> <p3>... (coords as x,y or refs as @eN)")
+    var targets: [String] = []
+
+    @Option(name: .long, help: "Target application name")
+    var app: String?
+
+    @Option(name: .long, help: "Number of intermediate steps per segment (default 30, higher = smoother)")
+    var steps: Int = 30
+
+    @Option(name: .long, help: "Total duration in seconds (default 0.3)")
+    var duration: Double = 0.3
+
+    @Option(name: .long, help: "Hold modifier keys during drag (e.g. shift, shift+alt, cmd+shift)")
+    var modifiers: String?
+
+    @Option(name: .long, help: "Mouse pressure 0.0-1.0 (for drawing tablet simulation)")
+    var pressure: Double?
+
+    @Flag(name: .long, help: "Use right mouse button (for context drag, canvas panning)")
+    var right: Bool = false
+
+    @Flag(name: .long, help: "Close path by appending start point (for shapes, 3+ points)")
+    var close: Bool = false
+
+    @Flag(name: .long, help: "Read coordinates from stdin (one x,y per line, or space-separated)")
+    var stdin: Bool = false
+
+    @Flag(name: .long, help: "JSON output")
+    var json: Bool = false
+
+    mutating func run() async throws {
+        let provider = DarwinProvider()
+        let options = buildDragOptions()
+        let result: ActionResult
+
+        if stdin {
+            let coords = try readCoordsFromStdin()
+            guard coords.count >= 2 else {
+                throw ValidationError(
+                    "--stdin requires at least 2 coordinates. Got \(coords.count).\n"
+                        + "Pipe coordinates as: echo \"100,100 200,200 300,300\" | forepaw drag --stdin --app App"
+                )
+            }
+            result = try await provider.drag(path: coords, options: options, app: app)
+        } else {
+            guard targets.count >= 2 else {
+                throw ValidationError(
+                    "drag requires at least 2 targets: <from> <to> or path of coordinates.\n"
+                        + "Examples: drag 100,100 500,500 --app Finder\n"
+                        + "          drag @e3 @e7 --app Finder\n"
+                        + "          drag 100,100 300,200 500,100 --app App  (path through 3 points)")
+            }
+
+            // Check if all targets are coordinates
+            let coords = targets.compactMap { parseCoordinate($0) }
+            if coords.count == targets.count {
+                result = try await provider.drag(path: coords, options: options, app: app)
+            } else if targets.count == 2,
+                let fromRef = ElementRef.parse(targets[0]),
+                let toRef = ElementRef.parse(targets[1])
+            {
+                guard let app else {
+                    throw ValidationError("--app is required for ref-based drag")
+                }
+                result = try await provider.drag(
+                    fromRef: fromRef, toRef: toRef, app: app, options: options)
+            } else if targets.count == 2 {
+                // Mixed: one might be a ref, the other coords. Resolve each.
+                let from = try resolveDragTarget(targets[0], provider: provider, app: app)
+                let to = try resolveDragTarget(targets[1], provider: provider, app: app)
+                result = try await provider.drag(path: [from, to], options: options, app: app)
+            } else {
+                throw ValidationError(
+                    "Path mode requires all coordinates (e.g. drag 100,100 300,200 500,100). Refs only supported for 2-point drag."
+                )
+            }
+        }
+
+        let formatter = OutputFormatter(json: json)
+        print(
+            formatter.format(
+                success: result.success, command: "drag", data: ["text": result.message ?? "dragged"]))
+    }
+
+    /// Read coordinates from stdin. Accepts space-separated or newline-separated x,y pairs.
+    private func readCoordsFromStdin() throws -> [Point] {
+        guard let data = try? FileHandle.standardInput.availableData,
+            let input = String(data: data, encoding: .utf8)
+        else {
+            throw ValidationError("Failed to read from stdin")
+        }
+
+        // Split on whitespace and newlines, parse each token as x,y
+        let tokens = input.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+        let coords = tokens.compactMap { parseCoordinate(String($0)) }
+
+        if coords.count != tokens.count {
+            let bad = tokens.filter { parseCoordinate(String($0)) == nil }
+            throw ValidationError(
+                "Invalid coordinate(s): \(bad.joined(separator: ", ")). Expected x,y format.")
+        }
+        return coords
+    }
+
+    private func buildDragOptions() -> DragOptions {
+        return DragOptions(
+            steps: steps, duration: duration,
+            modifiers: KeyCombo.Modifier.parseModifiers(modifiers),
+            pressure: pressure,
+            rightButton: right, closePath: close)
+    }
+
+    private func resolveDragTarget(_ target: String, provider: DarwinProvider, app: String?) throws -> Point {
+        if let point = parseCoordinate(target) {
+            return point
+        }
+        if let ref = ElementRef.parse(target) {
+            guard let app else {
+                throw ValidationError("--app is required for ref-based drag")
+            }
+            return try provider.resolveRefPosition(ref, app: app)
+        }
+        throw ValidationError("Invalid target: \(target). Expected a ref (@e1) or coordinates (500,300).")
+    }
+}
+
+/// Parse "x,y" coordinate string into a Point.
+func parseCoordinate(_ string: String) -> Point? {
     let parts = string.split(separator: ",")
     guard parts.count == 2,
         let x = Double(parts[0].trimmingCharacters(in: .whitespaces)),
         let y = Double(parts[1].trimmingCharacters(in: .whitespaces))
     else { return nil }
-    return CGPoint(x: x, y: y)
+    return Point(x: x, y: y)
 }
 
 struct Scroll: AsyncParsableCommand {

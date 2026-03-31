@@ -21,6 +21,7 @@ struct Forepaw: AsyncParsableCommand {
             OCR.self,
             OCRClick.self,
             Scroll.self,
+            Drag.self,
             Hover.self,
             Wait.self,
             Batch.self,

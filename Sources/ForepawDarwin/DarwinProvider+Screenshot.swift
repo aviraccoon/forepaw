@@ -21,13 +21,14 @@ extension DarwinProvider {
 
     /// Click at a specific screen coordinate with app activation.
     public func clickAtPoint(
-        _ point: CGPoint, app: String, options: ClickOptions = .normal
+        _ point: Point, app: String, options: ClickOptions = .normal
     ) async throws -> ActionResult {
+        let cgPoint = CGPoint(x: point.x, y: point.y)
         let runningApp = try findApp(named: app)
         runningApp.activate()
         try await Task.sleep(nanoseconds: 300_000_000)
         let button: CGMouseButton = options.button == .right ? .right : .left
-        try performMouseClick(at: point, button: button, clickCount: Int64(options.clickCount))
+        try performMouseClick(at: cgPoint, button: button, clickCount: Int64(options.clickCount))
         let isRight = options.button == .right
         let isDouble = options.clickCount > 1
         let label = isRight ? "right-clicked" : isDouble ? "double-clicked" : "clicked"

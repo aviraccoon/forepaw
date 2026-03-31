@@ -48,10 +48,13 @@ xcrun swift-format format -i -r Sources/ Tests/  # Auto-format
 ## Guidelines
 
 - Keep `ForepawCore` free of platform imports (`ApplicationServices`, `Cocoa`, `Carbon`, `Vision`). All macOS-specific code goes in `ForepawDarwin`. The CLI target (`Forepaw`) also stays platform-agnostic -- no `Cocoa` imports.
+- **Every new public API in `ForepawDarwin` must have a corresponding method on the `DesktopProvider` protocol in `ForepawCore`.** Use platform-agnostic types (`Point`, `Rect`, not `CGPoint`, `CGRect`) in the protocol. Convert to platform types inside the Darwin implementation. The CLI target should only depend on `ForepawCore` types.
 - Mirror `agent-browser`'s CLI patterns where applicable (same flag names, similar output format, `@e` ref syntax).
 - `--app` activates the target app before mouse/keyboard actions. Make it optional for commands where global input makes sense (e.g. `press` for system hotkeys, `keyboard-type` for typing into current focus).
 - Test `ForepawCore` logic (ref assignment, tree rendering, key parsing) with unit tests. `ForepawDarwin` tests need interactive accessibility access -- keep them separate.
+- **Every new type or function in `ForepawCore` needs unit tests.** Adding `DragOptions`? Add `DragOptionsTests.swift`. Adding `parseModifiers`? Test it. The test suite is the safety net for the cross-platform core -- if it's not tested, it'll break silently when refactored.
 - Output is plain text by default, `--json` for structured JSON.
 - Element names: check `AXTitle`, then `AXDescription`, then `AXTitleUIElement` (points to a label element), then first `AXStaticText` child's `AXValue`. This chain (`computedName`) handles cells, rows, and other container elements.
 - Keystroke simulation needs inter-character delay (~8ms) for Electron apps. Without it, characters get dropped.
 - **Every feature or behavior change must update the agent skill** (`.agents/skills/forepaw/SKILL.md`) and `README.md`. The skill is how agents learn to use forepaw -- if a capability isn't documented there, it doesn't exist to them.
+- **Load the forepaw skill before testing interactively.** The skill documents the observe-act loop, command patterns, and behavioral gotchas. Read it before running forepaw commands against real apps.

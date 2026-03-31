@@ -293,6 +293,15 @@ extension DarwinProvider {
         return ActionResult(success: true)
     }
 
+    /// Resolve a ref to its center point in screen coordinates.
+    public func resolveRefPosition(_ ref: ElementRef, app: String) throws -> Point {
+        let element = try resolveRef(ref, app: app)
+        guard let pos = getPosition(of: element), let size = getSize(of: element) else {
+            throw ForepawError.actionFailed("Cannot determine position of \(ref)")
+        }
+        return Point(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
+    }
+
     /// Move the mouse to a screen point without clicking.
     public func moveMouse(to point: CGPoint) throws {
         guard
@@ -306,13 +315,13 @@ extension DarwinProvider {
     }
 
     /// Move the mouse to a screen point, optionally activating an app first.
-    public func hoverAtPoint(_ point: CGPoint, app: String? = nil) async throws -> ActionResult {
+    public func hoverAtPoint(_ point: Point, app: String? = nil) async throws -> ActionResult {
         if let app {
             let runningApp = try findApp(named: app)
             runningApp.activate()
             try await Task.sleep(nanoseconds: 300_000_000)
         }
-        try moveMouse(to: point)
+        try moveMouse(to: CGPoint(x: point.x, y: point.y))
         return ActionResult(success: true, message: "hovered at \(Int(point.x)),\(Int(point.y))")
     }
 
@@ -347,6 +356,157 @@ extension DarwinProvider {
         return ActionResult(
             success: true,
             message: "hovered '\(match.text)' at \(Int(match.point.x)),\(Int(match.point.y))")
+    }
+
+    /// Drag along a path of screen coordinates.
+    ///
+    /// For two-point drag, pass a 2-element path.
+    /// For multi-point path, pass 3+ points.
+    /// If `options.closePath` is true, the first point is appended to close the shape.
+    public func drag(
+        path: [Point], options: DragOptions = DragOptions(),
+        app: String? = nil
+    ) async throws -> ActionResult {
+        var cgPath = path.map { CGPoint(x: $0.x, y: $0.y) }
+        guard cgPath.count >= 2 else {
+            throw ForepawError.actionFailed("Drag path requires at least 2 points")
+        }
+
+        if let app {
+            let runningApp = try findApp(named: app)
+            runningApp.activate()
+            try await Task.sleep(nanoseconds: 300_000_000)
+        }
+
+        if options.closePath, cgPath.count >= 3, let first = cgPath.first {
+            cgPath.append(first)
+        }
+
+        try performMouseDrag(path: cgPath, options: options)
+
+        if cgPath.count == 2 {
+            return ActionResult(
+                success: true,
+                message:
+                    "dragged from \(Int(cgPath[0].x)),\(Int(cgPath[0].y)) to \(Int(cgPath[1].x)),\(Int(cgPath[1].y))"
+                    + " (\(options.steps) steps, \(String(format: "%.1f", options.duration))s)")
+        }
+        return ActionResult(
+            success: true,
+            message:
+                "dragged through \(cgPath.count) points"
+                + " (\(options.steps) steps/segment, \(String(format: "%.1f", options.duration))s)")
+    }
+
+    /// Drag from one element to another.
+    public func drag(
+        fromRef: ElementRef, toRef: ElementRef, app: String,
+        options: DragOptions = DragOptions()
+    ) async throws -> ActionResult {
+        let runningApp = try findApp(named: app)
+        runningApp.activate()
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        let from = try resolveRefPosition(fromRef, app: app)
+        let to = try resolveRefPosition(toRef, app: app)
+
+        try performMouseDrag(
+            path: [CGPoint(x: from.x, y: from.y), CGPoint(x: to.x, y: to.y)], options: options)
+        return ActionResult(
+            success: true,
+            message:
+                "dragged from \(Int(from.x)),\(Int(from.y)) to \(Int(to.x)),\(Int(to.y))"
+                + " (\(options.steps) steps, \(String(format: "%.1f", options.duration))s)")
+    }
+
+    // MARK: - Drag internals
+
+    /// Convert KeyCombo.Modifier array to CGEventFlags.
+    private func eventFlags(for modifiers: [KeyCombo.Modifier]) -> CGEventFlags {
+        var flags = CGEventFlags()
+        for modifier in modifiers {
+            switch modifier {
+            case .command: flags.insert(.maskCommand)
+            case .shift: flags.insert(.maskShift)
+            case .option: flags.insert(.maskAlternate)
+            case .control: flags.insert(.maskControl)
+            }
+        }
+        return flags
+    }
+
+    /// Apply drag options (modifiers, pressure) to a CGEvent.
+    private func applyDragOptions(_ event: CGEvent, options: DragOptions) {
+        if !options.modifiers.isEmpty {
+            event.flags = eventFlags(for: options.modifiers)
+        }
+        if let pressure = options.pressure {
+            event.setDoubleValueField(.mouseEventPressure, value: pressure)
+        }
+    }
+
+    /// Unified drag implementation for any path length.
+    internal func performMouseDrag(
+        path: [CGPoint], options: DragOptions
+    ) throws {
+        guard let first = path.first, let last = path.last else { return }
+
+        let button: CGMouseButton = options.rightButton ? .right : .left
+        let downType: CGEventType = options.rightButton ? .rightMouseDown : .leftMouseDown
+        let dragType: CGEventType = options.rightButton ? .rightMouseDragged : .leftMouseDragged
+        let upType: CGEventType = options.rightButton ? .rightMouseUp : .leftMouseUp
+
+        // Move to start position
+        try moveMouse(to: first)
+        Thread.sleep(forTimeInterval: 0.05)
+
+        // Mouse down
+        guard
+            let mouseDown = CGEvent(
+                mouseEventSource: nil, mouseType: downType,
+                mouseCursorPosition: first, mouseButton: button)
+        else {
+            throw ForepawError.actionFailed("Failed to create mouseDown event")
+        }
+        applyDragOptions(mouseDown, options: options)
+        mouseDown.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.02)
+
+        // Drag through segments
+        let segments = path.count - 1
+        let segmentDuration = options.duration / Double(segments)
+        let stepDelay = segmentDuration / Double(options.steps)
+
+        for segIdx in 0..<segments {
+            let segFrom = path[segIdx]
+            let segTo = path[segIdx + 1]
+            for i in 1...options.steps {
+                let t = Double(i) / Double(options.steps)
+                let x = segFrom.x + (segTo.x - segFrom.x) * t
+                let y = segFrom.y + (segTo.y - segFrom.y) * t
+                let point = CGPoint(x: x, y: y)
+
+                guard
+                    let dragEvent = CGEvent(
+                        mouseEventSource: nil, mouseType: dragType,
+                        mouseCursorPosition: point, mouseButton: button)
+                else { continue }
+                applyDragOptions(dragEvent, options: options)
+                dragEvent.post(tap: .cghidEventTap)
+                Thread.sleep(forTimeInterval: stepDelay)
+            }
+        }
+
+        // Mouse up
+        guard
+            let mouseUp = CGEvent(
+                mouseEventSource: nil, mouseType: upType,
+                mouseCursorPosition: last, mouseButton: button)
+        else {
+            throw ForepawError.actionFailed("Failed to create mouseUp event")
+        }
+        applyDragOptions(mouseUp, options: options)
+        mouseUp.post(tap: .cghidEventTap)
     }
 
     /// Wait for text to appear on screen via OCR polling.

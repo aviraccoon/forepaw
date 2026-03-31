@@ -27,6 +27,15 @@ public protocol DesktopProvider: Sendable {
 
     /// List windows for an app, or all visible windows.
     func listWindows(app: String?) async throws -> [WindowInfo]
+
+    /// Drag along a path of screen coordinates.
+    func drag(path: [Point], options: DragOptions, app: String?) async throws -> ActionResult
+
+    /// Drag from one element to another.
+    func drag(
+        fromRef: ElementRef, toRef: ElementRef, app: String, options: DragOptions
+    ) async throws
+        -> ActionResult
 }
 
 // MARK: - Supporting types
@@ -54,6 +63,16 @@ public struct WindowInfo: Sendable, Codable {
         self.title = title
         self.app = app
         self.bounds = bounds
+    }
+}
+
+public struct Point: Sendable, Codable {
+    public let x: Double
+    public let y: Double
+
+    public init(x: Double, y: Double) {
+        self.x = x
+        self.y = y
     }
 }
 
@@ -127,6 +146,29 @@ public struct ClickOptions: Sendable {
     public static let normal = ClickOptions()
     public static let rightClick = ClickOptions(button: .right)
     public static let doubleClick = ClickOptions(clickCount: 2)
+}
+
+/// Options for drag operations.
+public struct DragOptions: Sendable {
+    public let steps: Int
+    public let duration: Double
+    public let modifiers: [KeyCombo.Modifier]
+    public let pressure: Double?
+    public let rightButton: Bool
+    public let closePath: Bool
+
+    public init(
+        steps: Int = 30, duration: Double = 0.3,
+        modifiers: [KeyCombo.Modifier] = [], pressure: Double? = nil,
+        rightButton: Bool = false, closePath: Bool = false
+    ) {
+        self.steps = steps
+        self.duration = duration
+        self.modifiers = modifiers
+        self.pressure = pressure
+        self.rightButton = rightButton
+        self.closePath = closePath
+    }
 }
 
 public struct KeyCombo: Sendable {

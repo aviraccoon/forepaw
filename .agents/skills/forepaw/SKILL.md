@@ -1,6 +1,6 @@
 ---
 name: forepaw
-description: Control macOS desktop apps for the user. Use when asked to interact with GUI applications, click buttons, fill forms, read screen content, or debug visual issues in native/Electron apps.
+description: Control macOS desktop apps for the user. Use when asked to interact with GUI applications, click buttons, fill forms, read screen content, or automate any desktop task. Read this before running any forepaw command.
 ---
 
 # Desktop Automation with forepaw
@@ -115,6 +115,38 @@ Use when there's no AX ref for the target (e.g. inside batch after a coordinate 
 forepaw press cmd+s --app "App Name"   # activates app first
 forepaw press opt+space                 # global hotkey (no --app)
 ```
+
+### Drag (drawing, moving, resizing)
+
+```bash
+forepaw drag 100,100 500,500 --app "App Name"                      # simple drag between two points
+forepaw drag 100,100 300,200 500,100 700,300 --app "App Name"      # path through multiple waypoints
+forepaw drag @e3 @e7 --app "App Name"                              # drag between two elements
+forepaw drag 100,100 500,500 --app "App Name" --steps 60 --duration 1.0  # slower, smoother
+forepaw drag 100,100 500,350 --app "App Name" --modifiers shift    # constrained (straight lines, 45-degree)
+forepaw drag 100,100 500,500 --app "App Name" --modifiers shift+alt # combine modifiers
+forepaw drag 100,100 300,200 500,100 --app "App Name" --close      # auto-close path back to start
+forepaw drag 100,100 500,500 --app "App Name" --right              # right-button drag (panning, context menus)
+forepaw drag 100,100 500,500 --app "App Name" --pressure 0.5       # tablet pressure simulation
+```
+
+Stdin mode for complex paths (circles, stars, curves -- generate coordinates programmatically):
+```bash
+echo "100,100 200,150 300,100 400,200" | forepaw drag --stdin --app "App Name"
+python3 -c "import math; print(' '.join(f'{int(400+150*math.cos(i*2*math.pi/40))},{int(500+150*math.sin(i*2*math.pi/40))}' for i in range(41)))" | forepaw drag --stdin --app "App Name" --close --steps 20 --duration 2.0
+```
+
+Drags the mouse from one point to another with smooth interpolation. Supports coordinates, refs, or a mix. For paths with 3+ points, all must be coordinates.
+
+- `--steps` controls smoothness per segment (default 30, higher = more intermediate points)
+- `--duration` controls total drag time in seconds (default 0.3)
+- Use higher steps and duration for drawing apps that need smooth curves
+- `--modifiers shift+alt` holds modifier keys during the entire drag (supports shift, alt/opt, cmd, ctrl, combinable with `+`)
+- `--close` appends start point to end of path, closing the shape (3+ points only)
+- `--right` uses right mouse button instead of left
+- `--pressure 0.0-1.0` sets mouse pressure (apps must have pressure dynamics enabled)
+- `--stdin` reads coordinates from stdin (space or newline separated x,y pairs) -- use for complex paths with many points
+- Works in batch: `forepaw batch --app App "drag 100,100 500,500 --modifiers shift"`
 
 ### Scroll
 
