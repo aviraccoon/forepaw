@@ -82,14 +82,14 @@ swift run forepaw list-apps
 | Command | Description |
 |---------|-------------|
 | `click <@ref> --app <name> [--right] [--double]` | Click element (AX action first, mouse fallback) |
-| `type <@ref> <text> --app <name>` | Set element value / type into element |
-| `ocr-click <text> --app <name> [--window <title\|id>] [--right] [--double] [--index N]` | Find text via OCR and click it |
-| `keyboard-type <text> [--app <name>]` | Type into focused element |
+| `type <@ref> <text> --app <name> [--text <text>]` | Set element value / type into element |
+| `ocr-click <text> --app <name> [--window <title\|id>] [--right] [--double] [--index N] [--text <text>]` | Find text via OCR and click it |
+| `keyboard-type <text> [--app <name>] [--text <text>]` | Type into focused element |
 | `press <combo> [--app <name>]` | Keyboard shortcut (e.g. `cmd+s`, `ctrl+shift+z`) |
 | `drag <from> <to> [--app <name>] [--steps <n>] [--duration <s>] [--modifiers <keys>] [--pressure <0-1>] [--right] [--close] [--stdin]` | Drag between points (drawing, moving, resizing) |
 | `scroll <direction> --app <name> [--window <title\|id>] [--amount <n>]` | Scroll up/down/left/right |
 | `hover <@ref\|text> --app <name> [--window <title\|id>]` | Move mouse to element or text (triggers tooltips/hover states) |
-| `wait <text> --app <name> [--timeout <s>] [--interval <s>]` | Poll OCR until text appears |
+| `wait <text> --app <name> [--timeout <s>] [--interval <s>] [--text <text>]` | Poll OCR until text appears |
 | `batch <actions> [--app <name>] [--delay <ms>]` | Execute multiple actions (separated by `;;`) |
 
 ### Snapshot flags
@@ -144,6 +144,8 @@ OCR uses the macOS Vision framework (`VNRecognizeTextRequest`). No external depe
 **Click**: For elements found via `snapshot`, tries `AXPress` (accessibility action) first. For web content links in browsers, prefers mouse click (AXPress doesn't trigger navigation). Falls back to CGEvent mouse click at element center. `--right` for context menus, `--double` for double-click (file open, word select). Both flags always use mouse events (AXPress can't express these).
 
 **Type**: Tries `AXSetAttributeValue` on the element's value first. Falls back to focusing the element via AX (`AXRaise` + `AXFocused`) and simulating keystrokes via CGEvent. More reliable than click + `keyboard-type` for text fields -- AX focus ensures the right element receives input. Inter-keystroke delay (8ms) prevents character dropping in Electron apps.
+
+**Text starting with dashes**: `keyboard-type`, `type`, `ocr-click`, and `wait` accept `--text <value>` as an alternative to the positional text argument. Use it when the text starts with `-` or `--` to avoid it being parsed as a flag: `forepaw keyboard-type --text "--verbose" --app Notes`. The `--text` option unconditionally takes the next argument as its value.
 
 **OCR-click**: Screenshots the window, runs OCR, finds the text, converts pixel coordinates to screen points (accounting for Retina scale factor and window offset), then clicks via CGEvent. When multiple matches are found, errors with a listing of all matches and their coordinates -- use `--index N` (1-based) to pick one. Single matches click without needing `--index`.
 

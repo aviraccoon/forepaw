@@ -57,8 +57,13 @@ struct Type: AsyncParsableCommand {
     @Argument(help: "Element ref (e.g. @e5)")
     var ref: String
 
-    @Argument(help: "Text to type")
-    var text: String
+    @Argument(help: ArgumentHelp("Text to type", valueName: "text"))
+    var positionalText: String?
+
+    @Option(
+        name: .customLong("text"), parsing: .unconditional,
+        help: "Text to type (use instead of positional for text starting with dashes)")
+    var textOption: String?
 
     @Option(name: .long, help: "Target application name")
     var app: String
@@ -67,6 +72,7 @@ struct Type: AsyncParsableCommand {
     var json: Bool = false
 
     mutating func run() async throws {
+        let text = try resolveText(positional: positionalText, option: textOption, command: "type")
         guard let elementRef = ElementRef.parse(ref) else {
             throw ValidationError("Invalid ref: \(ref). Expected format: @e1, @e2, etc.")
         }
@@ -82,8 +88,13 @@ struct KeyboardType: AsyncParsableCommand {
         abstract: "Type text into the focused element (no ref needed)"
     )
 
-    @Argument(help: "Text to type")
-    var text: String
+    @Argument(help: ArgumentHelp("Text to type", valueName: "text"))
+    var positionalText: String?
+
+    @Option(
+        name: .customLong("text"), parsing: .unconditional,
+        help: "Text to type (use instead of positional for text starting with dashes)")
+    var textOption: String?
 
     @Option(name: .long, help: "Target application name (activates app first; omit to type into current focus)")
     var app: String?
@@ -92,6 +103,7 @@ struct KeyboardType: AsyncParsableCommand {
     var json: Bool = false
 
     mutating func run() async throws {
+        let text = try resolveText(positional: positionalText, option: textOption, command: "keyboard-type")
         let result: ActionResult
         if let app {
             result = try await provider.keyboardType(text: text, app: app)
@@ -138,8 +150,13 @@ struct OCRClick: AsyncParsableCommand {
         abstract: "Find text on screen via OCR and click it"
     )
 
-    @Argument(help: "Text to find and click")
-    var text: String
+    @Argument(help: ArgumentHelp("Text to find and click", valueName: "text"))
+    var positionalText: String?
+
+    @Option(
+        name: .customLong("text"), parsing: .unconditional,
+        help: "Text to find and click (use instead of positional for text starting with dashes)")
+    var textOption: String?
 
     @Option(name: .long, help: "Target application name")
     var app: String
@@ -160,6 +177,7 @@ struct OCRClick: AsyncParsableCommand {
     var json: Bool = false
 
     mutating func run() async throws {
+        let text = try resolveText(positional: positionalText, option: textOption, command: "ocr-click")
         let options = ClickOptions(
             button: right ? .right : .left,
             clickCount: double ? 2 : 1
@@ -217,8 +235,13 @@ struct Wait: AsyncParsableCommand {
         abstract: "Wait for text to appear on screen (OCR polling)"
     )
 
-    @Argument(help: "Text to wait for")
-    var text: String
+    @Argument(help: ArgumentHelp("Text to wait for", valueName: "text"))
+    var positionalText: String?
+
+    @Option(
+        name: .customLong("text"), parsing: .unconditional,
+        help: "Text to wait for (use instead of positional for text starting with dashes)")
+    var textOption: String?
 
     @Option(name: .long, help: "Target application name")
     var app: String
@@ -236,6 +259,7 @@ struct Wait: AsyncParsableCommand {
     var json: Bool = false
 
     mutating func run() async throws {
+        let text = try resolveText(positional: positionalText, option: textOption, command: "wait")
         let result = try await provider.wait(
             text: text, app: app, window: window,
             timeout: timeout, interval: interval)
@@ -347,12 +371,17 @@ struct Batch: AsyncParsableCommand {
             }
 
         case "type":
-            guard actionArgs.count >= 2,
-                let ref = ElementRef.parse(actionArgs[0])
+            guard let refStr = actionArgs.first,
+                let ref = ElementRef.parse(refStr)
             else {
                 throw ForepawError.actionFailed("type requires ref and text (e.g. type @e3 hello)")
             }
-            let text = actionArgs[1]
+            let text =
+                parseOption("--text", from: actionArgs)
+                ?? (actionArgs.count >= 2 ? actionArgs[1] : nil)
+            guard let text else {
+                throw ForepawError.actionFailed("type requires text (e.g. type @e3 hello or type @e3 --text hello)")
+            }
             let appName = parseOption("--app", from: actionArgs) ?? app
             guard let appName else {
                 throw ForepawError.actionFailed("type requires --app (on action or batch)")
@@ -360,7 +389,8 @@ struct Batch: AsyncParsableCommand {
             return try await provider.type(ref: ref, text: text, app: appName)
 
         case "keyboard-type":
-            guard let text = actionArgs.first else {
+            let text = parseOption("--text", from: actionArgs) ?? actionArgs.first
+            guard let text else {
                 throw ForepawError.actionFailed("keyboard-type requires text")
             }
             let appName = parseOption("--app", from: actionArgs) ?? app
@@ -395,7 +425,8 @@ struct Batch: AsyncParsableCommand {
                 direction: direction, amount: amount, app: appName, window: win, ref: scrollRef)
 
         case "ocr-click":
-            guard let text = actionArgs.first else {
+            let text = parseOption("--text", from: actionArgs) ?? actionArgs.first
+            guard let text else {
                 throw ForepawError.actionFailed("ocr-click requires text")
             }
             let appName = parseOption("--app", from: actionArgs) ?? app
@@ -462,7 +493,8 @@ struct Batch: AsyncParsableCommand {
             }
 
         case "wait":
-            guard let text = actionArgs.first else {
+            let text = parseOption("--text", from: actionArgs) ?? actionArgs.first
+            guard let text else {
                 throw ForepawError.actionFailed("wait requires text to search for")
             }
             let appName = parseOption("--app", from: actionArgs) ?? app
@@ -644,6 +676,20 @@ struct Drag: AsyncParsableCommand {
         }
         throw ValidationError("Invalid target: \(target). Expected a ref (@e1) or coordinates (500,300).")
     }
+}
+
+/// Resolve text from either positional argument or --text option.
+/// Errors if neither is provided or both are provided.
+func resolveText(positional: String?, option: String?, command: String) throws -> String {
+    if option != nil, positional != nil {
+        throw ValidationError(
+            "Provide text as either a positional argument or --text, not both.")
+    }
+    guard let text = option ?? positional else {
+        throw ValidationError(
+            "\(command) requires text. Provide as argument or use --text for text starting with dashes.")
+    }
+    return text
 }
 
 /// Parse "x,y" coordinate string into a Point.

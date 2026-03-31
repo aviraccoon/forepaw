@@ -248,10 +248,13 @@ The title shown in quotes in `list-windows` output is what you pass to `--window
 - **Mouse clicks are physical.** OCR-click and mouse-fallback clicks move the actual cursor and click on screen. The user will see this happening.
 - **Keystroke delay.** Typing is not instant (~8ms per character). Long text takes a moment.
 - **Wait timeout.** `wait` polls via OCR (screenshot + text recognition each poll). Keep intervals reasonable (1s+) to avoid hammering the system. The default 10s timeout covers most UI transitions.
-- **Text starting with dashes.** If text for `keyboard-type`, `type`, or `ocr-click` starts with `-` or `--`, put all options before `--` to prevent it being parsed as a flag:
+- **Text starting with dashes.** If text for `keyboard-type`, `type`, `ocr-click`, or `wait` starts with `-` or `--`, use the `--text` option instead of a positional argument:
   ```bash
-  forepaw keyboard-type --app Notes -- "--this starts with dashes"
+  forepaw keyboard-type --text "--this starts with dashes" --app Notes
+  forepaw type @e5 --text "-dash text" --app Notes
+  forepaw ocr-click --text "--Settings" --app App
   ```
+  `--text` unconditionally takes the next argument as its value, even if it looks like a flag.
 
 ## Permissions
 
