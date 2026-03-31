@@ -32,6 +32,12 @@ xcrun swift-format format -i -r Sources/ Tests/  # Auto-format
 - **OCR via Vision framework**: `VNRecognizeTextRequest` on window screenshots. Coordinates need Retina scale factor (backingScaleFactor) and window origin offset for screen-space clicks.
 - **Two permissions**: Accessibility (for AX tree, actions) and Screen Recording (for screenshots, OCR). Both checked in `forepaw permissions`.
 
+## Releases
+
+- Each release gets a codename from the extended raccoon family -- raccoons, possums, coatis, kinkajous, olingos, ringtails, tanuki, civets, binturongs, red pandas, etc.
+- Format in CHANGELOG.md: `## v0.2.0 "Ringtail" (2026-04-15)`
+- Keep it playful.
+
 ## Formatting
 
 - **swift-format** (ships with Xcode toolchain). Config in `.swift-format`.
