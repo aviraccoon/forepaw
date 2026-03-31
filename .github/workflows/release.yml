@@ -28,10 +28,31 @@ jobs:
           tar czf forepaw-darwin-arm64.tar.gz forepaw
           shasum -a 256 forepaw-darwin-arm64.tar.gz > forepaw-darwin-arm64.tar.gz.sha256
 
+      - name: Extract changelog
+        id: changelog
+        run: |
+          # Extract the section for the current tag from CHANGELOG.md
+          version="${GITHUB_REF_NAME#v}"
+          # Get everything between this version's header and the next ## header (or EOF)
+          awk "/^## v${version//./\\.}/{found=1; next} /^## v/{if(found) exit} found" CHANGELOG.md > dist/release-notes.md
+          # Append install instructions
+          cat >> dist/release-notes.md << 'INSTALL'
+
+          ### Install
+
+          ```bash
+          curl -L https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-darwin-arm64.tar.gz | tar xz
+          mv forepaw /usr/local/bin/
+          forepaw permissions --request
+          ```
+
+          Requires macOS 14+, Apple Silicon. Needs Accessibility and Screen Recording permissions.
+          INSTALL
+
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/forepaw-darwin-arm64.tar.gz
             dist/forepaw-darwin-arm64.tar.gz.sha256
-          generate_release_notes: true
+          body_path: dist/release-notes.md
