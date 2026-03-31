@@ -10,7 +10,8 @@ Three observation strategies, used based on what the target app exposes:
 
 1. **Accessibility tree** (best) -- structured text with `@e` refs. Works well for native macOS apps.
 2. **OCR** -- screenshot + Vision framework text recognition. Fallback for Electron apps (Discord, Slack) with poor accessibility.
-3. **Screenshots** -- visual fallback for anything else. Can be sent to vision models.
+3. **Annotated screenshots** -- numbered labels overlaid on interactive elements, bridging visual and structural. Three styles: badges (agent-optimized), labeled (human-readable), spotlight (focus mode).
+4. **Plain screenshots** -- visual fallback for anything else. Can be sent to vision models.
 
 ```
 forepaw snapshot --app Finder -i    # accessibility tree with refs
@@ -27,7 +28,8 @@ forepaw hover @e5 --app Finder      # move mouse to element (tooltip)
 forepaw wait "Done" --app MyApp     # poll until text appears
 forepaw batch --app Notes "click @e3 ;; keyboard-type hello ;; press return"
 forepaw screenshot --app Finder     # take a screenshot
-forepaw screenshot --app Zed --window "my-project"  # target specific window
+forepaw screenshot --app Finder --annotate  # numbered labels on elements
+forepaw screenshot --app Finder --style spotlight --only @e1 @e3  # highlight specific refs
 ```
 
 The agent loop: **observe -> decide -> act -> observe**
@@ -72,7 +74,7 @@ swift run forepaw list-apps
 | Command | Description |
 |---------|-------------|
 | `snapshot --app <name> [-i] [-c]` | Accessibility tree with `@e` refs |
-| `screenshot [--app <name>] [--window <title\|id>]` | Take a screenshot (PNG) |
+| `screenshot [--app <name>] [--window <title\|id>] [--annotate\|--style <style>] [--only @eN...]` | Take a screenshot (PNG), optionally annotated |
 | `ocr [--app <name>] [--window <title\|id>] [--find <text>]` | Screenshot + OCR, returns text with coordinates |
 | `list-apps [--json]` | Running GUI applications |
 | `list-windows [--app <name>]` | Visible windows with titles and IDs |
@@ -159,6 +161,8 @@ OCR uses the macOS Vision framework (`VNRecognizeTextRequest`). No external depe
 
 **Batch**: Executes multiple actions sequentially in one process invocation. Actions are separated by `;;`. The `--app` and `--window` flags apply to all actions unless overridden per-action. Default 100ms delay between actions. Supported actions: click, drag, hover, type, keyboard-type, press, scroll, ocr-click, wait. **Use batch for any multi-step interaction** -- separate CLI invocations return control to the terminal between commands, which steals focus from the target app. Any click-then-type pattern needs batch.
 
+**Annotated screenshots**: Captures a window screenshot, walks the AX tree for the same window, then overlays numbered labels on interactive elements using CoreGraphics. Labels use sequential display numbers (1, 2, 3...) with a legend mapping to `@e` refs. Three styles: `badges` (small colored pills -- agent-optimized), `labeled` (bounding boxes with role+name -- human-readable), `spotlight` (dims non-interactive areas). Color-coded by element category: green=buttons, yellow=text fields, blue=selection controls, purple=navigation. `--only @eN...` filters to specific refs. The annotation pipeline is split: `AnnotationCollector` (ForepawCore, platform-agnostic) walks the tree and collects annotation data, `AnnotationRenderer` (ForepawDarwin) draws on the image via CoreGraphics.
+
 ## Design decisions
 
 - **Accessibility-first, not screenshot-first.** Text trees are ~50 lines vs ~1500 tokens for an image. OCR is the fallback, not the default.
@@ -166,3 +170,4 @@ OCR uses the macOS Vision framework (`VNRecognizeTextRequest`). No external depe
 - **CLI, not library/daemon/MCP.** Works with any agent that can call shell commands.
 - **Platform-agnostic core.** The ref system, tree rendering, and output formatting are in `ForepawCore` with no platform imports. Only `ForepawDarwin` touches macOS APIs.
 - **App activation before input.** Mouse clicks and keystrokes target whatever window is under the cursor. Activating the app first ensures the right window receives input.
+- **Built for agents, designed for humans too.** forepaw reads the same accessibility tree that screen readers use. Annotated screenshots bridge invisible structure to the visible -- useful for AI agents acting on apps with poor AX trees, but also for sighted people helping blind users debug UIs, low-vision users, or anyone trying to understand an app's interactive structure. The annotation system supports multiple styles for different audiences rather than optimizing solely for machine consumption.

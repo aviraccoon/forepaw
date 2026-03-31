@@ -21,7 +21,12 @@ public protocol DesktopProvider: Sendable {
     func snapshot(app: String, options: SnapshotOptions) async throws -> ElementTree
 
     /// Take a screenshot. If `app` is nil, captures full screen.
-    func screenshot(app: String?, window: String?, annotate: Bool) async throws -> ScreenshotResult
+    /// When `style` is provided, overlays annotations on interactive elements.
+    /// When `only` is provided, only those refs are annotated.
+    func screenshot(
+        app: String?, window: String?, style: AnnotationStyle?, only: [ElementRef]?
+    ) async throws
+        -> ScreenshotResult
 
     /// Screenshot + OCR, returning recognized text with screen coordinates.
     func ocr(app: String?, window: String?, find: String?) async throws -> [OCRResult]
@@ -185,11 +190,14 @@ public struct SnapshotOptions: Sendable {
 
 public struct ScreenshotResult: Sendable {
     public let path: String
+    /// Structured annotation data, if annotations were requested.
+    public let annotations: [Annotation]?
     /// If annotated, the text legend mapping labels to elements.
     public let legend: String?
 
-    public init(path: String, legend: String?) {
+    public init(path: String, annotations: [Annotation]?, legend: String?) {
         self.path = path
+        self.annotations = annotations
         self.legend = legend
     }
 }

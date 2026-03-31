@@ -8,7 +8,7 @@ extension DarwinProvider {
     /// Screenshot + OCR, returning recognized text with screen coordinates.
     /// When `find` is provided, uses word-level bounding boxes for precise targeting.
     public func ocr(app: String?, window: String? = nil, find: String? = nil) async throws -> [OCRResult] {
-        let screenshotResult = try await screenshot(app: app, window: window, annotate: false)
+        let screenshotResult = try await screenshot(app: app, window: window, style: nil, only: nil)
         guard let image = NSImage(contentsOfFile: screenshotResult.path),
             let rep = image.representations.first
         else {
@@ -114,31 +114,88 @@ extension DarwinProvider {
     ///   - window: Optional window title substring or "w-<id>" identifier
     /// - Returns: The resolved window
 
-    public func screenshot(app: String?, window: String? = nil, annotate: Bool) async throws -> ScreenshotResult {
+    public func screenshot(
+        app: String?, window: String? = nil, style: AnnotationStyle? = nil, only: [ElementRef]? = nil
+    ) async throws -> ScreenshotResult {
         guard CGPreflightScreenCaptureAccess() else {
             throw ForepawError.screenRecordingDenied
         }
         let timestamp = Int(Date().timeIntervalSince1970)
-        let path = "/tmp/forepaw-\(timestamp).png"
+        let rawPath = "/tmp/forepaw-\(timestamp).png"
 
+        var resolvedWindow: ResolvedWindow?
         if let appName = app {
             let runningApp = try findApp(named: appName)
+            runningApp.activate()
+            try await Task.sleep(nanoseconds: 300_000_000)
             let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
+            resolvedWindow = resolved
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            process.arguments = ["-x", "-o", "-l", String(resolved.windowID), path]
+            process.arguments = ["-x", "-o", "-l", String(resolved.windowID), rawPath]
             try process.run()
             process.waitUntilExit()
         } else {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            process.arguments = ["-x", path]
+            process.arguments = ["-x", rawPath]
             try process.run()
             process.waitUntilExit()
         }
 
-        // TODO: annotation support (overlay numbered labels on interactive elements)
-        return ScreenshotResult(path: path, legend: annotate ? "annotation not yet implemented" : nil)
+        guard let style = style, let appName = app else {
+            return ScreenshotResult(path: rawPath, annotations: nil, legend: nil)
+        }
+
+        // Get the AX tree for annotations
+        let options = SnapshotOptions(interactiveOnly: true, maxDepth: SnapshotOptions.defaultDepth, compact: false)
+        let tree = try await snapshot(app: appName, options: options)
+
+        // Determine window bounds for coordinate conversion
+        let windowBounds: Rect
+        if let resolved = resolvedWindow {
+            windowBounds = Rect(
+                x: resolved.origin.x,
+                y: resolved.origin.y,
+                width: resolved.size.width,
+                height: resolved.size.height
+            )
+        } else {
+            // Full screen fallback
+            let screen = NSScreen.main!
+            windowBounds = Rect(x: 0, y: 0, width: screen.frame.width, height: screen.frame.height)
+        }
+
+        // Collect annotations
+        let collector = AnnotationCollector()
+        var annotations = collector.collect(from: tree, windowBounds: windowBounds)
+
+        // Filter to specific refs if requested
+        if let only = only, !only.isEmpty {
+            let refSet = Set(only)
+            annotations = annotations.filter { refSet.contains($0.ref) }
+        }
+
+        guard !annotations.isEmpty else {
+            return ScreenshotResult(path: rawPath, annotations: nil, legend: "No interactive elements found")
+        }
+
+        // Render annotated image
+        let annotatedPath = "/tmp/forepaw-\(timestamp)-annotated.png"
+        let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
+        let renderer = AnnotationRenderer()
+        try renderer.render(
+            imagePath: rawPath,
+            annotations: annotations,
+            style: style,
+            scaleFactor: scaleFactor,
+            outputPath: annotatedPath
+        )
+
+        // Generate legend
+        let legend = AnnotationLegend().format(annotations: annotations)
+
+        return ScreenshotResult(path: annotatedPath, annotations: annotations, legend: legend)
     }
 
 }

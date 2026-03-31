@@ -113,8 +113,12 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
             throw ForepawError.windowNotFound(window)
         }
 
-        // Default: largest window by area
-        let best = appWindows.max(by: {
+        // Default: prefer titled windows, then largest by area.
+        // Finder (and some other apps) have a full-screen untitled desktop window
+        // that's larger than the actual content window.
+        let titled = appWindows.filter { !$0.title.isEmpty }
+        let candidates = titled.isEmpty ? appWindows : titled
+        let best = candidates.max(by: {
             let a1 = ($0.bounds["Width"] ?? 0) * ($0.bounds["Height"] ?? 0)
             let a2 = ($1.bounds["Width"] ?? 0) * ($1.bounds["Height"] ?? 0)
             return a1 < a2

@@ -48,11 +48,37 @@ Returns text with click coordinates. Use when `snapshot` returns an empty or use
 ### 3. Screenshot (for visual inspection)
 
 ```bash
-forepaw screenshot --app "App Name"   # app window
+forepaw screenshot --app "App Name"   # plain screenshot
 forepaw screenshot                    # full screen
 ```
 
 Returns a PNG path. Use when you need to see what's on screen (debugging visual issues, checking layout). The image can be read with the `read` tool.
+
+### 4. Annotated screenshot (visual + structural)
+
+```bash
+forepaw screenshot --app "App Name" --annotate           # numbered badges (default)
+forepaw screenshot --app "App Name" --style badges        # same as --annotate
+forepaw screenshot --app "App Name" --style labeled       # bounding boxes with role+name
+forepaw screenshot --app "App Name" --style spotlight      # dims non-interactive areas
+forepaw screenshot --app "App Name" --style spotlight --only @e5 @e8 @e12  # highlight specific refs
+```
+
+Overlays numbered labels on interactive elements. Each label maps to an `@e` ref. Prints a legend:
+```
+[1] @e1 Button "Save"
+[2] @e3 TextField "Search"
+[3] @e5 CheckBox "Enable"
+```
+
+Labels are color-coded by element type: green=buttons, yellow=text fields, blue=selection controls, purple=navigation.
+
+**Styles:**
+- `badges` -- small numbered pills. Minimal visual noise. Best for agents.
+- `labeled` -- bounding boxes with role and name. Best for humans understanding UI structure.
+- `spotlight` -- dims everything except interactive elements. Best for focusing attention.
+
+**When to use:** When the AX tree is sparse (Electron apps) or you need visual context for spatial layout. Prefer `snapshot -i` for most tasks -- it's faster and cheaper in tokens. Use annotated screenshots when you need to correlate visual appearance with interactive elements.
 
 ## Actions
 

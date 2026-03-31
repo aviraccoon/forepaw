@@ -40,15 +40,46 @@ struct Screenshot: AsyncParsableCommand {
 
     @OptionGroup var global: GlobalOptions
 
-    @Flag(name: .long, help: "Annotate with numbered labels")
+    @Flag(name: .long, help: "Annotate with numbered labels (shorthand for --style badges)")
     var annotate: Bool = false
 
+    @Option(
+        name: .long,
+        help: "Annotation style: badges (compact), labeled (with roles/names), spotlight (dim non-interactive)")
+    var style: String?
+
+    @Option(
+        name: .long, parsing: .upToNextOption,
+        help: "Only annotate these refs (e.g. --only @e5 @e8 @e12)")
+    var only: [String] = []
+
     mutating func run() async throws {
-        let result = try await provider.screenshot(app: global.app, window: global.window, annotate: annotate)
+        let annotationStyle = resolveAnnotationStyle()
+        let refFilter = only.isEmpty ? nil : only.compactMap { ElementRef.parse($0) }
+        let result = try await provider.screenshot(
+            app: global.app, window: global.window,
+            style: annotationStyle, only: refFilter)
         print(result.path)
         if let legend = result.legend {
             print(legend)
         }
+    }
+
+    private func resolveAnnotationStyle() -> AnnotationStyle? {
+        if let style = style {
+            guard let parsed = AnnotationStyle(rawValue: style) else {
+                // Will print error and exit
+                print(
+                    "error: unknown style '\(style)'. Options: \(AnnotationStyle.allCases.map(\.rawValue).joined(separator: ", "))"
+                )
+                return nil
+            }
+            return parsed
+        }
+        if annotate {
+            return .badges
+        }
+        return nil
     }
 }
 
