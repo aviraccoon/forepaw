@@ -1,0 +1,22 @@
+[tasks.build]
+description = "Build release binary"
+run = "swift build -c release"
+
+[tasks.dev]
+description = "Build debug binary and run"
+run = "swift build && swift run forepaw {{arg(name='command', rest=true)}}"
+
+[tasks.test]
+run = "swift test"
+
+[tasks.lint]
+run = "xcrun swift-format lint -r Sources/ Tests/ --strict"
+
+[tasks.fmt]
+description = "Auto-format Swift files"
+run = "xcrun swift-format format -i -r Sources/ Tests/"
+
+[tasks.install]
+description = "Build release and copy to ~/.local/bin"
+depends = ["build"]
+run = "cp .build/release/forepaw ~/.local/bin/forepaw"
