@@ -26,7 +26,7 @@ extension KeyCombo {
 extension KeyCombo.Modifier {
     public static func fromString(_ s: String) -> KeyCombo.Modifier? {
         switch s {
-        case "cmd", "command": .command
+        case "cmd", "command", "meta", "super": .command
         case "shift": .shift
         case "opt", "option", "alt": .option
         case "ctrl", "control": .control

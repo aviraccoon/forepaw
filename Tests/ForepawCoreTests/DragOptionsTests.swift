@@ -76,6 +76,8 @@ struct ParseModifiersTests {
         #expect(KeyCombo.Modifier.parseModifiers("option") == [.option])
         #expect(KeyCombo.Modifier.parseModifiers("command") == [.command])
         #expect(KeyCombo.Modifier.parseModifiers("control") == [.control])
+        #expect(KeyCombo.Modifier.parseModifiers("meta") == [.command])
+        #expect(KeyCombo.Modifier.parseModifiers("super") == [.command])
     }
 
     @Test("combined modifiers")

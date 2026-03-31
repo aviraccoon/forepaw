@@ -29,9 +29,11 @@ struct KeyComboTests {
 
     @Test("parse all modifier aliases")
     func modifierAliases() {
-        // cmd/command
+        // cmd/command/meta/super
         #expect(KeyCombo.parse("cmd+a").modifiers == [.command])
         #expect(KeyCombo.parse("command+a").modifiers == [.command])
+        #expect(KeyCombo.parse("meta+a").modifiers == [.command])
+        #expect(KeyCombo.parse("super+a").modifiers == [.command])
 
         // opt/option/alt
         #expect(KeyCombo.parse("opt+a").modifiers == [.option])
