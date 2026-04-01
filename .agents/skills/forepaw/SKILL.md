@@ -36,6 +36,8 @@ Every element includes `(x,y WxH)` screen coordinates. These match what action c
 
 Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' chrome). For browsers, the full tree (without `-i`) includes web content elements like links, headings, and text -- useful for clicking small targets like footnote links.
 
+**Electron apps (Discord, Slack, VS Code, Cursor, Notion, Linear, etc.)** are automatically detected. forepaw sets `AXManualAccessibility` to tell Chromium to expose its web content tree. The first snapshot of an Electron app may take an extra 1-3s while the tree builds; subsequent snapshots are fast. No special flags needed -- just use `snapshot` as normal.
+
 ### 2. OCR (fallback for Electron apps)
 
 ```bash
@@ -269,7 +271,7 @@ The title shown in quotes in `list-windows` output is what you pass to `--window
 - **Snapshot activates the app.** The snapshot command brings the app to the foreground so the AX tree matches what action commands will see. Some apps (especially browsers) expose different elements when active vs. background.
 - **Prefer `type @ref` over click + keyboard-type.** `type` focuses the element via AX and types into it directly. `keyboard-type` after a click can fail if the click didn't give the element AX focus. Use `keyboard-type` only inside batch (after coordinate clicks) or when no ref is available.
 - **Use batch for multi-step interactions.** Separate CLI invocations return control to the terminal, which steals focus from the target app. Any click-then-type or multi-action sequence should use batch. Even adding `--delay` for slow UI transitions.
-- **AX tree vs OCR.** Try `snapshot -i` first. If the tree is mostly empty (just window buttons and menu bar), the app is Electron -- switch to OCR.
+- **AX tree vs OCR.** Try `snapshot -i` first. Electron apps are auto-detected and their web content trees are enabled automatically. If the tree is still sparse after this, fall back to OCR.
 - **App activation.** `--app` brings the app to the foreground. This means the user's screen will change. Warn them before switching apps if they didn't explicitly ask.
 - **Mouse clicks are physical.** OCR-click and mouse-fallback clicks move the actual cursor and click on screen. The user will see this happening.
 - **Keystroke delay.** Typing is not instant (~8ms per character). Long text takes a moment.

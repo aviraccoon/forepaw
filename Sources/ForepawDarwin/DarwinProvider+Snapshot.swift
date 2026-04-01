@@ -16,9 +16,30 @@ extension DarwinProvider {
         runningApp.activate()
         try await Task.sleep(nanoseconds: 300_000_000)
 
+        // Electron apps (Discord, Slack, VS Code, etc.) don't expose their web content
+        // through the accessibility tree unless explicitly told to. Setting AXManualAccessibility
+        // tells Chromium to build the full a11y tree, like VoiceOver would trigger.
+        let isElectron = isElectronApp(runningApp)
+        if isElectron {
+            enableElectronAccessibility(runningApp)
+            // Chromium needs time to build the tree after first enable.
+            // Poll until web content appears (or timeout after ~3s).
+            if !electronTreeIsPopulated(runningApp) {
+                for _ in 0..<6 {
+                    try await Task.sleep(nanoseconds: 500_000_000)
+                    if electronTreeIsPopulated(runningApp) { break }
+                }
+            }
+        }
+
+        // Electron apps nest web content deeply (13+ levels of groups from DOM structure).
+        // Use a higher depth to reach interactive elements inside the web area.
+        let effectiveDepth =
+            isElectron ? max(options.maxDepth, Self.electronDepth) : options.maxDepth
+
         let appElement = AXUIElementCreateApplication(runningApp.processIdentifier)
 
-        let root = buildTree(element: appElement, depth: 0, maxDepth: options.maxDepth)
+        let root = buildTree(element: appElement, depth: 0, maxDepth: effectiveDepth)
 
         let assigner = RefAssigner()
         let result = assigner.assign(root: root, interactiveOnly: options.interactiveOnly)
@@ -28,7 +49,7 @@ extension DarwinProvider {
         var axElements: [Int: AXUIElement] = [:]
         var axCounter = 1
         collectAXElements(
-            element: appElement, depth: 0, maxDepth: options.maxDepth, counter: &axCounter,
+            element: appElement, depth: 0, maxDepth: effectiveDepth, counter: &axCounter,
             elements: &axElements)
 
         for (ref, _) in result.refs {
@@ -46,11 +67,19 @@ extension DarwinProvider {
     public func resolveRef(_ ref: ElementRef, app appName: String) throws -> AXUIElement {
         guard AXIsProcessTrusted() else { throw ForepawError.permissionDenied }
         let runningApp = try findApp(named: appName)
+
+        // Ensure Electron accessibility is enabled for action dispatch too.
+        let isElectron = isElectronApp(runningApp)
+        if isElectron {
+            enableElectronAccessibility(runningApp)
+        }
+
+        let resolveDepth = isElectron ? Self.electronDepth : Self.defaultDepth
         let appElement = AXUIElementCreateApplication(runningApp.processIdentifier)
         var elements: [Int: AXUIElement] = [:]
         var resolveCounter = 1
         collectAXElements(
-            element: appElement, depth: 0, maxDepth: Self.defaultDepth, counter: &resolveCounter,
+            element: appElement, depth: 0, maxDepth: resolveDepth, counter: &resolveCounter,
             elements: &elements)
         guard let element = elements[ref.id] else {
             throw ForepawError.staleRef(ref)

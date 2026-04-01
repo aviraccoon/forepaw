@@ -8,8 +8,8 @@ Named after the raccoon's dexterous forepaws -- precise manipulation of UI eleme
 
 Three observation strategies, used based on what the target app exposes:
 
-1. **Accessibility tree** (best) -- structured text with `@e` refs. Works well for native macOS apps.
-2. **OCR** -- screenshot + Vision framework text recognition. Fallback for Electron apps (Discord, Slack) with poor accessibility.
+1. **Accessibility tree** (best) -- structured text with `@e` refs. Works well for native macOS apps. Electron apps (Discord, Slack, VS Code, Cursor, Notion, Linear) are automatically detected and their Chromium accessibility trees enabled via `AXManualAccessibility`.
+2. **OCR** -- screenshot + Vision framework text recognition. Fallback for apps where the accessibility tree is still insufficient.
 3. **Annotated screenshots** -- numbered labels overlaid on interactive elements, bridging visual and structural. Three styles: badges (agent-optimized), labeled (human-readable), spotlight (focus mode).
 4. **Plain screenshots** -- visual fallback for anything else. Can be sent to vision models.
 

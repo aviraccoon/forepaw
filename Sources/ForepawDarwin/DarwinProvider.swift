@@ -27,6 +27,9 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
     /// Used by resolveRef to match snapshot's ref assignment.
     static let defaultDepth = SnapshotOptions.defaultDepth
 
+    /// Depth for Electron apps, which nest web content deeply (13+ levels of DOM groups).
+    static let electronDepth = 25
+
     // Current snapshot's ref table, keyed by ref ID.
     // Stores AXUIElement handles for action dispatch.
     internal var refTable: [ElementRef: AXUIElement] = [:]
@@ -173,6 +176,62 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
             return app
         }
         throw ForepawError.appNotFound(name)
+    }
+
+    // MARK: - Electron detection & accessibility
+
+    /// Check if an app bundle contains the Electron Framework.
+    internal func isElectronApp(_ app: NSRunningApplication) -> Bool {
+        guard let bundleURL = app.bundleURL else { return false }
+        let frameworkPath = bundleURL.appendingPathComponent(
+            "Contents/Frameworks/Electron Framework.framework")
+        return FileManager.default.fileExists(atPath: frameworkPath.path)
+    }
+
+    /// Tell an Electron app to build its Chromium accessibility tree.
+    /// This sets the `AXManualAccessibility` attribute, which is Electron's
+    /// official API for third-party assistive technology on macOS.
+    /// The call is idempotent -- setting it when already enabled is a no-op.
+    internal func enableElectronAccessibility(_ app: NSRunningApplication) {
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetAttributeValue(
+            appElement, "AXManualAccessibility" as CFString, true as CFTypeRef)
+    }
+
+    /// Check if an Electron app's web content tree is populated yet.
+    /// After setting AXManualAccessibility, Chromium needs time to build the tree.
+    /// We detect this by looking for an AXWebArea with actual children.
+    internal func electronTreeIsPopulated(_ app: NSRunningApplication) -> Bool {
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        return hasPopulatedWebArea(appElement, depth: 0, maxDepth: 10)
+    }
+
+    private func hasPopulatedWebArea(_ element: AXUIElement, depth: Int, maxDepth: Int) -> Bool {
+        guard depth < maxDepth else { return false }
+        let role = getAttribute(element, kAXRoleAttribute) as? String
+        if role == "AXWebArea" {
+            // Check if it has interactive children (not just empty groups)
+            if let children = getAttribute(element, kAXChildrenAttribute) as? [AXUIElement] {
+                for child in children {
+                    let childRole = getAttribute(child, kAXRoleAttribute) as? String ?? ""
+                    if ElementNode.isInteractiveRole(childRole) { return true }
+                    // Check one level deeper for interactive content inside groups
+                    if let grandchildren = getAttribute(child, kAXChildrenAttribute) as? [AXUIElement] {
+                        for gc in grandchildren {
+                            let gcRole = getAttribute(gc, kAXRoleAttribute) as? String ?? ""
+                            if ElementNode.isInteractiveRole(gcRole) { return true }
+                        }
+                    }
+                }
+            }
+            return false
+        }
+        if let children = getAttribute(element, kAXChildrenAttribute) as? [AXUIElement] {
+            for child in children {
+                if hasPopulatedWebArea(child, depth: depth + 1, maxDepth: maxDepth) { return true }
+            }
+        }
+        return false
     }
 
 }
