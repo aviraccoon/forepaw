@@ -6,7 +6,7 @@ Named after the raccoon's dexterous forepaws -- precise manipulation of UI eleme
 
 ## How it works
 
-Three observation strategies, used based on what the target app exposes:
+Four observation strategies, used based on what the target app exposes:
 
 1. **Accessibility tree** (best) -- structured text with `@e` refs. Works well for native macOS apps. Electron apps (Discord, Slack, VS Code, Cursor, Notion, Linear) are automatically detected and their Chromium accessibility trees enabled via `AXManualAccessibility`.
 2. **OCR** -- screenshot + Vision framework text recognition. Fallback for apps where the accessibility tree is still insufficient.
@@ -171,3 +171,42 @@ OCR uses the macOS Vision framework (`VNRecognizeTextRequest`). No external depe
 - **Platform-agnostic core.** The ref system, tree rendering, and output formatting are in `ForepawCore` with no platform imports. Only `ForepawDarwin` touches macOS APIs.
 - **App activation before input.** Mouse clicks and keystrokes target whatever window is under the cursor. Activating the app first ensures the right window receives input.
 - **Built for agents, designed for humans too.** forepaw reads the same accessibility tree that screen readers use. Annotated screenshots bridge invisible structure to the visible -- useful for AI agents acting on apps with poor AX trees, but also for sighted people helping blind users debug UIs, low-vision users, or anyone trying to understand an app's interactive structure. The annotation system supports multiple styles for different audiences rather than optimizing solely for machine consumption.
+
+## Development
+
+Requires Swift 6 and Xcode. Uses [mise](https://mise.jdx.dev) for task running.
+
+```bash
+mise run check          # lint + build + test
+mise run build          # debug build
+mise run release-build  # release build (.build/release/forepaw)
+mise run dev <command>  # build + run (e.g. mise run dev snapshot --app Finder -i)
+mise run lint           # swift-format --strict
+mise run fmt            # auto-format
+```
+
+Or without mise:
+
+```bash
+swift build
+swift test
+xcrun swift-format lint -r Sources/ Tests/ TestApps/ --strict
+xcrun swift-format format -i -r Sources/ Tests/ TestApps/
+```
+
+### Project layout
+
+| Directory | Purpose |
+|-----------|---------|
+| `Sources/ForepawCore/` | Platform-agnostic types and logic (no macOS imports) |
+| `Sources/ForepawDarwin/` | macOS implementation (AX, CGEvent, Vision, CoreGraphics) |
+| `Sources/Forepaw/` | CLI commands (swift-argument-parser) |
+| `Tests/ForepawCoreTests/` | Unit tests for ForepawCore |
+| `TestApps/` | SwiftUI apps for manual testing |
+
+### Guidelines
+
+- Run `mise run check` (or lint + build + test manually) before committing.
+- Every new type or function in `ForepawCore` needs unit tests.
+- `ForepawCore` must stay free of platform imports. All macOS-specific code goes in `ForepawDarwin`.
+- New public APIs in `ForepawDarwin` need a corresponding `DesktopProvider` protocol method in `ForepawCore`, using platform-agnostic types (`Point`, `Rect`, not `CGPoint`, `CGRect`).

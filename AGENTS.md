@@ -9,8 +9,10 @@ swift build                              # Build
 swift test                               # Run tests (ForepawCore only)
 swift run forepaw <command>              # Run CLI
 swift run forepaw snapshot --app Finder -i  # Quick smoke test
-xcrun swift-format lint -r Sources/ Tests/  # Lint
-xcrun swift-format format -i -r Sources/ Tests/  # Auto-format
+xcrun swift-format lint -r Sources/ Tests/ TestApps/  # Lint
+xcrun swift-format format -i -r Sources/ Tests/ TestApps/  # Auto-format
+mise run check                           # Lint + build + test
+mise run dev <command>                   # Build + run (e.g. mise run dev snapshot --app Finder -i)
 ```
 
 ## Key Paths
@@ -21,6 +23,7 @@ xcrun swift-format format -i -r Sources/ Tests/  # Auto-format
 | Platform-agnostic types & logic | `Sources/ForepawCore/` |
 | macOS AX/OCR/input implementation | `Sources/ForepawDarwin/` |
 | Core tests | `Tests/ForepawCoreTests/` |
+| Test apps (SwiftUI, manual testing) | `TestApps/` |
 
 ## Project Context
 
@@ -42,8 +45,8 @@ xcrun swift-format format -i -r Sources/ Tests/  # Auto-format
 
 - **swift-format** (ships with Xcode toolchain). Config in `.swift-format`.
 - 4-space indent, 120 char line length.
-- Run `xcrun swift-format format -i -r Sources/ Tests/` before committing.
-- Lint with `xcrun swift-format lint -r Sources/ Tests/` -- must be zero warnings.
+- Run `xcrun swift-format format -i -r Sources/ Tests/ TestApps/` before committing.
+- Lint with `xcrun swift-format lint -r Sources/ Tests/ TestApps/` -- must be zero warnings.
 
 ## Guidelines
 
