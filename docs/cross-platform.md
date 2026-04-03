@@ -1,8 +1,8 @@
 # Cross-Platform Prospects
 
 Research notes on what it would take to bring forepaw's capabilities to Linux
-and Windows. Written April 2026; the landscape is actively shifting,
-especially on Linux.
+and Windows. Written April 2026, updated with VM test results; the landscape
+is actively shifting, especially on Linux.
 
 forepaw needs four things from a platform:
 
@@ -105,9 +105,9 @@ AT-SPI2 provides:
 - Value, selection, table interfaces
 - Event notifications (focus, state change, text change)
 
-Conceptually similar to macOS AX. Roles map reasonably well (`ROLE_PUSH_BUTTON`
-~ `AXButton`, `ROLE_TEXT` ~ `AXTextField`, etc.). Bounds are available. Actions
-are named strings like macOS.
+Conceptually similar to macOS AX. Roles map well -- tested on KDE Plasma 6
+(see [VM testing](#linux-vm-testing) below). Bounds are available in desktop
+coordinates. Actions are named strings like macOS.
 
 **Tooling:**
 - Python: `pyatspi2` -- the standard binding, used by Orca screen reader
@@ -122,7 +122,16 @@ are named strings like macOS.
 `--force-renderer-accessibility` flag forces the tree to be built. Unlike
 macOS's `AXManualAccessibility` (set at runtime on a running process), this
 flag must be set at app launch time. Detecting and handling this is harder --
-there's no way to flip a switch on an already-running Discord.
+there's no way to flip a switch on an already-running Discord. Firefox
+responds to the `MOZ_ENABLE_ACCESSIBILITY=1` environment variable, which
+must also be set before launch.
+
+**Activation:** AT-SPI2's bus exists by default on GNOME/KDE but
+`org.a11y.Status.IsEnabled` defaults to `false`. Apps check this flag and
+skip building their accessibility trees if it's off. Set
+`org.gnome.desktop.interface.toolkit-accessibility = true` via
+dconf/gsettings to enable it persistently. Without this, the bus is
+running but empty.
 
 ### Screen capture
 
@@ -140,8 +149,12 @@ Some compositors offer non-standard protocols:
 - PipeWire-based screen capture via portal -- requires user interaction
 
 For a CLI automation tool, the consent dialog is a dealbreaker for the
-screenshot/OCR workflow. The options are compositor-specific backends or
-accepting that screenshots require manual approval.
+screenshot/OCR workflow. However, KDE's `spectacle` CLI and GNOME's
+`gnome-screenshot` work without portal consent when run within the
+graphical session (they're trusted compositor clients). From SSH, importing
+the graphical session's environment variables (`WAYLAND_DISPLAY`,
+`XDG_SESSION_TYPE`, etc.) from a compositor process like `kwin_wayland`
+makes this work. Not elegant, but functional.
 
 ### Input injection
 
@@ -158,8 +171,13 @@ accepting that screenshots require manual approval.
 - Compositor-specific: GNOME has an `InputCapture` portal (2025+), KDE has its
   own mechanisms
 
-This is the single biggest problem for forepaw on Linux. Each compositor is
-its own island.
+This was expected to be the biggest problem, but AT-SPI2 actions change the
+picture significantly (see [VM testing](#linux-vm-testing) below). For the
+majority of forepaw's use cases -- clicking buttons, menu items, toggles --
+AT-SPI2 `doAction("Press")` works over D-Bus and bypasses the compositor
+entirely. `ydotool` (kernel-level via `/dev/uinput`) covers the remaining
+cases where raw mouse/keyboard input is needed, and works on any compositor
+without special protocols.
 
 ### Window management
 
@@ -171,12 +189,16 @@ don't expose window lists to clients. Some offer D-Bus interfaces
 
 ### The Wayland situation
 
-Wayland's design philosophy is explicitly hostile to desktop automation. From
-the Wayland perspective, "no app should be able to see or control another
-app's windows" is a security feature, not a bug. The accessibility community
-has been pushing back on this -- Orca (the Linux screen reader) still has
-significant Wayland issues as of 2026. Key capture, input injection, and
-global UI inspection are all active areas of work.
+Wayland's design philosophy is hostile to the traditional desktop automation
+approach (screen capture + input injection). But AT-SPI2 operates on a
+different plane -- it's a D-Bus protocol, not a Wayland protocol, so it
+bypasses compositor restrictions entirely. Tree walking, element queries,
+and action invocation all work from any process with D-Bus access, including
+SSH sessions.
+
+The remaining Wayland friction is in screen capture (needs compositor-specific
+tools or portal consent) and raw input injection (needs `ydotool` with
+`/dev/uinput` access). Both are solvable with system configuration.
 
 A next-generation accessibility architecture is being designed by GNOME/AccessKit
 contributors that would address some of these problems. It proposes a push-based
@@ -187,15 +209,111 @@ problem properly but is still in the design/prototype phase.
 
 ### Verdict
 
-Linux is the hardest platform. AT-SPI2 covers the accessibility tree, but
-everything else is fragmented across compositors. A practical Linux port would
-probably need to:
+Linux is harder than macOS or Windows but more viable than initially expected.
+AT-SPI2 actions are the key insight -- they handle the common case (clicking
+UI elements) without needing compositor cooperation. Combined with `ydotool`
+for raw input and compositor-native screenshot tools, all four capabilities
+work on KDE Wayland today.
 
-1. Target GNOME specifically (largest desktop, most accessibility investment)
-2. Accept X11-only for full functionality, with degraded Wayland support
-3. Or target a specific Wayland compositor (Sway/Hyprland via wlroots protocols)
+Remaining unknowns:
+- GNOME Wayland behavior (screenshot tools, AT-SPI2 tree quality)
+- GNOME X11 (removed in GNOME 49 / NixOS 25.11 -- only available on older
+  distros)
+- Electron/Chromium app tree quality with `--force-renderer-accessibility`
 
-None of these are great options for a tool meant to Just Work.
+
+### Linux VM testing
+
+Tested on NixOS (aarch64) in UTM on Apple Silicon, KDE Plasma 6 Wayland
+session. All four capabilities validated.
+
+**AT-SPI2 tree walking:** 15 apps visible on the desktop. Kate editor
+exposed 849 elements at depth 8 -- rich tree including menu bar with all
+items, toolbar buttons, editor panels, status bar. plasmashell exposed the
+full system tray, calendar widget (every day as a named button), and
+clipboard popup.
+
+Role mapping from AT-SPI2 to forepaw's model:
+
+| AT-SPI2 | forepaw (macOS AX) | Notes |
+|---------|-------------------|-------|
+| application | AXApplication | direct |
+| frame | AXWindow | direct |
+| push button / button | AXButton | AT-SPI2 uses both names |
+| menu bar, menu item | AXMenuBar, AXMenuItem | direct |
+| text | AXTextField / AXTextArea | direct |
+| check box | AXCheckBox | direct |
+| panel | AXGroup | direct |
+| label | AXStaticText | direct |
+| page tab, page tab list | AXTab, AXTabGroup | direct |
+| heading | *(no macOS equivalent)* | HTML semantics |
+| filler | *(no macOS equivalent)* | KDE spacers |
+| layered pane | *(no macOS equivalent)* | KDE stacking containers |
+
+**AT-SPI2 actions:** `doAction("Press")` on plasmashell's "Application
+Launcher" button opened the app launcher -- from an SSH session. Actions go
+through D-Bus, not the compositor's input path, so they bypass all Wayland
+restrictions. This is the single biggest finding: for 90% of forepaw's use
+cases (clicking buttons, menu items, toggles), AT-SPI2 actions are the right
+path on Linux. Available action names observed: Press, SetFocus, ShowMenu,
+Toggle, Increase, Decrease.
+
+**Screen capture:** `spectacle -b -n -f -o <path>` captures fullscreen
+screenshots on KDE. Must be run with the graphical session's environment
+variables -- from SSH, import `WAYLAND_DISPLAY`, `XDG_SESSION_TYPE`, etc.
+from `kwin_wayland`'s `/proc/<pid>/environ`. KWin's `ScreenShot2` D-Bus
+API also exists (`CaptureActiveWindow`, `CaptureArea`, `CaptureScreen`) but
+rejects non-authorized (non-KDE) callers.
+
+**Input injection:** `ydotool` with `ydotoold` daemon works. Needs
+`/dev/uinput` access (ydotool group or root). NixOS has a
+`programs.ydotool.enable` module that handles the systemd service, group,
+and permissions. Tested mouse moves and text typing -- input goes to
+whatever has focus (kernel-level, compositor-agnostic).
+
+**OCR:** Tesseract via pytesseract reads text from spectacle screenshots.
+20 text lines extracted from a Kate window capture.
+
+**Setup requirements** (NixOS-specific, other distros will differ):
+- `services.gnome.at-spi2-core.enable = true` (AT-SPI2 D-Bus service)
+- `toolkit-accessibility = true` in dconf (enables `IsEnabled` on AT-SPI2 bus)
+- `programs.ydotool.enable = true` (input injection daemon + permissions)
+- `GI_TYPELIB_PATH` env var pointing to system typelibs (NixOS gotcha --
+  typelibs exist but the search path isn't set by default)
+- `MOZ_ENABLE_ACCESSIBILITY=1` (Firefox accessibility tree)
+
+**KDE X11 session:** Also tested. AT-SPI2 tree identical to Wayland (849
+elements in Kate, same tree structure). X11 has two advantages for
+screenshot capture:
+1. `magick import -window root` captures fullscreen without session env
+   workarounds -- standard X11 capture Just Works from SSH.
+2. Per-window capture via X11 window ID: `magick import -window 0x3a00017`
+   grabs just one window, equivalent to macOS's `screencapture -l`. Window
+   IDs available via `xprop -root _NET_CLIENT_LIST_STACKING`. Not available
+   on Wayland.
+
+18 apps visible on X11 (3 more than Wayland: `kscreen_backend_launcher`,
+`kglobalaccel`, `baloorunner`). ydotool also works (kernel-level,
+display-server-agnostic).
+
+AT-SPI2 bounds can also be used for per-window crop on either display
+server: capture fullscreen, crop to the `frame` element's extents. Less
+clean than X11 window ID capture (includes overlapping windows) but works
+on Wayland.
+
+**Firefox on Linux:** Rich accessibility tree with `MOZ_ENABLE_ACCESSIBILITY=1`.
+217 total elements. Full web content exposed: headings, links with `jump`
+actions, paragraphs, landmarks, lists, buttons, checkboxes, form controls.
+58 named links on the Privacy Notice page alone, all invokable via AT-SPI2
+`doAction("jump")`. Tab switching works via `switch` action on `page tab`
+elements. URL bar exposes `EditableText` interface for text input.
+
+Tested pressing "Skip this step" button from SSH -- navigated Firefox's
+onboarding wizard. Firefox's tree quality on Linux is excellent, comparable
+to what forepaw gets from native macOS apps via AX.
+
+**Still untested:** GNOME Wayland, Electron/Chromium apps with
+`--force-renderer-accessibility`, multi-monitor.
 
 
 ## Language considerations
@@ -296,11 +414,11 @@ string-identified. This was designed for exactly this scenario.
 | Element role | AXRole string | ControlType enum | AT-SPI2 Role enum |
 | Element name | AXTitle/AXDescription | Name property | Name/Description |
 | Bounds | AXPosition + AXSize | BoundingRectangle | Extents |
-| Press/click action | AXPress / CGEvent | InvokePattern | Action "press" |
-| Text input | AXSetValue / CGEvent keys | ValuePattern.SetValue / SendInput | Text.SetCaretOffset + keys |
-| Screenshot | screencapture -l | Graphics Capture API | Portal (Wayland) / X11 capture |
-| Mouse events | CGEvent | SendInput | ydotool / xdotool / wtype |
-| Keyboard events | CGEvent | SendInput | ydotool / xdotool / wtype |
+| Press/click action | AXPress / CGEvent | InvokePattern | Action "press"/"jump"/"switch" |
+| Text input | AXSetValue / CGEvent keys | ValuePattern.SetValue / SendInput | EditableText.setTextContents / ydotool |
+| Screenshot | screencapture -l | Graphics Capture API | spectacle/gnome-screenshot (Wayland) / scrot (X11) |
+| Mouse events | CGEvent | SendInput | AT-SPI2 actions (primary) / ydotool (fallback) |
+| Keyboard events | CGEvent | SendInput | ydotool / xdotool (X11) |
 
 ### What doesn't map
 
@@ -313,8 +431,9 @@ string-identified. This was designed for exactly this scenario.
   Would need platform-specific image drawing (GDI+/Direct2D on Windows,
   Cairo on Linux). Or use a cross-platform image library.
 - **Permission model**: macOS requires explicit Accessibility and Screen
-  Recording permissions. Windows has no equivalent gates. Linux varies
-  (uinput group for ydotool, portal consent for Wayland capture).
+  Recording permissions. Windows has no equivalent gates. Linux needs
+  uinput group for ydotool; AT-SPI2 and screenshot tools work without
+  special permissions when configured correctly.
 
 
 ## Realistic paths forward
@@ -343,13 +462,22 @@ forepaw (Swift/macOS), forepaw-win (Rust or C#/Windows), forepaw-linux
 internals. Each implementation is idiomatic for its platform. Downside:
 three codebases to maintain, drift risk.
 
-**No recommendation here.** The decision depends on whether cross-platform
+**No recommendation yet.** The decision depends on whether cross-platform
 demand materializes, and whether forepaw's value is in the specific
 implementation or in the CLI interface contract (command names, output
 format, ref system) that agents learn once and use everywhere.
 
-VM-based testing on Windows and Linux can help validate feasibility before
-committing to a path.
+The language question matters most if targeting both Linux and Windows. Rust
+has proven ecosystem support on both (atspi + zbus for Linux, windows-rs for
+Windows UIA). Swift works on Linux but has no viable AT-SPI2 or UIA story.
+Python has the best prototyping story (pyatspi2 for Linux, pywinauto for
+Windows) but distribution and performance are concerns.
+
+More VM testing will help inform this:
+- Linux: GNOME Wayland, KDE X11, Firefox/Chromium tree quality
+- Windows: UIA tree walking, input injection, Chromium native UIA
+- Rust: prototype AT-SPI2 tree walk with `atspi` crate, compare with
+  pyatspi2 for ergonomics and performance
 
 
 ## References
