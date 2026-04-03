@@ -149,12 +149,25 @@ Some compositors offer non-standard protocols:
 - PipeWire-based screen capture via portal -- requires user interaction
 
 For a CLI automation tool, the consent dialog is a dealbreaker for the
-screenshot/OCR workflow. However, KDE's `spectacle` CLI and GNOME's
-`gnome-screenshot` work without portal consent when run within the
-graphical session (they're trusted compositor clients). From SSH, importing
-the graphical session's environment variables (`WAYLAND_DISPLAY`,
-`XDG_SESSION_TYPE`, etc.) from a compositor process like `kwin_wayland`
-makes this work. Not elegant, but functional.
+screenshot/OCR workflow. KDE's `spectacle` CLI works without portal consent
+when run within the graphical session (it's a trusted compositor client).
+From SSH, importing the graphical session's environment variables
+(`WAYLAND_DISPLAY`, `XDG_SESSION_TYPE`, etc.) from a compositor process
+like `kwin_wayland` makes this work. Not elegant, but functional.
+
+GNOME is harder: `gnome-screenshot` is deprecated and doesn't work on
+GNOME Wayland (falls back to X11 which fails). The `org.gnome.Shell.Screenshot`
+D-Bus API exists (`Screenshot`, `ScreenshotWindow`, `ScreenshotArea` methods)
+but is access-controlled -- returns "Screenshot is not allowed" for non-shell
+processes, including SSH sessions with correct `DBUS_SESSION_BUS_ADDRESS`.
+The XDG Desktop Portal `Screenshot` interface pops a user consent dialog
+on first use, but after granting permission once, subsequent requests
+succeed silently. The permission is stored in the XDG permission store
+(`screenshot` table with `{'': ['yes']}`) and persists across reboots.
+The portal saves screenshots to `~/Pictures/` with auto-incrementing
+names and returns the URI in the response.
+grim (wlroots screenshotter) doesn't work on GNOME (needs wlr-screencopy
+protocol).
 
 ### Input injection
 
@@ -200,12 +213,33 @@ The remaining Wayland friction is in screen capture (needs compositor-specific
 tools or portal consent) and raw input injection (needs `ydotool` with
 `/dev/uinput` access). Both are solvable with system configuration.
 
-A next-generation accessibility architecture is being designed by GNOME/AccessKit
-contributors that would address some of these problems. It proposes a push-based
-model (providers push tree snapshots to clients, like Chromium's internal
-architecture) with Wayland integration. This would solve the tree-walking
-problem properly but is still in the design/prototype phase.
-([Design doc](https://gnome.pages.gitlab.gnome.org/at-spi2-core/devel-docs/new-protocol.html))
+A next-generation accessibility architecture called **Newton** is being
+developed by Matt Campbell (AccessKit lead, ex-Microsoft Narrator/UIA team),
+funded by the Sovereign Tech Fund. It proposes a push-based model where
+providers push full accessibility tree snapshots and incremental updates
+to clients (like Chromium's internal architecture), with a Wayland protocol
+for toolkit-to-compositor communication and D-Bus for compositor-to-AT.
+Tree updates are synchronized with visual frames.
+
+As of June 2024, Newton has a working prototype: Orca is functional with
+GTK4 apps (Nautilus, Text Editor, Podcasts, Fractal) running in Flatpak
+sandboxes without AT-SPI2 bus access. However, Newton itself is not upstream
+yet.
+
+The AccessKit backend was merged into GTK 4.18 (May 2025). On Linux, GTK4
+still defaults to AT-SPI2, but the AccessKit backend can be enabled with
+`GTK_A11Y=accesskit`. NixOS's GTK4 package (4.20.3) has AccessKit
+referenced but disabled at build time. Enabling it requires packaging
+`accesskit-c` (a Rust crate producing C bindings, not yet in nixpkgs)
+and overriding GTK4 with `-Daccesskit=enabled`, triggering a full GNOME
+rebuild. When enabled, AccessKit's AT-SPI2 bridge may
+produce richer trees than GTK4's native AT-SPI2 backend, since AccessKit's
+model is based on Chromium's internal a11y (which exposes everything).
+This is untested.
+
+([Design doc](https://gnome.pages.gitlab.gnome.org/at-spi2-core/devel-docs/new-protocol.html),
+[Newton update](https://blogs.gnome.org/a11y/2024/06/18/update-on-newton-the-wayland-native-accessibility-project/),
+[GTK AccessKit merge](https://blogs.gnome.org/gtk/2025/05/12/an-accessibility-update/))
 
 ### Verdict
 
@@ -216,9 +250,6 @@ for raw input and compositor-native screenshot tools, all four capabilities
 work on KDE Wayland today.
 
 Remaining unknowns:
-- GNOME Wayland behavior (screenshot tools, AT-SPI2 tree quality)
-- GNOME X11 (removed in GNOME 49 / NixOS 25.11 -- only available on older
-  distros)
 - Electron/Chromium app tree quality with `--force-renderer-accessibility`
 
 
@@ -312,8 +343,78 @@ Tested pressing "Skip this step" button from SSH -- navigated Firefox's
 onboarding wizard. Firefox's tree quality on Linux is excellent, comparable
 to what forepaw gets from native macOS apps via AX.
 
-**Still untested:** GNOME Wayland, Electron/Chromium apps with
+**Still untested:** Electron/Chromium apps with
 `--force-renderer-accessibility`, multi-monitor.
+
+
+### GNOME Wayland testing
+
+Tested on NixOS (aarch64) in UTM, GNOME 49 Wayland session. Results are
+mixed -- AT-SPI2 works but GTK4 tree quality is poor, and screenshots
+have no non-interactive path.
+
+**AT-SPI2 tree walking:** The bus is active with `toolkit-accessibility = true`.
+However, GTK4 apps expose dramatically sparse trees compared to KDE/Qt:
+
+| App | Elements | Notes |
+|-----|----------|-------|
+| gnome-calculator | 25 | No individual buttons (0-9, +, -, etc.) |
+| Nautilus (Files) | 10 | No file entries, no sidebar items |
+| gnome-text-editor | 24 | No toolbar buttons, no menu items |
+| GNOME Settings | 12 | No settings categories, no list items |
+| gnome-shell | 120 | Mostly unnamed 0x0 panels |
+| Firefox | 70 | Full tree with named buttons and actions |
+
+GTK4 apps expose GAction names as AT-SPI2 actions on container elements
+(e.g., `cal.solve`, `cal.clear`, `win.close`) rather than individual UI
+elements with their own actions. The Calculator's button grid panel has
+8 GActions but no child button elements. This means forepaw can invoke
+application-level actions (save, close, preferences) but cannot target
+individual UI widgets like number buttons or list items.
+
+Firefox is the exception -- it implements its own AT-SPI2 backend (not via
+GTK4's bridge) and exposes a full tree with 20+ named buttons, menu items,
+tabs, and per-element press/click/switch actions. Same quality as on KDE.
+
+This is a fundamental architectural difference: GTK4's accessibility model
+is based on WAI-ARIA roles and a declarative `GtkAccessible` interface,
+where widgets opt in to exposing children. Many GTK4 widgets don't expose
+their internal structure to AT-SPI2. Qt widgets expose their full widget
+tree by default.
+
+The AccessKit backend (`GTK_A11Y=accesskit`) may produce richer trees, as
+it uses Chromium-inspired semantics that expose more widget structure. This
+backend was merged in GTK 4.18 but is disabled in the NixOS GTK4 package;
+testing requires a package overlay with `-Daccesskit=enabled`.
+
+**AT-SPI2 actions:** Work from SSH, same as KDE. Firefox button press
+tested successfully. GTK4 GActions (invoked via `doAction` on the
+container that exposes them) also return success.
+
+**Screen capture:** GNOME Shell's D-Bus Screenshot API (`org.gnome.Shell.Screenshot`)
+rejects non-shell callers ("Screenshot is not allowed"). gnome-screenshot
+is deprecated and fails on Wayland. grim requires wlr-screencopy (not on
+GNOME). The XDG Desktop Portal `Screenshot` interface works but requires
+user consent on first use -- after clicking "Allow" once, subsequent
+requests succeed silently. Permission persists in the XDG permission store
+across reboots (one-time grant, similar to macOS Screen Recording permission).
+Screenshots save to `~/Pictures/` with auto-incrementing names; the URI
+is returned in the portal response.
+
+**Input injection:** ydotool works (kernel-level, compositor-agnostic).
+Mouse moves, clicks, and text typing all work from SSH.
+
+**Clipboard:** spice-vdagent handles clipboard sharing at the SPICE
+protocol level -- works across both KDE and GNOME sessions without
+compositor-specific tools (no Klipper needed on GNOME).
+
+**Implications for forepaw on GNOME:** The sparse GTK4 trees make
+accessibility-tree-based automation much less useful for native GNOME apps
+than for KDE/Qt apps. A GNOME forepaw implementation would need to lean
+heavily on OCR/vision for GTK4 apps, while AT-SPI2 would still work well
+for Firefox/Chromium (which have their own AT-SPI2 backends). This is a
+significant finding -- the quality of automation depends on the desktop
+environment and toolkit, not just the display server.
 
 
 ## Language considerations
