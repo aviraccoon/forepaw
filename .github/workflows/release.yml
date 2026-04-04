@@ -12,10 +12,10 @@ jobs:
   build:
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install mise
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v4
 
       - name: Check (lint + build + test)
         run: mise run check
@@ -56,6 +56,7 @@ jobs:
           INSTALL
 
       - name: Release
+        # TODO: upgrade to v3 when released (Node 24 support, see softprops/action-gh-release#654)
         uses: softprops/action-gh-release@v2
         with:
           files: |
