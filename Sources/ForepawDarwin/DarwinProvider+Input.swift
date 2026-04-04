@@ -164,7 +164,8 @@ extension DarwinProvider {
     ///   - window: Optional window title or ID to target
     ///   - ref: Optional element ref to scroll within (scrolls at element center)
     public func scroll(
-        direction: String, amount: Int = 3, app: String, window: String? = nil, ref: ElementRef? = nil
+        direction: String, amount: Int = 3, app: String, window: String? = nil,
+        ref: ElementRef? = nil, at point: Point? = nil
     ) async throws
         -> ActionResult
     {
@@ -175,7 +176,18 @@ extension DarwinProvider {
         let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
         let scrollPoint: CGPoint
 
-        if let ref = ref {
+        if let point = point {
+            // Scroll at explicit screen coordinates
+            if let error = CoordinateValidation.validate(
+                point: point,
+                bounds: Rect(
+                    x: resolved.origin.x, y: resolved.origin.y,
+                    width: resolved.size.width, height: resolved.size.height)
+            ) {
+                throw ForepawError.actionFailed(error)
+            }
+            scrollPoint = CGPoint(x: point.x, y: point.y)
+        } else if let ref = ref {
             // Scroll at the center of the referenced element
             let element = try resolveRef(ref, app: app)
             guard let pos = getPosition(of: element), let size = getSize(of: element) else {
@@ -386,6 +398,9 @@ extension DarwinProvider {
             throw ForepawError.actionFailed("Failed to create mouse move event")
         }
         moveEvent.post(tap: .cghidEventTap)
+        // Wait for the event system to process the move. Without this,
+        // the process can exit before the cursor actually moves.
+        Thread.sleep(forTimeInterval: 0.05)
     }
 
     /// Move the mouse to a screen point, optionally activating an app first.

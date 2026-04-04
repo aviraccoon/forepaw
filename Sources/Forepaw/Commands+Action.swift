@@ -378,7 +378,7 @@ struct Batch: AsyncParsableCommand {
             }
             let text =
                 parseOption("--text", from: actionArgs)
-                ?? (actionArgs.count >= 2 ? actionArgs[1] : nil)
+                ?? collectPositionalText(from: actionArgs, skip: 1)
             guard let text else {
                 throw ForepawError.actionFailed("type requires text (e.g. type @e3 hello or type @e3 --text hello)")
             }
@@ -389,7 +389,9 @@ struct Batch: AsyncParsableCommand {
             return try await provider.type(ref: ref, text: text, app: appName)
 
         case "keyboard-type":
-            let text = parseOption("--text", from: actionArgs) ?? actionArgs.first
+            let text =
+                parseOption("--text", from: actionArgs)
+                ?? collectPositionalText(from: actionArgs, skip: 0)
             guard let text else {
                 throw ForepawError.actionFailed("keyboard-type requires text")
             }
@@ -421,8 +423,10 @@ struct Batch: AsyncParsableCommand {
             let amount = parseOption("--amount", from: actionArgs).flatMap { Int($0) } ?? 3
             let win = parseOption("--window", from: actionArgs) ?? window
             let scrollRef = parseOption("--ref", from: actionArgs).flatMap { ElementRef.parse($0) }
+            let scrollAt = parseOption("--at", from: actionArgs).flatMap { parseCoordinate($0) }
             return try await provider.scroll(
-                direction: direction, amount: amount, app: appName, window: win, ref: scrollRef)
+                direction: direction, amount: amount, app: appName, window: win,
+                ref: scrollRef, at: scrollAt)
 
         case "ocr-click":
             let text = parseOption("--text", from: actionArgs) ?? actionArgs.first
@@ -519,6 +523,25 @@ struct Batch: AsyncParsableCommand {
     private func parseOption(_ name: String, from args: [String]) -> String? {
         guard let idx = args.firstIndex(of: name), idx + 1 < args.count else { return nil }
         return args[idx + 1]
+    }
+
+    /// Collect remaining positional arguments as text, skipping flags and their values.
+    /// `skip` is the number of leading positional args to skip (e.g. 1 for `type @ref text...`).
+    /// Returns nil if no positional text remains.
+    private func collectPositionalText(from args: [String], skip: Int) -> String? {
+        var positional: [String] = []
+        var i = 0
+        while i < args.count {
+            if args[i].starts(with: "--") {
+                i += 2  // skip flag + its value
+                continue
+            }
+            positional.append(args[i])
+            i += 1
+        }
+        let remaining = positional.dropFirst(skip)
+        guard !remaining.isEmpty else { return nil }
+        return remaining.joined(separator: " ")
     }
 
     /// Split a string into shell-like tokens, respecting double quotes.
@@ -722,6 +745,9 @@ struct Scroll: AsyncParsableCommand {
     @Option(name: .long, help: "Element ref to scroll within (e.g. @e5)")
     var ref: String?
 
+    @Option(name: .long, help: "Screen coordinates to scroll at (e.g. 589,400)")
+    var at: String?
+
     @Flag(name: .long, help: "JSON output")
     var json: Bool = false
 
@@ -729,6 +755,10 @@ struct Scroll: AsyncParsableCommand {
         let validDirections = ["up", "down", "left", "right"]
         guard validDirections.contains(direction) else {
             throw ValidationError("Invalid direction '\(direction)'. Use: \(validDirections.joined(separator: ", "))")
+        }
+
+        if ref != nil, at != nil {
+            throw ValidationError("Use --ref or --at, not both")
         }
 
         var elementRef: ElementRef?
@@ -739,8 +769,17 @@ struct Scroll: AsyncParsableCommand {
             elementRef = parsed
         }
 
+        var scrollPoint: Point?
+        if let at = at {
+            guard let point = parseCoordinate(at) else {
+                throw ValidationError("Invalid coordinates: \(at). Expected x,y (e.g. 589,400)")
+            }
+            scrollPoint = point
+        }
+
         let result = try await provider.scroll(
-            direction: direction, amount: amount, app: app, window: window, ref: elementRef)
+            direction: direction, amount: amount, app: app, window: window,
+            ref: elementRef, at: scrollPoint)
         let formatter = OutputFormatter(json: json)
         print(
             formatter.format(success: result.success, command: "scroll", data: ["text": result.message ?? "scrolled"]))

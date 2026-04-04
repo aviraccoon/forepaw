@@ -94,7 +94,7 @@ swift run forepaw list-apps
 | `keyboard-type <text> [--app <name>] [--text <text>]` | Type into focused element |
 | `press <combo> [--app <name>]` | Keyboard shortcut (e.g. `cmd+s`, `ctrl+shift+z`) |
 | `drag <from> <to> [--app <name>] [--steps <n>] [--duration <s>] [--modifiers <keys>] [--pressure <0-1>] [--right] [--close] [--stdin]` | Drag between points (drawing, moving, resizing) |
-| `scroll <direction> --app <name> [--window <title\|id>] [--amount <n>]` | Scroll up/down/left/right |
+| `scroll <direction> --app <name> [--window <title\|id>] [--amount <n>] [--at <x,y>]` | Scroll up/down/left/right (at coordinates or window center) |
 | `hover <@ref\|text> --app <name> [--window <title\|id>]` | Move mouse to element or text (triggers tooltips/hover states) |
 | `wait <text> --app <name> [--timeout <s>] [--interval <s>] [--text <text>]` | Poll OCR until text appears |
 | `batch <actions> [--app <name>] [--delay <ms>]` | Execute multiple actions (separated by `;;`) |
@@ -181,7 +181,7 @@ The `ocr` command saves an agent-friendly screenshot alongside the text results,
 
 **OCR-click**: Screenshots the window, runs OCR, finds the text, converts pixel coordinates to screen points (accounting for Retina scale factor and window offset), then clicks via CGEvent. When multiple matches are found, errors with a listing of all matches and their coordinates -- use `--index N` (1-based) to pick one. Single matches click without needing `--index`.
 
-**Scroll**: Moves the mouse to the target position (window center by default, or element center with `--ref`), then fires CGEvent scroll wheel events. Amount is in "ticks" (lines), default 3.
+**Scroll**: Moves the mouse to the target position (window center by default, element center with `--ref`, or explicit coordinates with `--at x,y`), then fires CGEvent scroll wheel events. Amount is in "ticks" (lines), default 3. Use `--at` to scroll a specific panel or sidebar when no ref is available.
 
 **Drag**: Mouse drag with smooth interpolation between points. Supports two-point drag (`drag 100,100 500,500`), multi-point paths (`drag 100,100 300,200 500,100`), and ref-based drag (`drag @e3 @e7`). `--steps` controls smoothness per segment (default 30), `--duration` controls total time (default 0.3s). Uses CGEvent mouse drag events for intermediate points, which apps like Affinity, Figma, etc. recognize as continuous brush strokes or drag gestures. `--modifiers` holds keys during the drag (e.g. `--modifiers shift`, `--modifiers shift+alt`) -- Shift constrains to straight lines in drawing apps, Alt clones in design tools. `--close` appends the start point to close a multi-point path (triangles, polygons). `--right` uses right mouse button. `--pressure 0.0-1.0` sets tablet-style pressure (app must have pressure dynamics enabled). `--stdin` reads coordinates from stdin for complex paths with many points (e.g. `python3 -c "..." | forepaw drag --stdin --app App`).
 

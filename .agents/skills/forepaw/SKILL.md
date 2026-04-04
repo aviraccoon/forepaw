@@ -229,9 +229,10 @@ forepaw scroll down --app Orion              # scroll down 3 ticks (default)
 forepaw scroll up --app Orion --amount 10    # scroll up 10 ticks
 forepaw scroll left --app Finder             # horizontal scroll
 forepaw scroll down --app Orion --ref @e5    # scroll within a specific element
+forepaw scroll down --app Discord --at 589,400  # scroll at specific coordinates (e.g. a sidebar)
 ```
 
-Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks.
+Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks. Use `--at x,y` to scroll a specific panel or sidebar when no ref is available (e.g. Discord's server list). Coordinates are validated against window bounds.
 
 ### Hover (trigger tooltips/hover states)
 
@@ -239,9 +240,12 @@ Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks.
 forepaw hover @e5 --app "App Name"              # by ref (from snapshot)
 forepaw hover "Submit" --app "App Name"          # by text (OCR lookup)
 forepaw hover "8 comments" --app Orion           # hover over a link
+forepaw hover 589,470 --app Discord              # hover at coordinates (triggers tooltips for icon buttons)
 ```
 
-Moves the mouse without clicking. Accepts either an `@e` ref or text (auto-detected -- if the argument parses as a ref, uses AX; otherwise uses OCR). Useful for triggering tooltips, hover menus, or preview popups.
+Moves the mouse without clicking. Accepts either an `@e` ref, text (OCR lookup), or coordinates. Useful for triggering tooltips, hover menus, or preview popups.
+
+**Tooltip discovery for unnamed elements:** Some apps (especially Discord) have icon-only buttons with no AX name. Hover at their coordinates to trigger a tooltip, then snapshot -- the tooltip appears in the AX tree as `subrole=AXUserInterfaceTooltip` with the element's name. This is how you identify unnamed server icons, toolbar buttons, etc.
 
 ### Wait (poll for text to appear)
 

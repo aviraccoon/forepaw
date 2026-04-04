@@ -87,7 +87,7 @@ public protocol DesktopProvider: Sendable {
     /// Scroll within an app window.
     func scroll(
         direction: String, amount: Int, app: String,
-        window: String?, ref: ElementRef?
+        window: String?, ref: ElementRef?, at: Point?
     ) async throws -> ActionResult
 
     /// Drag along a path of screen coordinates.
