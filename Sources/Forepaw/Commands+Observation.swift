@@ -24,14 +24,27 @@ struct Snapshot: AsyncParsableCommand {
     @Option(name: .long, help: "Context lines around changes in diff output (default: 0)")
     var context: Int = 0
 
+    @Flag(name: .long, help: "Include menu bar (excluded by default with -i)")
+    var menu: Bool = false
+
+    @Flag(name: .long, help: "Include zero-size elements (excluded by default with -i)")
+    var zeroSize: Bool = false
+
     mutating func run() async throws {
         guard let app = global.app else {
             throw ValidationError("--app is required")
         }
+        // In interactive mode (-i), skip menus and zero-size elements by default.
+        // Agents almost never need menu items, and zero-size elements are invisible.
+        // --menu and --zero-size override to include them.
+        // --menu implies --zero-size because menu items have 0x0 bounds (collapsed).
+        let includeHidden = zeroSize || menu
         let options = SnapshotOptions(
             interactiveOnly: interactive,
             maxDepth: depth,
-            compact: compact
+            compact: compact,
+            skipMenuBar: interactive && !menu,
+            skipZeroSize: interactive && !includeHidden
         )
         let tree = try await provider.snapshot(app: app, options: options)
         let renderer = TreeRenderer()

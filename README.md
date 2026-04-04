@@ -78,7 +78,7 @@ swift run forepaw list-apps
 
 | Command | Description |
 |---------|-------------|
-| `snapshot --app <name> [-i] [-c] [--diff] [--context N]` | Accessibility tree with `@e` refs (--diff compares to previous) |
+| `snapshot --app <name> [-i] [-c] [--diff] [--context N] [--menu] [--zero-size]` | Accessibility tree with `@e` refs (-i auto-skips menus + hidden elements; --menu/--zero-size to include) |
 | `screenshot [--app <name>] [--window <title\|id>] [--annotate\|--style <style>] [--only @eN...] [--ref @eN] [--region x,y,w,h] [--padding N] [--format jpeg\|png\|webp] [--quality N] [--scale 1\|2] [--no-cursor]` | Take a screenshot, optionally annotated or cropped to an element/region |
 | `ocr [--app <name>] [--window <title\|id>] [--find <text>] [--no-screenshot] [--format jpeg\|png\|webp] [--quality N] [--scale 1\|2] [--no-cursor]` | Screenshot + OCR, returns screenshot path + text with coordinates |
 | `list-apps [--json]` | Running GUI applications |

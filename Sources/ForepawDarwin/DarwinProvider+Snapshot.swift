@@ -39,19 +39,23 @@ extension DarwinProvider {
 
         let appElement = AXUIElementCreateApplication(runningApp.processIdentifier)
 
-        let root = buildTree(element: appElement, depth: 0, maxDepth: effectiveDepth)
+        let pruning = TreePruning(
+            skipMenuBar: options.skipMenuBar, skipZeroSize: options.skipZeroSize)
+
+        // Single-pass tree walk: builds the ElementNode tree and collects
+        // AXUIElement handles for interactive elements simultaneously.
+        // Previously this was two separate walks, doubling IPC calls.
+        var axElements: [Int: AXUIElement] = [:]
+        var axCounter = 1
+        let root = buildTree(
+            element: appElement, depth: 0, maxDepth: effectiveDepth,
+            pruning: pruning, axElements: &axElements, axCounter: &axCounter)
 
         let assigner = RefAssigner()
         let result = assigner.assign(root: root, interactiveOnly: options.interactiveOnly)
 
-        // Build platform ref table for action dispatch
+        // Map refs to AXUIElement handles collected during the walk.
         refTable.removeAll()
-        var axElements: [Int: AXUIElement] = [:]
-        var axCounter = 1
-        collectAXElements(
-            element: appElement, depth: 0, maxDepth: effectiveDepth, counter: &axCounter,
-            elements: &axElements)
-
         for (ref, _) in result.refs {
             if let axElement = axElements[ref.id] {
                 refTable[ref] = axElement
@@ -87,37 +91,125 @@ extension DarwinProvider {
         return element
     }
 
-    internal func buildTree(element: AXUIElement, depth: Int, maxDepth: Int) -> ElementNode {
+    /// Options controlling which subtrees to skip during tree walks.
+    internal struct TreePruning {
+        let skipMenuBar: Bool
+        let skipZeroSize: Bool
+
+        static let none = TreePruning(skipMenuBar: false, skipZeroSize: false)
+    }
+
+    // MARK: - Batched attribute fetching
+
+    /// Attributes fetched in a single IPC call per element.
+    /// Using AXUIElementCopyMultipleAttributeValues collapses 7+ round-trips into 1.
+    private static let batchAttributes: [String] = [
+        kAXRoleAttribute,  // 0
+        kAXTitleAttribute,  // 1
+        kAXDescriptionAttribute,  // 2
+        kAXValueAttribute,  // 3
+        kAXPositionAttribute,  // 4
+        kAXSizeAttribute,  // 5
+        kAXChildrenAttribute,  // 6
+        kAXSubroleAttribute,  // 7
+    ]
+
+    // nonisolated(unsafe): this CFArray is created once from static strings and never mutated.
+    nonisolated(unsafe) private static let batchCFArray: CFArray =
+        batchAttributes.map {
+            $0 as CFString
+        } as CFArray
+
+    /// Fetch multiple attributes in a single IPC call.
+    /// Returns an array of values (or kCFNull for missing attributes).
+    private func getMultipleAttributes(_ element: AXUIElement) -> [Any?] {
+        var values: CFArray?
+        let result = AXUIElementCopyMultipleAttributeValues(
+            element, Self.batchCFArray,
+            // .stopOnError would abort on first missing attr; 0 means continue.
+            AXCopyMultipleAttributeOptions(rawValue: 0),
+            &values)
+        guard result == .success, let array = values as? [Any?] else {
+            return Array(repeating: nil, count: Self.batchAttributes.count)
+        }
+        // Replace kCFNull with nil for ergonomics.
+        return array.map { val in
+            if val is NSNull { return nil }
+            return val
+        }
+    }
+
+    // MARK: - Single-pass tree build
+
+    internal func buildTree(
+        element: AXUIElement, depth: Int, maxDepth: Int,
+        pruning: TreePruning = .none,
+        axElements: inout [Int: AXUIElement],
+        axCounter: inout Int
+    ) -> ElementNode {
         guard depth < maxDepth else { return ElementNode(role: "AXGroup") }
 
-        let role = getAttribute(element, kAXRoleAttribute) as? String ?? "AXUnknown"
+        // Batch fetch: one IPC call for role + title + desc + value + pos + size + children + subrole.
+        let attrs = getMultipleAttributes(element)
+        let role = attrs[0] as? String ?? "AXUnknown"
+
+        // Skip menu bar subtree if requested.
+        if pruning.skipMenuBar && role == "AXMenuBar" {
+            return ElementNode(role: role)
+        }
+
+        // Collect AXUIElement handle if this element is interactive.
+        // Must happen in the same depth-first order as RefAssigner.
+        if ElementNode.isInteractiveRole(role) {
+            axElements[axCounter] = element
+            axCounter += 1
+        }
+
         let name =
-            nonEmpty(getAttribute(element, kAXTitleAttribute) as? String)
-            ?? nonEmpty(getAttribute(element, kAXDescriptionAttribute) as? String)
+            nonEmpty(attrs[1] as? String)
+            ?? nonEmpty(attrs[2] as? String)
             ?? computedName(of: element, role: role)
-        let value = getAttribute(element, kAXValueAttribute).flatMap { val -> String? in
+
+        let value = (attrs[3]).flatMap { val -> String? in
             if let s = val as? String { return s }
             if let n = val as? NSNumber { return n.stringValue }
             return nil
         }
 
         var bounds: Rect?
-        if let pos = getPosition(of: element), let size = getSize(of: element) {
-            bounds = Rect(x: pos.x, y: pos.y, width: size.width, height: size.height)
+        if let posValue = attrs[4], let sizeValue = attrs[5] {
+            var point = CGPoint.zero
+            var size = CGSize.zero
+            // swiftlint:disable force_cast
+            AXValueGetValue(posValue as! AXValue, .cgPoint, &point)
+            AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
+            // swiftlint:enable force_cast
+            bounds = Rect(x: point.x, y: point.y, width: size.width, height: size.height)
         }
 
         // Collect extra attributes that give agents useful context.
         var attributes: [String: String] = [:]
-
-        if let subrole = getAttribute(element, kAXSubroleAttribute) as? String,
-            !subrole.isEmpty, subrole != "AXNone"
-        {
+        if let subrole = attrs[7] as? String, !subrole.isEmpty, subrole != "AXNone" {
             attributes["subrole"] = subrole
         }
 
+        // Skip zero-size subtrees if requested. Elements at 0x0 are collapsed menus,
+        // hidden panels, or offscreen content -- walking their children is pure waste.
+        if pruning.skipZeroSize, let b = bounds,
+            b.width == 0, b.height == 0, depth > 1
+        {
+            return ElementNode(
+                role: role, name: name, value: value, bounds: bounds,
+                attributes: attributes)
+        }
+
         var children: [ElementNode] = []
-        if let childrenRef = getAttribute(element, kAXChildrenAttribute) as? [AXUIElement] {
-            children = childrenRef.map { buildTree(element: $0, depth: depth + 1, maxDepth: maxDepth) }
+        if let childrenRef = attrs[6] as? [AXUIElement] {
+            children = childrenRef.map {
+                buildTree(
+                    element: $0, depth: depth + 1, maxDepth: maxDepth,
+                    pruning: pruning, axElements: &axElements, axCounter: &axCounter)
+            }
         }
 
         return ElementNode(
@@ -130,8 +222,16 @@ extension DarwinProvider {
         )
     }
 
+    // MARK: - Ref resolution (action commands)
+
     /// Walk the AX tree to map ref positions to AXUIElement handles.
+    /// Used by resolveRef for action dispatch across CLI invocations.
     /// Must mirror the depth-first order used by RefAssigner.
+    ///
+    /// Note: this still uses individual getAttribute calls (no batching)
+    /// because it only needs role + children -- not the full attribute set.
+    /// It's also used without pruning options (action commands don't pass
+    /// snapshot options).
     internal func collectAXElements(
         element: AXUIElement,
         depth: Int,
@@ -142,6 +242,7 @@ extension DarwinProvider {
         guard depth < maxDepth else { return }
 
         let role = getAttribute(element, kAXRoleAttribute) as? String ?? "AXUnknown"
+
         if ElementNode.isInteractiveRole(role) {
             elements[counter] = element
             counter += 1
@@ -150,16 +251,19 @@ extension DarwinProvider {
         if let children = getAttribute(element, kAXChildrenAttribute) as? [AXUIElement] {
             for child in children {
                 collectAXElements(
-                    element: child, depth: depth + 1, maxDepth: maxDepth, counter: &counter, elements: &elements)
+                    element: child, depth: depth + 1, maxDepth: maxDepth, counter: &counter,
+                    elements: &elements)
             }
         }
     }
+
+    // MARK: - Name computation
 
     /// Derive a name from multiple fallback sources.
     ///
     /// The chain (in priority order):
     /// 1. AXTitleUIElement -> its value or title
-    /// 2. First AXStaticText child's value
+    /// 2. First AXStaticText child's value, or AXImage child with icon classes
     /// 3. AXHelp (descriptive help text)
     /// 4. AXPlaceholderValue (text field placeholder)
     /// 5. AXDOMClassList -> icon class parsing (Electron apps with Lucide, Tabler, etc.)
@@ -242,6 +346,8 @@ extension DarwinProvider {
     ]
 
     private static let iconClassParser = IconClassParser()
+
+    // MARK: - Helpers
 
     /// Return nil for empty strings -- AX APIs often return "" rather than nil.
     private func nonEmpty(_ s: String?) -> String? {

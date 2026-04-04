@@ -18,8 +18,9 @@ Always snapshot or screenshot before acting. Never assume UI state from a previo
 ### 1. Accessibility tree (prefer this)
 
 ```bash
-forepaw snapshot --app "App Name" -i         # interactive elements only
+forepaw snapshot --app "App Name" -i         # interactive elements only (skips menus + hidden)
 forepaw snapshot --app "App Name" -i --diff  # diff against previous snapshot
+forepaw snapshot --app "App Name" -i --menu  # include menu bar (excluded by default with -i)
 ```
 
 Returns structured text with `@e` refs and screen positions:
@@ -39,6 +40,10 @@ Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' ch
 
 **Electron apps (Discord, Slack, VS Code, Cursor, Notion, Linear, etc.)** are automatically detected. forepaw sets `AXManualAccessibility` to tell Chromium to expose its web content tree. The first snapshot of an Electron app may take an extra 1-3s while the tree builds; subsequent snapshots are fast. No special flags needed -- just use `snapshot` as normal.
 
+**Electron icon naming:** Electron apps using icon libraries (Lucide, Tabler, FontAwesome, etc.) get automatic icon names from CSS classes. An unnamed button with a Lucide settings icon becomes `button @e5 "settings"`. Also checks AXHelp, AXPlaceholderValue, and AXRoleDescription for additional names. Try `snapshot -i` first on any Electron app -- the tree is often better than expected.
+
+**Performance:** With `-i`, menu bar and zero-size (hidden/collapsed) elements are automatically excluded. This significantly speeds up apps with large menus (Music: 300+ menu items skipped). Use `--menu` or `--zero-size` to include them back if needed. Some apps (Music, other Catalyst apps) have inherently slow AX responses (~55s even optimized) -- for these, consider using OCR instead.
+
 ### 2. OCR (fallback for Electron apps)
 
 ```bash
@@ -47,7 +52,7 @@ forepaw ocr --app Discord --find "Settings"  # filter for specific text
 forepaw ocr --app Discord --no-screenshot    # text only, no screenshot saved
 ```
 
-Returns a screenshot path (first line) followed by recognized text with click coordinates. The screenshot uses the best available format (WebP if `cwebp` is installed, else JPEG) at 1x scale. Use when `snapshot` returns an empty or useless tree (Discord, Slack, VS Code, most Electron apps).
+Returns a screenshot path (first line) followed by recognized text with click coordinates. The screenshot uses the best available format (WebP if `cwebp` is installed, else JPEG) at 1x scale. Use when `snapshot` returns unnamed elements or when you need text that isn't in the AX tree (e.g. Discord's poorly labeled icon buttons).
 
 **OCR replaces separate screenshot + OCR calls.** Since OCR already captures a screenshot internally for text recognition, it saves and returns that screenshot automatically. No need to run `screenshot` + `ocr` separately.
 

@@ -189,11 +189,22 @@ public struct SnapshotOptions: Sendable {
     public let interactiveOnly: Bool
     public let maxDepth: Int
     public let compact: Bool
+    /// Skip the menu bar subtree (AXMenuBar). Saves significant time on apps
+    /// with large menus (e.g. Music: 300+ menu items).
+    public let skipMenuBar: Bool
+    /// Skip subtrees rooted at elements with zero-size bounds (0x0).
+    /// These are typically collapsed menus, hidden panels, or offscreen content.
+    public let skipZeroSize: Bool
 
-    public init(interactiveOnly: Bool = false, maxDepth: Int = defaultDepth, compact: Bool = false) {
+    public init(
+        interactiveOnly: Bool = false, maxDepth: Int = defaultDepth,
+        compact: Bool = false, skipMenuBar: Bool = false, skipZeroSize: Bool = false
+    ) {
         self.interactiveOnly = interactiveOnly
         self.maxDepth = maxDepth
         self.compact = compact
+        self.skipMenuBar = skipMenuBar
+        self.skipZeroSize = skipZeroSize
     }
 }
 
