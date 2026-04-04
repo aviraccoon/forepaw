@@ -92,9 +92,9 @@ extension DarwinProvider {
 
         let role = getAttribute(element, kAXRoleAttribute) as? String ?? "AXUnknown"
         let name =
-            getAttribute(element, kAXTitleAttribute) as? String
-            ?? getAttribute(element, kAXDescriptionAttribute) as? String
-            ?? computedName(of: element)
+            nonEmpty(getAttribute(element, kAXTitleAttribute) as? String)
+            ?? nonEmpty(getAttribute(element, kAXDescriptionAttribute) as? String)
+            ?? computedName(of: element, role: role)
         let value = getAttribute(element, kAXValueAttribute).flatMap { val -> String? in
             if let s = val as? String { return s }
             if let n = val as? NSNumber { return n.stringValue }
@@ -104,6 +104,15 @@ extension DarwinProvider {
         var bounds: Rect?
         if let pos = getPosition(of: element), let size = getSize(of: element) {
             bounds = Rect(x: pos.x, y: pos.y, width: size.width, height: size.height)
+        }
+
+        // Collect extra attributes that give agents useful context.
+        var attributes: [String: String] = [:]
+
+        if let subrole = getAttribute(element, kAXSubroleAttribute) as? String,
+            !subrole.isEmpty, subrole != "AXNone"
+        {
+            attributes["subrole"] = subrole
         }
 
         var children: [ElementNode] = []
@@ -116,6 +125,7 @@ extension DarwinProvider {
             name: name,
             value: value,
             bounds: bounds,
+            attributes: attributes,
             children: children
         )
     }
@@ -145,10 +155,16 @@ extension DarwinProvider {
         }
     }
 
-    /// Derive a name from AXTitleUIElement or first AXStaticText child.
-    /// Many elements (cells, rows) don't have a direct title but point
-    /// to a label element via AXTitleUIElement, or contain a static text child.
-    internal func computedName(of element: AXUIElement) -> String? {
+    /// Derive a name from multiple fallback sources.
+    ///
+    /// The chain (in priority order):
+    /// 1. AXTitleUIElement -> its value or title
+    /// 2. First AXStaticText child's value
+    /// 3. AXHelp (descriptive help text)
+    /// 4. AXPlaceholderValue (text field placeholder)
+    /// 5. AXDOMClassList -> icon class parsing (Electron apps with Lucide, Tabler, etc.)
+    /// 6. AXRoleDescription (when more specific than the generic role name)
+    internal func computedName(of element: AXUIElement, role: String = "") -> String? {
         // 1. AXTitleUIElement -> read its value or title
         if let titleElement = getAttribute(element, kAXTitleUIElementAttribute) as! AXUIElement? {
             if let val = getAttribute(titleElement, kAXValueAttribute) as? String, !val.isEmpty {
@@ -159,7 +175,9 @@ extension DarwinProvider {
             }
         }
 
-        // 2. First AXStaticText child's value
+        // 2. First AXStaticText child's value, or AXImage child with icon classes.
+        //    Many Electron buttons contain an AXImage child whose AXDOMClassList
+        //    has the icon identity (e.g. ["icon", "icon-tabler", "icon-tabler-home"]).
         if let children = getAttribute(element, kAXChildrenAttribute) as? [AXUIElement] {
             for child in children {
                 let childRole = getAttribute(child, kAXRoleAttribute) as? String
@@ -168,10 +186,67 @@ extension DarwinProvider {
                         return val
                     }
                 }
+                if childRole == "AXImage" {
+                    if let classList = getAttribute(child, "AXDOMClassList") as? [String],
+                        !classList.isEmpty,
+                        let iconName = Self.iconClassParser.parse(classList)
+                    {
+                        return iconName
+                    }
+                }
             }
         }
 
+        // 3. AXHelp -- descriptive help text, sometimes the only label
+        if let help = getAttribute(element, "AXHelp") as? String, !help.isEmpty {
+            return help
+        }
+
+        // 4. AXPlaceholderValue -- text field placeholder (e.g. "Search...")
+        if let placeholder = getAttribute(element, "AXPlaceholderValue") as? String,
+            !placeholder.isEmpty
+        {
+            return placeholder
+        }
+
+        // 5. AXDOMClassList -- extract icon names from CSS classes (Electron apps).
+        //    Lucide, Tabler, FontAwesome, etc. encode icon identity in class names.
+        if let classList = getAttribute(element, "AXDOMClassList") as? [String], !classList.isEmpty {
+            if let iconName = Self.iconClassParser.parse(classList) {
+                return iconName
+            }
+        }
+
+        // 6. AXRoleDescription -- use when more specific than the generic role.
+        //    e.g. "close button" is better than just "button" for AXButton.
+        if let roleDesc = getAttribute(element, kAXRoleDescriptionAttribute) as? String,
+            !roleDesc.isEmpty, !Self.genericRoleDescriptions.contains(roleDesc)
+        {
+            return roleDesc
+        }
+
         return nil
+    }
+
+    /// Role descriptions that are too generic to use as names.
+    private static let genericRoleDescriptions: Set<String> = [
+        "button", "link", "text field", "text entry area", "image",
+        "menu item", "check box", "radio button", "tab", "cell",
+        "slider", "pop up button", "combo box", "menu button",
+        "incrementor", "color well", "disclosure triangle",
+        "switch", "toggle", "group", "list", "table", "outline",
+        "scroll area", "scroll bar", "toolbar", "menu bar",
+        "menu bar item", "window", "sheet", "drawer",
+        "application", "browser", "row", "column",
+        "heading", "static text", "tree item",
+    ]
+
+    private static let iconClassParser = IconClassParser()
+
+    /// Return nil for empty strings -- AX APIs often return "" rather than nil.
+    private func nonEmpty(_ s: String?) -> String? {
+        guard let s, !s.isEmpty else { return nil }
+        return s
     }
 
     internal func getAttribute(_ element: AXUIElement, _ attribute: String) -> Any? {
