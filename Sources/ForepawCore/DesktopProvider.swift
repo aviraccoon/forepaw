@@ -211,13 +211,30 @@ public struct ScreenshotResult: Sendable {
 public enum ImageFormat: String, Sendable, CaseIterable {
     case png
     case jpeg
+    case webp
+
+    /// File extension for this format.
+    public var fileExtension: String {
+        switch self {
+        case .png: return "png"
+        case .jpeg: return "jpg"
+        case .webp: return "webp"
+        }
+    }
+
+    /// Best available format on this system.
+    /// Checks for WebP encoder (cwebp), falls back to JPEG.
+    /// Result is cached for the process lifetime.
+    public static var bestAvailable: ImageFormat {
+        return EncoderDetection.bestFormat
+    }
 }
 
 /// Options controlling screenshot output format and quality.
 public struct ScreenshotOptions: Sendable {
-    /// Image format (default: jpeg for smaller files).
+    /// Image format (default: best available -- WebP if cwebp installed, else JPEG).
     public let format: ImageFormat
-    /// JPEG quality 1-100 (default 85, ignored for PNG).
+    /// Quality 1-100 (default 85). Applies to JPEG and WebP, ignored for PNG.
     public let quality: Int
     /// Output scale: 1 = logical pixels, 2 = Retina (default 1).
     public let scale: Int
@@ -225,7 +242,7 @@ public struct ScreenshotOptions: Sendable {
     public let cursor: Bool
 
     public init(
-        format: ImageFormat = .jpeg, quality: Int = 85,
+        format: ImageFormat = .bestAvailable, quality: Int = 85,
         scale: Int = 1, cursor: Bool = true
     ) {
         self.format = format
@@ -234,7 +251,7 @@ public struct ScreenshotOptions: Sendable {
         self.cursor = cursor
     }
 
-    /// Default options optimized for agent use: JPEG, 1x, cursor visible.
+    /// Default options optimized for agent use: best format, 1x, cursor visible.
     public static let `default` = ScreenshotOptions()
 
     /// Full quality: PNG, 2x Retina, cursor visible.

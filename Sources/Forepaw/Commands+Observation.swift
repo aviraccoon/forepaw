@@ -53,7 +53,7 @@ struct Screenshot: AsyncParsableCommand {
         help: "Only annotate these refs (e.g. --only @e5 @e8 @e12)")
     var only: [String] = []
 
-    @Option(name: .long, help: "Image format: jpeg (default) or png")
+    @Option(name: .long, help: "Image format: jpeg, png, or webp (default: best available)")
     var format: String?
 
     @Option(name: .long, help: "JPEG quality 1-100 (default 85)")
@@ -82,9 +82,9 @@ struct Screenshot: AsyncParsableCommand {
     private func buildScreenshotOptions() -> ScreenshotOptions {
         let fmt: ImageFormat
         if let f = format {
-            fmt = ImageFormat(rawValue: f) ?? .jpeg
+            fmt = ImageFormat(rawValue: f) ?? .bestAvailable
         } else {
-            fmt = .jpeg
+            fmt = .bestAvailable
         }
         return ScreenshotOptions(
             format: fmt,
@@ -167,7 +167,7 @@ struct OCR: AsyncParsableCommand {
     @Flag(name: .long, help: "Skip saving the display screenshot (only output OCR text)")
     var noScreenshot: Bool = false
 
-    @Option(name: .long, help: "Image format for screenshot: jpeg (default) or png")
+    @Option(name: .long, help: "Image format for screenshot: jpeg, png, or webp (default: best available)")
     var format: String?
 
     @Option(name: .long, help: "JPEG quality 1-100 (default 85)")
@@ -210,9 +210,9 @@ struct OCR: AsyncParsableCommand {
     private func buildScreenshotOptions() -> ScreenshotOptions {
         let fmt: ImageFormat
         if let f = format {
-            fmt = ImageFormat(rawValue: f) ?? .jpeg
+            fmt = ImageFormat(rawValue: f) ?? .bestAvailable
         } else {
-            fmt = .jpeg
+            fmt = .bestAvailable
         }
         return ScreenshotOptions(
             format: fmt,

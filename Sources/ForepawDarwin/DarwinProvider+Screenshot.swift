@@ -253,25 +253,64 @@ extension DarwinProvider {
         }
     }
 
-    /// Post-process a screenshot: downscale to 1x and/or convert to JPEG.
+    /// Post-process a screenshot: downscale and/or convert format.
     /// Returns the final output path (may be the same as input if no conversion needed).
     internal func postProcessScreenshot(
         rawPath: String, tag: String, options: ScreenshotOptions,
         suffix: String = ""
     ) throws -> String {
         let needsScale = options.scale == 1
-        let needsFormat = options.format == .jpeg
+        let needsFormat = options.format != .png
 
         guard needsScale || needsFormat else {
             return rawPath
         }
 
-        let ext = options.format == .jpeg ? "jpg" : "png"
-        let outputPath = "/tmp/forepaw-\(tag)\(suffix).\(ext)"
+        let outputPath = "/tmp/forepaw-\(tag)\(suffix).\(options.format.fileExtension)"
 
+        // WebP: scale with sips first if needed, then convert with cwebp
+        if options.format == .webp {
+            var scaledPath = rawPath
+            if needsScale {
+                guard let image = NSImage(contentsOfFile: rawPath),
+                    let rep = image.representations.first
+                else {
+                    return rawPath
+                }
+                let targetWidth = rep.pixelsWide / 2
+                scaledPath = "/tmp/forepaw-\(tag)\(suffix)-scaled.png"
+                let sipsProcess = Process()
+                sipsProcess.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
+                sipsProcess.arguments = ["--resampleWidth", String(targetWidth), rawPath, "--out", scaledPath]
+                sipsProcess.standardOutput = FileHandle.nullDevice
+                sipsProcess.standardError = FileHandle.nullDevice
+                try sipsProcess.run()
+                sipsProcess.waitUntilExit()
+            }
+
+            let cwebp = Process()
+            cwebp.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            cwebp.arguments = ["cwebp", "-q", String(options.quality), scaledPath, "-o", outputPath]
+            cwebp.standardOutput = FileHandle.nullDevice
+            cwebp.standardError = FileHandle.nullDevice
+            try cwebp.run()
+            cwebp.waitUntilExit()
+
+            guard cwebp.terminationStatus == 0 else {
+                throw ForepawError.actionFailed("cwebp failed (exit \(cwebp.terminationStatus)). Is cwebp installed?")
+            }
+
+            // Clean up intermediate files
+            if scaledPath != rawPath {
+                try? FileManager.default.removeItem(atPath: scaledPath)
+            }
+            try? FileManager.default.removeItem(atPath: rawPath)
+            return outputPath
+        }
+
+        // JPEG: use sips for both scale and format conversion in one pass
         var sipsArgs: [String] = []
 
-        // Scale down to 1x (half the Retina 2x dimensions)
         if needsScale {
             guard let image = NSImage(contentsOfFile: rawPath),
                 let rep = image.representations.first
@@ -282,7 +321,6 @@ extension DarwinProvider {
             sipsArgs += ["--resampleWidth", String(targetWidth)]
         }
 
-        // Convert format
         if needsFormat {
             sipsArgs += ["-s", "format", "jpeg", "-s", "formatOptions", String(options.quality)]
         }

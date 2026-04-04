@@ -3,10 +3,10 @@ import Testing
 
 @Suite("ScreenshotOptions")
 struct ScreenshotOptionsTests {
-    @Test("default options are JPEG, q85, 1x, cursor on")
+    @Test("default options are best available format, q85, 1x, cursor on")
     func defaultOptions() {
         let opts = ScreenshotOptions.default
-        #expect(opts.format == .jpeg)
+        #expect(opts.format == .bestAvailable)
         #expect(opts.quality == 85)
         #expect(opts.scale == 1)
         #expect(opts.cursor == true)
@@ -39,10 +39,24 @@ struct ImageFormatTests {
         #expect(ImageFormat(rawValue: "gif") == nil)
     }
 
-    @Test("allCases includes both formats")
+    @Test("allCases includes all formats")
     func allCases() {
-        #expect(ImageFormat.allCases.count == 2)
+        #expect(ImageFormat.allCases.count == 3)
         #expect(ImageFormat.allCases.contains(.png))
         #expect(ImageFormat.allCases.contains(.jpeg))
+        #expect(ImageFormat.allCases.contains(.webp))
+    }
+
+    @Test("file extensions")
+    func fileExtensions() {
+        #expect(ImageFormat.png.fileExtension == "png")
+        #expect(ImageFormat.jpeg.fileExtension == "jpg")
+        #expect(ImageFormat.webp.fileExtension == "webp")
+    }
+
+    @Test("bestAvailable returns jpeg or webp")
+    func bestAvailable() {
+        let best = ImageFormat.bestAvailable
+        #expect(best == .jpeg || best == .webp)
     }
 }

@@ -77,8 +77,8 @@ swift run forepaw list-apps
 | Command | Description |
 |---------|-------------|
 | `snapshot --app <name> [-i] [-c]` | Accessibility tree with `@e` refs |
-| `screenshot [--app <name>] [--window <title\|id>] [--annotate\|--style <style>] [--only @eN...] [--format jpeg\|png] [--quality N] [--scale 1\|2] [--no-cursor]` | Take a screenshot, optionally annotated |
-| `ocr [--app <name>] [--window <title\|id>] [--find <text>] [--no-screenshot] [--format jpeg\|png] [--quality N] [--scale 1\|2] [--no-cursor]` | Screenshot + OCR, returns screenshot path + text with coordinates |
+| `screenshot [--app <name>] [--window <title\|id>] [--annotate\|--style <style>] [--only @eN...] [--format jpeg\|png\|webp] [--quality N] [--scale 1\|2] [--no-cursor]` | Take a screenshot, optionally annotated |
+| `ocr [--app <name>] [--window <title\|id>] [--find <text>] [--no-screenshot] [--format jpeg\|png\|webp] [--quality N] [--scale 1\|2] [--no-cursor]` | Screenshot + OCR, returns screenshot path + text with coordinates |
 | `list-apps [--json]` | Running GUI applications |
 | `list-windows [--app <name>]` | Visible windows with titles and IDs |
 
@@ -145,7 +145,7 @@ forepaw ocr-click "Bobby Tables" --app Discord   # find and click
 
 OCR uses the macOS Vision framework (`VNRecognizeTextRequest`). No external dependencies. Coordinates are automatically adjusted for Retina displays and window position.
 
-The `ocr` command saves an agent-friendly screenshot (JPEG 1x) alongside the text results, since it already captures one internally for text recognition. The screenshot path is printed first, followed by OCR results. Use `--no-screenshot` to skip saving the screenshot. Screenshot format options (`--format`, `--quality`, `--scale`, `--no-cursor`) work the same as the `screenshot` command.
+The `ocr` command saves an agent-friendly screenshot alongside the text results, since it already captures one internally for text recognition. The screenshot path is printed first, followed by OCR results. Use `--no-screenshot` to skip saving the screenshot. Screenshot format options (`--format`, `--quality`, `--scale`, `--no-cursor`) work the same as the `screenshot` command.
 
 ## Action strategies
 
@@ -167,7 +167,7 @@ The `ocr` command saves an agent-friendly screenshot (JPEG 1x) alongside the tex
 
 **Batch**: Executes multiple actions sequentially in one process invocation. Actions are separated by `;;`. The `--app` and `--window` flags apply to all actions unless overridden per-action. Default 100ms delay between actions. Supported actions: click, drag, hover, type, keyboard-type, press, scroll, ocr-click, wait. **Use batch for any multi-step interaction** -- separate CLI invocations return control to the terminal between commands, which steals focus from the target app. Any click-then-type pattern needs batch.
 
-**Screenshots**: Default output is JPEG at 1x logical pixels with the mouse cursor visible -- optimized for agent consumption (~150KB per window vs ~650KB+ for Retina PNGs). Use `--format png --scale 2` for full-quality Retina output. `--no-cursor` hides the cursor. OCR internally uses full-resolution PNG regardless of display options.
+**Screenshots**: Default output uses the best available format at 1x logical pixels with the mouse cursor visible. If `cwebp` is installed, uses WebP (~85KB per window). Otherwise falls back to JPEG (~150KB). Both are dramatically smaller than Retina PNGs (~650KB+). Use `--format png --scale 2` for full-quality Retina output. `--no-cursor` hides the cursor. OCR internally uses full-resolution PNG regardless of display options.
 
 **Annotated screenshots**: Captures a window screenshot, walks the AX tree for the same window, then overlays numbered labels on interactive elements using CoreGraphics. Labels use sequential display numbers (1, 2, 3...) with a legend mapping to `@e` refs. Three styles: `badges` (small colored pills -- agent-optimized), `labeled` (bounding boxes with role+name -- human-readable), `spotlight` (dims non-interactive areas). Color-coded by element category: green=buttons, yellow=text fields, blue=selection controls, purple=navigation. `--only @eN...` filters to specific refs. The annotation pipeline is split: `AnnotationCollector` (ForepawCore, platform-agnostic) walks the tree and collects annotation data, `AnnotationRenderer` (ForepawDarwin) draws on the image via CoreGraphics.
 
