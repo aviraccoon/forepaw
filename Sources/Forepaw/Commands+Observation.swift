@@ -18,6 +18,12 @@ struct Snapshot: AsyncParsableCommand {
     @Option(name: .shortAndLong, help: "Maximum tree depth (default 15)")
     var depth: Int = SnapshotOptions.defaultDepth
 
+    @Flag(name: .long, help: "Show diff against previous snapshot of this app")
+    var diff: Bool = false
+
+    @Option(name: .long, help: "Context lines around changes in diff output (default: 0)")
+    var context: Int = 0
+
     mutating func run() async throws {
         guard let app = global.app else {
             throw ValidationError("--app is required")
@@ -29,7 +35,26 @@ struct Snapshot: AsyncParsableCommand {
         )
         let tree = try await provider.snapshot(app: app, options: options)
         let renderer = TreeRenderer()
-        print(renderer.render(tree: tree))
+        let rendered = renderer.render(tree: tree)
+
+        let cache = SnapshotCache()
+
+        if diff {
+            if let previous = cache.load(app: app) {
+                let differ = SnapshotDiffer()
+                let result = differ.diff(old: previous, new: rendered)
+                print(result.render(context: context))
+            } else {
+                // No previous snapshot -- show the full tree as all "added"
+                print("[diff: no previous snapshot cached for \(app)]")
+                print(rendered)
+            }
+        } else {
+            print(rendered)
+        }
+
+        // Always cache the current snapshot for future diffs
+        try? cache.save(app: app, text: rendered)
     }
 }
 

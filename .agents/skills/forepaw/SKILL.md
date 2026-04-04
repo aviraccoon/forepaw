@@ -18,7 +18,8 @@ Always snapshot or screenshot before acting. Never assume UI state from a previo
 ### 1. Accessibility tree (prefer this)
 
 ```bash
-forepaw snapshot --app "App Name" -i   # interactive elements only
+forepaw snapshot --app "App Name" -i         # interactive elements only
+forepaw snapshot --app "App Name" -i --diff  # diff against previous snapshot
 ```
 
 Returns structured text with `@e` refs and screen positions:
@@ -86,6 +87,36 @@ Labels are color-coded by element type: green=buttons, yellow=text fields, blue=
 - `spotlight` -- dims everything except interactive elements. Best for focusing attention.
 
 **When to use:** When the AX tree is sparse (Electron apps) or you need visual context for spatial layout. Prefer `snapshot -i` for most tasks -- it's faster and cheaper in tokens. Use annotated screenshots when you need to correlate visual appearance with interactive elements.
+
+## Snapshot diffing
+
+After performing an action, use `--diff` to see what changed instead of reading the full tree:
+
+```bash
+forepaw snapshot --app Finder -i              # baseline (auto-cached)
+forepaw click @e3 --app Finder                # action
+forepaw snapshot --app Finder -i --diff       # shows +/- of what changed
+```
+
+Output uses `+` for added lines and `-` for removed lines:
+```
+[diff: 3 added, 1 removed, 42 unchanged]
+
+-   window "Documents" (388,265 1024x678)
++   window "Recents" (388,265 1024x678)
+- button "Add Tags" (1147,265 40x52)
++ button "Edit Tags" (1147,265 40x52)
++ button "New Item" (500,300 80x30)
+```
+
+Ref shifts are handled automatically -- if a new element appears early in the tree and bumps all subsequent refs, unchanged elements still show as unchanged (refs are stripped for comparison, then the new refs are shown in the output).
+
+Use `--context N` to show N unchanged lines around each change for spatial context:
+```bash
+forepaw snapshot --app Finder -i --diff --context 2
+```
+
+The previous snapshot is cached per app in a temp file. No manual baseline management needed -- just run `snapshot` normally, then `snapshot --diff` after an action.
 
 ## Actions
 

@@ -76,7 +76,7 @@ swift run forepaw list-apps
 
 | Command | Description |
 |---------|-------------|
-| `snapshot --app <name> [-i] [-c]` | Accessibility tree with `@e` refs |
+| `snapshot --app <name> [-i] [-c] [--diff] [--context N]` | Accessibility tree with `@e` refs (--diff compares to previous) |
 | `screenshot [--app <name>] [--window <title\|id>] [--annotate\|--style <style>] [--only @eN...] [--format jpeg\|png\|webp] [--quality N] [--scale 1\|2] [--no-cursor]` | Take a screenshot, optionally annotated |
 | `ocr [--app <name>] [--window <title\|id>] [--find <text>] [--no-screenshot] [--format jpeg\|png\|webp] [--quality N] [--scale 1\|2] [--no-cursor]` | Screenshot + OCR, returns screenshot path + text with coordinates |
 | `list-apps [--json]` | Running GUI applications |
@@ -131,6 +131,28 @@ If a title substring matches multiple windows, forepaw reports the ambiguity and
 The `--depth` flag controls how deep the AX tree is walked (default 15). Action commands like `click` also walk at depth 15, so refs are consistent at the default. Using a non-default `--depth` may cause ref mismatch with action commands.
 
 Interactive roles: button, text field, text area, checkbox, radio button, slider, combo box, popup button, menu button, link, menu item, tab, switch, incrementor, color well, tree item, cell, dock item.
+
+## Snapshot diffing
+
+Compare snapshots before and after an action to see what changed:
+
+```bash
+forepaw snapshot --app Finder -i        # takes baseline (auto-cached)
+forepaw click @e3 --app Finder          # perform action
+forepaw snapshot --app Finder -i --diff # shows what changed
+```
+
+Output uses `+`/`-` markers like a unified diff. Refs are stripped for comparison so positional ref shifts (from elements added/removed earlier in the tree) don't produce false changes. The output shows the new refs:
+
+```
+[diff: 3 added, 1 removed, 42 unchanged]
+
+-   window "Documents" (388,265 1024x678)
++   window "Recents" (388,265 1024x678)
++ button @e20 "New Item" (500,300 80x30)
+```
+
+Use `--context N` to show N unchanged lines around each change for spatial context. The previous snapshot is cached per app in a temp file -- no manual baseline management needed.
 
 ## OCR
 
