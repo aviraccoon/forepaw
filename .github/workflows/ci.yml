@@ -15,5 +15,12 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@v4
 
-      - name: Check (lint + build + test)
+      - name: Cache SPM
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Lint + test
         run: mise run check
