@@ -241,9 +241,12 @@ forepaw hover @e5 --app "App Name"              # by ref (from snapshot)
 forepaw hover "Submit" --app "App Name"          # by text (OCR lookup)
 forepaw hover "8 comments" --app Orion           # hover over a link
 forepaw hover 589,470 --app Discord              # hover at coordinates (triggers tooltips for icon buttons)
+forepaw hover 1100,400 --app Orion --smooth      # smooth mouse movement (dismisses hover-triggered panels)
 ```
 
 Moves the mouse without clicking. Accepts either an `@e` ref, text (OCR lookup), or coordinates. Useful for triggering tooltips, hover menus, or preview popups.
+
+**`--smooth` flag:** Moves the mouse along a path from current position to target with intermediate events, instead of teleporting. Use when you need to dismiss hover-triggered overlays (e.g. Orion's auto-hiding tab sidebar) or trigger mouseEnter/mouseLeave handlers. Without `--smooth`, some apps don't register that the mouse left their hover zone. Works in batch too: `hover 1100,400 --smooth`.
 
 **Tooltip discovery for unnamed elements:** Some apps (especially Discord) have icon-only buttons with no AX name. Hover at their coordinates to trigger a tooltip, then snapshot -- the tooltip appears in the AX tree as `subrole=AXUserInterfaceTooltip` with the element's name. This is how you identify unnamed server icons, toolbar buttons, etc.
 

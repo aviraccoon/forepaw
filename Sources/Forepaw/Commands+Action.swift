@@ -205,6 +205,9 @@ struct Hover: AsyncParsableCommand {
     @Option(name: .long, help: "Window title or ID (e.g. 'Hacker News' or 'w-7290')")
     var window: String?
 
+    @Flag(name: .long, help: "Smooth mouse movement (triggers mouseEnter/mouseLeave events)")
+    var smooth: Bool = false
+
     @Flag(name: .long, help: "JSON output")
     var json: Bool = false
 
@@ -217,7 +220,7 @@ struct Hover: AsyncParsableCommand {
             }
             result = try await provider.hover(ref: elementRef, app: app)
         } else if let point = parseCoordinate(target) {
-            result = try await provider.hoverAtPoint(point, app: app)
+            result = try await provider.hoverAtPoint(point, app: app, smooth: smooth)
         } else {
             guard let app else {
                 throw ValidationError("--app is required for text-based hover")
@@ -361,7 +364,8 @@ struct Batch: AsyncParsableCommand {
                 }
                 return try await provider.hover(ref: ref, app: appName)
             } else if let point = parseCoordinate(target) {
-                return try await provider.hoverAtPoint(point, app: appName)
+                let smoothMove = actionArgs.contains("--smooth")
+                return try await provider.hoverAtPoint(point, app: appName, smooth: smoothMove)
             } else {
                 guard let appName else {
                     throw ForepawError.actionFailed("hover requires --app (on action or batch)")

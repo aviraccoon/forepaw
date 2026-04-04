@@ -404,14 +404,23 @@ extension DarwinProvider {
     }
 
     /// Move the mouse to a screen point, optionally activating an app first.
-    public func hoverAtPoint(_ point: Point, app: String? = nil) async throws -> ActionResult {
+    public func hoverAtPoint(
+        _ point: Point, app: String? = nil, smooth: Bool = false
+    ) async throws
+        -> ActionResult
+    {
         if let app {
             let runningApp = try findApp(named: app)
             runningApp.activate()
             try await Task.sleep(nanoseconds: 300_000_000)
             try validatePointInWindow(point, pid: runningApp.processIdentifier)
         }
-        try moveMouse(to: CGPoint(x: point.x, y: point.y))
+        let target = CGPoint(x: point.x, y: point.y)
+        if smooth {
+            try smoothMoveMouse(to: target)
+        } else {
+            try moveMouse(to: target)
+        }
         return ActionResult(success: true, message: "hovered at \(Int(point.x)),\(Int(point.y))")
     }
 
@@ -532,6 +541,29 @@ extension DarwinProvider {
         }
         if let pressure = options.pressure {
             event.setDoubleValueField(.mouseEventPressure, value: pressure)
+        }
+    }
+
+    /// Move the mouse smoothly along a straight line from current position to target,
+    /// posting intermediate mouseMoved events. Used to trigger mouseEnter/mouseLeave
+    /// handlers that don't respond to cursor teleportation.
+    internal func smoothMoveMouse(to target: CGPoint, steps: Int = 20, duration: Double = 0.15) throws {
+        let current = CGEvent(source: nil)?.location ?? target
+        let stepDelay = duration / Double(steps)
+
+        for i in 1...steps {
+            let t = Double(i) / Double(steps)
+            let x = current.x + (target.x - current.x) * t
+            let y = current.y + (target.y - current.y) * t
+            let point = CGPoint(x: x, y: y)
+
+            guard
+                let moveEvent = CGEvent(
+                    mouseEventSource: nil, mouseType: .mouseMoved,
+                    mouseCursorPosition: point, mouseButton: .left)
+            else { continue }
+            moveEvent.post(tap: .cghidEventTap)
+            Thread.sleep(forTimeInterval: stepDelay)
         }
     }
 

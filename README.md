@@ -95,7 +95,7 @@ swift run forepaw list-apps
 | `press <combo> [--app <name>]` | Keyboard shortcut (e.g. `cmd+s`, `ctrl+shift+z`) |
 | `drag <from> <to> [--app <name>] [--steps <n>] [--duration <s>] [--modifiers <keys>] [--pressure <0-1>] [--right] [--close] [--stdin]` | Drag between points (drawing, moving, resizing) |
 | `scroll <direction> --app <name> [--window <title\|id>] [--amount <n>] [--at <x,y>]` | Scroll up/down/left/right (at coordinates or window center) |
-| `hover <@ref\|text> --app <name> [--window <title\|id>]` | Move mouse to element or text (triggers tooltips/hover states) |
+| `hover <@ref\|text\|x,y> --app <name> [--window <title\|id>] [--smooth]` | Move mouse to element, text, or coordinates (triggers tooltips/hover states) |
 | `wait <text> --app <name> [--timeout <s>] [--interval <s>] [--text <text>]` | Poll OCR until text appears |
 | `batch <actions> [--app <name>] [--delay <ms>]` | Execute multiple actions (separated by `;;`) |
 

@@ -71,7 +71,7 @@ public protocol DesktopProvider: Sendable {
     func hover(ref: ElementRef, app: String) async throws -> ActionResult
 
     /// Hover at a screen coordinate.
-    func hoverAtPoint(_ point: Point, app: String?) async throws -> ActionResult
+    func hoverAtPoint(_ point: Point, app: String?, smooth: Bool) async throws -> ActionResult
 
     /// Hover over text found via OCR.
     func ocrHover(
