@@ -1,39 +1,37 @@
 /// Describes a crop region for area screenshots.
 ///
-/// All coordinates are in screen space (logical pixels). The crop logic
-/// converts to image pixel coordinates using the window origin and scale factor.
+/// Coordinates are window-relative logical pixels (0,0 = window top-left).
+/// The crop logic converts to image pixel coordinates using the scale factor.
 public struct CropRegion: Sendable {
-    /// The area to capture in screen coordinates (x, y, width, height).
-    public let screenRect: Rect
+    /// The area to capture in window-relative coordinates (x, y, width, height).
+    public let rect: Rect
     /// Padding in logical pixels to add around the region.
     public let padding: Double
 
-    public init(screenRect: Rect, padding: Double = 20) {
-        self.screenRect = screenRect
+    public init(rect: Rect, padding: Double = 20) {
+        self.rect = rect
         self.padding = padding
     }
 
     /// Calculate the crop rectangle in image pixel coordinates.
     ///
     /// The captured image is window-relative (0,0 = window top-left) at
-    /// `scaleFactor` resolution (e.g. 2x for Retina). This method converts
-    /// the screen-space crop region to image pixel coordinates, adds padding,
-    /// and clamps to the image bounds.
+    /// `scaleFactor` resolution (e.g. 2x for Retina). This method adds padding,
+    /// clamps to the window bounds, and scales to pixel coordinates.
     ///
     /// - Parameters:
-    ///   - windowOrigin: Window's top-left corner in screen coordinates.
     ///   - windowSize: Window size in logical pixels.
     ///   - scaleFactor: Image scale factor (2.0 for Retina captures).
     /// - Returns: Crop rectangle in image pixel coordinates (x, y, width, height),
     ///   or nil if the region doesn't overlap with the window.
     public func imageCropRect(
-        windowOrigin: Point, windowSize: Point, scaleFactor: Double
+        windowSize: Point, scaleFactor: Double
     ) -> (x: Int, y: Int, width: Int, height: Int)? {
-        // Convert screen coordinates to window-relative
-        let relX = screenRect.x - windowOrigin.x - padding
-        let relY = screenRect.y - windowOrigin.y - padding
-        let relW = screenRect.width + padding * 2
-        let relH = screenRect.height + padding * 2
+        // Apply padding to window-relative coordinates
+        let relX = rect.x - padding
+        let relY = rect.y - padding
+        let relW = rect.width + padding * 2
+        let relH = rect.height + padding * 2
 
         // Clamp to window bounds (0,0 to windowSize)
         let clampedX = max(0, relX)

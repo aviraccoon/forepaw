@@ -3,73 +3,75 @@ import Testing
 
 @Suite("CoordinateValidation")
 struct CoordinateValidationTests {
-    let window = Rect(x: 553, y: 83, width: 1212, height: 756)
+    // Window is 1212x756. Coordinates are now window-relative (0,0 = top-left).
+    let windowSize = Point(x: 1212, y: 756)
 
     @Test("point inside window returns nil")
     func insideWindow() {
         let result = CoordinateValidation.validate(
-            point: Point(x: 700, y: 400), bounds: window)
+            point: Point(x: 100, y: 200), windowSize: windowSize)
         #expect(result == nil)
     }
 
     @Test("point at window origin is valid")
     func atOrigin() {
         let result = CoordinateValidation.validate(
-            point: Point(x: 553, y: 83), bounds: window)
+            point: Point(x: 0, y: 0), windowSize: windowSize)
         #expect(result == nil)
     }
 
     @Test("point at window bottom-right edge is valid")
     func atBottomRight() {
         let result = CoordinateValidation.validate(
-            point: Point(x: 553 + 1212, y: 83 + 756), bounds: window)
+            point: Point(x: 1212, y: 756), windowSize: windowSize)
         #expect(result == nil)
     }
 
-    @Test("point left of window returns error")
-    func leftOfWindow() {
+    @Test("negative x returns error")
+    func negativeX() {
         let result = CoordinateValidation.validate(
-            point: Point(x: 400, y: 400), bounds: window)
+            point: Point(x: -10, y: 400), windowSize: windowSize)
         #expect(result != nil)
-        #expect(result!.contains("400,400"))
+        #expect(result!.contains("-10,400"))
         #expect(result!.contains("outside window bounds"))
-        #expect(result!.contains("553,83 1212x756"))
+        #expect(result!.contains("1212x756"))
     }
 
-    @Test("point above window returns error")
-    func aboveWindow() {
+    @Test("negative y returns error")
+    func negativeY() {
         let result = CoordinateValidation.validate(
-            point: Point(x: 700, y: 50), bounds: window)
+            point: Point(x: 100, y: -5), windowSize: windowSize)
         #expect(result != nil)
-        #expect(result!.contains("700,50"))
+        #expect(result!.contains("100,-5"))
     }
 
     @Test("point right of window returns error")
     func rightOfWindow() {
         let result = CoordinateValidation.validate(
-            point: Point(x: 2000, y: 400), bounds: window)
+            point: Point(x: 1500, y: 400), windowSize: windowSize)
         #expect(result != nil)
-        #expect(result!.contains("2000,400"))
+        #expect(result!.contains("1500,400"))
     }
 
     @Test("point below window returns error")
     func belowWindow() {
         let result = CoordinateValidation.validate(
-            point: Point(x: 700, y: 1000), bounds: window)
+            point: Point(x: 100, y: 800), windowSize: windowSize)
         #expect(result != nil)
     }
 
     @Test("error message suggests re-snapshot")
     func errorSuggestsReSnapshot() {
         let result = CoordinateValidation.validate(
-            point: Point(x: 0, y: 0), bounds: window)
+            point: Point(x: -1, y: -1), windowSize: windowSize)
         #expect(result!.contains("Re-snapshot"))
     }
 
-    @Test("window at origin works")
-    func windowAtOrigin() {
-        let bounds = Rect(x: 0, y: 0, width: 800, height: 600)
-        #expect(CoordinateValidation.validate(point: Point(x: 400, y: 300), bounds: bounds) == nil)
-        #expect(CoordinateValidation.validate(point: Point(x: -1, y: 300), bounds: bounds) != nil)
+    @Test("small window works")
+    func smallWindow() {
+        let size = Point(x: 800, y: 600)
+        #expect(CoordinateValidation.validate(point: Point(x: 400, y: 300), windowSize: size) == nil)
+        #expect(CoordinateValidation.validate(point: Point(x: -1, y: 300), windowSize: size) != nil)
+        #expect(CoordinateValidation.validate(point: Point(x: 801, y: 300), windowSize: size) != nil)
     }
 }

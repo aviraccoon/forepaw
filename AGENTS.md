@@ -51,6 +51,7 @@ mise run test                            # Test only
 
 - Keep `ForepawCore` free of platform imports (`ApplicationServices`, `Cocoa`, `Carbon`, `Vision`). `Foundation` is allowed in ForepawCore (used by `EncoderDetection`, `OutputFormatter`). All macOS-specific code goes in `ForepawDarwin`. The CLI target (`Forepaw`) also stays platform-agnostic -- no `Cocoa` imports.
 - **Every new public API in `ForepawDarwin` must have a corresponding method on the `DesktopProvider` protocol in `ForepawCore`.** Use platform-agnostic types (`Point`, `Rect`, not `CGPoint`, `CGRect`) in the protocol. Convert to platform types inside the Darwin implementation. The CLI target should only depend on `ForepawCore` types.
+- **Read skill files completely before using the tool.** The skill description says "read this before running any forepaw command" -- that means the full file, not skimming. Skills contain behavioral rules, gotchas, and patterns that prevent errors. A partial read leads to misused flags, wrong coordinate systems, and broken workflows.
 - Mirror `agent-browser`'s CLI patterns where applicable (same flag names, similar output format, `@e` ref syntax).
 - `--app` activates the target app before mouse/keyboard actions. Make it optional for commands where global input makes sense (e.g. `press` for system hotkeys, `keyboard-type` for typing into current focus).
 - Test `ForepawCore` logic (ref assignment, tree rendering, key parsing) with unit tests. `ForepawDarwin` tests need interactive accessibility access -- keep them separate.

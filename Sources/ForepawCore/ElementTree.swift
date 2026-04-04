@@ -51,11 +51,18 @@ public struct ElementTree: Sendable {
     public let root: ElementNode
     /// All refs assigned in this snapshot, in order.
     public let refs: [ElementRef: ElementRefInfo]
+    /// Window bounds in screen coordinates. Used to convert element bounds
+    /// to window-relative coordinates for display and input.
+    public let windowBounds: Rect?
 
-    public init(app: String, root: ElementNode, refs: [ElementRef: ElementRefInfo]) {
+    public init(
+        app: String, root: ElementNode, refs: [ElementRef: ElementRefInfo],
+        windowBounds: Rect? = nil
+    ) {
         self.app = app
         self.root = root
         self.refs = refs
+        self.windowBounds = windowBounds
     }
 }
 

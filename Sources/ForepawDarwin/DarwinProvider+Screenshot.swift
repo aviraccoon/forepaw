@@ -5,9 +5,13 @@ import ForepawCore
 // MARK: - Screenshot & OCR
 
 extension DarwinProvider {
-    /// Screenshot + OCR, returning recognized text with screen coordinates.
+    /// Screenshot + OCR, returning recognized text with window-relative coordinates.
     /// When `find` is provided, uses word-level bounding boxes for precise targeting.
     /// When `screenshotOptions` is provided, also saves an agent-friendly display copy.
+    ///
+    /// Coordinates in returned OCRResults are window-relative logical pixels
+    /// (0,0 = window top-left). Image-pixel coordinates from the Vision framework
+    /// are divided by the Retina scale factor.
     public func ocr(
         app: String?, window: String? = nil, find: String? = nil,
         screenshotOptions: ScreenshotOptions? = nil
@@ -22,8 +26,24 @@ extension DarwinProvider {
             throw ForepawError.actionFailed("Failed to load screenshot at \(screenshotResult.path)")
         }
         let engine = OCREngine()
-        let results = try engine.recognize(
+        let rawResults = try engine.recognize(
             imagePath: screenshotResult.path, imageHeight: Double(rep.pixelsHigh), find: find)
+
+        // Convert image-pixel coordinates to window-relative logical pixels.
+        // The screenshot is captured per-window (screencapture -l), so image (0,0)
+        // is already window top-left. We just need to divide by the Retina scale factor.
+        let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
+        let results = rawResults.map { r in
+            OCRResult(
+                text: r.text,
+                bounds: Rect(
+                    x: r.bounds.x / scaleFactor,
+                    y: r.bounds.y / scaleFactor,
+                    width: r.bounds.width / scaleFactor,
+                    height: r.bounds.height / scaleFactor
+                )
+            )
+        }
 
         // Optionally produce an agent-friendly display copy from the same capture
         var displayPath: String?
@@ -39,7 +59,10 @@ extension DarwinProvider {
         return OCROutput(results: results, screenshotPath: displayPath)
     }
 
-    /// Click at a specific screen coordinate with app activation.
+    /// Click at a window-relative coordinate with app activation.
+    ///
+    /// Coordinates are window-relative: (0,0) = window top-left.
+    /// Converted to screen-absolute internally for CGEvent.
     public func clickAtPoint(
         _ point: Point, app: String, options: ClickOptions = .normal
     ) async throws -> ActionResult {
@@ -49,10 +72,10 @@ extension DarwinProvider {
 
         // Reject coordinates outside the window -- a misplaced click could be destructive
         try validatePointInWindow(point, pid: runningApp.processIdentifier)
-        let cgPoint = CGPoint(x: point.x, y: point.y)
+        let screenPoint = try toScreenPoint(point, pid: runningApp.processIdentifier)
 
         let button: CGMouseButton = options.button == .right ? .right : .left
-        try performMouseClick(at: cgPoint, button: button, clickCount: Int64(options.clickCount))
+        try performMouseClick(at: screenPoint, button: button, clickCount: Int64(options.clickCount))
         let isRight = options.button == .right
         let isDouble = options.clickCount > 1
         let label = isRight ? "right-clicked" : isDouble ? "double-clicked" : "clicked"
@@ -68,6 +91,10 @@ extension DarwinProvider {
     ///   - window: Optional window title or ID
     ///   - index: 1-based match index, or nil to require a unique match
     /// - Returns: Tuple of matched text and screen point
+    /// Resolve OCR text to a screen-absolute point for clicking.
+    ///
+    /// OCR results are in window-relative logical coordinates. This method
+    /// adds the window origin to get screen-absolute coordinates for CGEvent.
     internal func resolveOCRText(
         _ text: String, app: String, window: String? = nil, index: Int? = nil
     ) async throws -> (text: String, point: CGPoint) {
@@ -77,14 +104,9 @@ extension DarwinProvider {
             throw ForepawError.actionFailed("No text matching '\(text)' found on screen")
         }
         if matches.count > 1 && index == nil {
-            let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
-            let runningApp = try findApp(named: app)
-            let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
             var listing = "Multiple matches for '\(text)':\n"
             for (i, m) in matches.enumerated() {
-                let sx = Int(m.center.x / scaleFactor + resolved.origin.x)
-                let sy = Int(m.center.y / scaleFactor + resolved.origin.y)
-                listing += "  --index \(i + 1): '\(m.text)' at \(sx),\(sy)\n"
+                listing += "  --index \(i + 1): '\(m.text)' at \(Int(m.center.x)),\(Int(m.center.y))\n"
             }
             listing += "Use --index N to pick one."
             throw ForepawError.actionFailed(listing)
@@ -96,12 +118,12 @@ extension DarwinProvider {
         }
         let match = matches[resolvedIndex]
 
-        let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
+        // Convert window-relative logical coords to screen-absolute for CGEvent
         let runningApp = try findApp(named: app)
         let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
         let screenPoint = CGPoint(
-            x: match.center.x / scaleFactor + resolved.origin.x,
-            y: match.center.y / scaleFactor + resolved.origin.y
+            x: match.center.x + resolved.origin.x,
+            y: match.center.y + resolved.origin.y
         )
         return (text: match.text, point: screenPoint)
     }
@@ -121,9 +143,15 @@ extension DarwinProvider {
         runningApp.activate()
         try await Task.sleep(nanoseconds: 300_000_000)
         try performMouseClick(at: match.point, button: cgButton, clickCount: Int64(options.clickCount))
+        // Report window-relative coordinates
+        let windowOrigin =
+            (try? findWindow(pid: runningApp.processIdentifier, window: window))?.origin
+            ?? .zero
+        let relX = Int(match.point.x - windowOrigin.x)
+        let relY = Int(match.point.y - windowOrigin.y)
         return ActionResult(
             success: true,
-            message: "\(label) '\(match.text)' at \(Int(match.point.x)),\(Int(match.point.y))"
+            message: "\(label) '\(match.text)' at \(relX),\(relY)"
         )
     }
 
@@ -259,19 +287,29 @@ extension DarwinProvider {
         return ScreenshotResult(path: finalPath, annotations: annotations, legend: legend)
     }
 
-    /// Validate that a point falls within the app's window bounds.
+    /// Validate that a window-relative point falls within the app's window bounds.
     /// Throws if outside -- a misplaced click could hit the wrong element or a different app.
     internal func validatePointInWindow(_ point: Point, pid: Int32) throws {
         guard let resolved = try? findWindow(pid: pid, window: nil) else {
             return  // Can't validate without window info -- allow the action
         }
-        let bounds = Rect(
-            x: resolved.origin.x, y: resolved.origin.y,
-            width: resolved.size.width, height: resolved.size.height
-        )
-        if let error = CoordinateValidation.validate(point: point, bounds: bounds) {
+        let windowSize = Point(x: resolved.size.width, y: resolved.size.height)
+        if let error = CoordinateValidation.validate(point: point, windowSize: windowSize) {
             throw ForepawError.actionFailed(error)
         }
+    }
+
+    /// Convert a window-relative point to screen-absolute CGPoint.
+    /// (0,0) in window-relative = window's top-left corner in screen space.
+    internal func toScreenPoint(_ point: Point, pid: Int32) throws -> CGPoint {
+        guard let resolved = try? findWindow(pid: pid, window: nil) else {
+            // No window info -- treat as absolute (best effort)
+            return CGPoint(x: point.x, y: point.y)
+        }
+        return CGPoint(
+            x: point.x + resolved.origin.x,
+            y: point.y + resolved.origin.y
+        )
     }
 
     /// Apply a crop region to an image file.
@@ -281,11 +319,10 @@ extension DarwinProvider {
         tag: String, suffix: String = ""
     ) throws -> String {
         let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
-        let windowOrigin = Point(x: resolved.origin.x, y: resolved.origin.y)
         let windowSize = Point(x: resolved.size.width, y: resolved.size.height)
         guard
             let cropRect = crop.imageCropRect(
-                windowOrigin: windowOrigin, windowSize: windowSize, scaleFactor: scaleFactor
+                windowSize: windowSize, scaleFactor: scaleFactor
             )
         else {
             return inputPath  // No overlap -- return original

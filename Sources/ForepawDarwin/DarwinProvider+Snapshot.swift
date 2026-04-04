@@ -62,7 +62,20 @@ extension DarwinProvider {
             }
         }
 
-        return ElementTree(app: appName, root: result.root, refs: result.refs)
+        // Look up window bounds for window-relative coordinate display.
+        // Errors are non-fatal -- we still return the tree without bounds.
+        let windowBounds: Rect?
+        if let resolved = try? findWindow(pid: runningApp.processIdentifier, window: nil) {
+            windowBounds = Rect(
+                x: resolved.origin.x, y: resolved.origin.y,
+                width: resolved.size.width, height: resolved.size.height)
+        } else {
+            windowBounds = nil
+        }
+
+        return ElementTree(
+            app: appName, root: result.root, refs: result.refs,
+            windowBounds: windowBounds)
     }
 
     /// Re-walk the tree to find the AXUIElement for a given ref.

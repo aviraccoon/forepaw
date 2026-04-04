@@ -101,8 +101,39 @@ struct TreeRendererTests {
         #expect(output == "app: App\ngroup")
     }
 
-    @Test("renders bounds as (x,y WxH)")
-    func rendersBounds() {
+    @Test("renders bounds as window-relative when window bounds available")
+    func rendersBoundsRelative() {
+        let tree = ElementTree(
+            app: "App",
+            root: ElementNode(
+                role: "AXWindow",
+                name: "Main",
+                bounds: Rect(x: 100, y: 200, width: 800, height: 600),
+                children: [
+                    ElementNode(
+                        role: "AXButton",
+                        name: "OK",
+                        ref: ElementRef(1),
+                        bounds: Rect(x: 150, y: 250, width: 80, height: 30)
+                    )
+                ]
+            ),
+            refs: [:],
+            windowBounds: Rect(x: 100, y: 200, width: 800, height: 600)
+        )
+
+        let renderer = TreeRenderer()
+        let output = renderer.render(tree: tree)
+        let lines = output.split(separator: "\n").map(String.init)
+
+        // Window itself should be at 0,0 relative to itself
+        #expect(lines[1] == "window \"Main\" (0,0 800x600)")
+        // Button at 150,250 screen -> 50,50 window-relative
+        #expect(lines[2] == "  button @e1 \"OK\" (50,50 80x30)")
+    }
+
+    @Test("renders bounds as absolute when no window bounds")
+    func rendersBoundsAbsolute() {
         let tree = ElementTree(
             app: "App",
             root: ElementNode(
@@ -125,6 +156,7 @@ struct TreeRendererTests {
         let output = renderer.render(tree: tree)
         let lines = output.split(separator: "\n").map(String.init)
 
+        // No windowBounds -> absolute coordinates
         #expect(lines[1] == "window \"Main\" (100,200 800x600)")
         #expect(lines[2] == "  button @e1 \"OK\" (150,250 80x30)")
     }

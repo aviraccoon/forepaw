@@ -106,7 +106,7 @@ struct Screenshot: AsyncParsableCommand {
     @Option(name: .long, help: "Crop to element ref bounds (e.g. --ref @e5). Requires --app.")
     var ref: String?
 
-    @Option(name: .long, help: "Crop to screen region: x,y,w,h (e.g. --region 100,200,400,300). Requires --app.")
+    @Option(name: .long, help: "Crop to window-relative region: x,y,w,h (e.g. --region 10,50,400,300). Requires --app.")
     var region: String?
 
     @Option(name: .long, help: "Padding around cropped area in logical pixels (default 20)")
@@ -152,17 +152,18 @@ struct Screenshot: AsyncParsableCommand {
             guard let elementRef = ElementRef.parse(ref) else {
                 throw ValidationError("Invalid ref format: \(ref). Expected @eN (e.g. @e5)")
             }
+            // resolveRefBounds returns window-relative coordinates
             let bounds = try provider.resolveRefBounds(elementRef, app: app)
-            return CropRegion(screenRect: bounds, padding: pad)
+            return CropRegion(rect: bounds, padding: pad)
         }
 
         if let region = region {
             let parts = region.split(separator: ",").compactMap { Double($0) }
             guard parts.count == 4 else {
-                throw ValidationError("Invalid region format: \(region). Expected x,y,w,h (e.g. 100,200,400,300)")
+                throw ValidationError("Invalid region format: \(region). Expected x,y,w,h (e.g. 10,50,400,300)")
             }
             let rect = Rect(x: parts[0], y: parts[1], width: parts[2], height: parts[3])
-            return CropRegion(screenRect: rect, padding: pad)
+            return CropRegion(rect: rect, padding: pad)
         }
 
         return nil

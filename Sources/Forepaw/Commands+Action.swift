@@ -7,10 +7,10 @@ struct Click: AsyncParsableCommand {
         abstract: "Click an element by ref or at coordinates"
     )
 
-    @Argument(help: "Element ref (e.g. @e3) or coordinates (e.g. 500,300)")
+    @Argument(help: "Element ref (e.g. @e3) or window-relative coordinates (e.g. 500,300)")
     var target: String
 
-    @Option(name: .long, help: "Target application name")
+    @Option(name: .long, help: "Target application name (required; coordinates are relative to window)")
     var app: String?
 
     @Flag(name: .long, help: "Right-click (context menu)")
@@ -196,10 +196,10 @@ struct Hover: AsyncParsableCommand {
         abstract: "Move mouse to an element without clicking (triggers tooltips/hover states)"
     )
 
-    @Argument(help: "Element ref (e.g. @e3), text to find via OCR, or coordinates (e.g. 500,300)")
+    @Argument(help: "Element ref (e.g. @e3), text for OCR, or window-relative coords (e.g. 500,300)")
     var target: String
 
-    @Option(name: .long, help: "Target application name")
+    @Option(name: .long, help: "Target application name (coordinates are window-relative when set)")
     var app: String?
 
     @Option(name: .long, help: "Window title or ID (e.g. 'Hacker News' or 'w-7290')")
@@ -749,7 +749,7 @@ struct Scroll: AsyncParsableCommand {
     @Option(name: .long, help: "Element ref to scroll within (e.g. @e5)")
     var ref: String?
 
-    @Option(name: .long, help: "Screen coordinates to scroll at (e.g. 589,400)")
+    @Option(name: .long, help: "Window-relative coordinates to scroll at (e.g. 200,400)")
     var at: String?
 
     @Flag(name: .long, help: "JSON output")

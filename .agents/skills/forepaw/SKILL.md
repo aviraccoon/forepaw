@@ -23,18 +23,18 @@ forepaw snapshot --app "App Name" -i --diff  # diff against previous snapshot
 forepaw snapshot --app "App Name" -i --menu  # include menu bar (excluded by default with -i)
 ```
 
-Returns structured text with `@e` refs and screen positions:
+Returns structured text with `@e` refs and window-relative positions:
 ```
 app: Finder
-window "Documents" (0,46 1200x800)
-  button @e1 "Back" (10,50 60x30)
-  textfield @e2 "Search" value="" (200,50 300x30)
-  list (10,90 1180x700)
-    cell @e3 "README.md" (10,90 1180x25)
-    cell @e4 "src" (10,115 1180x25)
+window "Documents" (0,0 1200x800)
+  button @e1 "Back" (10,4 60x30)
+  textfield @e2 "Search" value="" (200,4 300x30)
+  list (10,44 1180x700)
+    cell @e3 "README.md" (10,44 1180x25)
+    cell @e4 "src" (10,69 1180x25)
 ```
 
-Every element includes `(x,y WxH)` screen coordinates. These match what action commands use -- you can verify click targets or use coordinate-based click/hover for precision.
+All coordinates are **window-relative**: `(0,0)` is the window's top-left corner. These match what action commands expect -- you can verify click targets or use coordinate-based click/hover for precision. Coordinates are portable across window positions (if the window moves, the same coordinates still work).
 
 Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' chrome). For browsers, the full tree (without `-i`) includes web content elements like links, headings, and text -- useful for clicking small targets like footnote links.
 
@@ -65,12 +65,12 @@ forepaw screenshot --app "App Name"   # plain screenshot
 forepaw screenshot                    # full screen
 forepaw screenshot --app "App Name" --ref @e5              # crop to element bounds
 forepaw screenshot --app "App Name" --ref @e5 --padding 40 # more context around element
-forepaw screenshot --app "App Name" --region 100,200,400,300  # crop to screen region (x,y,w,h)
+forepaw screenshot --app "App Name" --region 10,50,400,300  # crop to window-relative region (x,y,w,h)
 ```
 
 Returns a screenshot path (WebP if `cwebp` is installed, else JPEG; 1x scale by default). Use when you need to see what's on screen without OCR text. The image can be read with the `read` tool.
 
-**Area capture with `--ref` or `--region`:** Crops the screenshot to just the specified area. `--ref @eN` resolves the element's bounds from the AX tree. `--region x,y,w,h` uses screen coordinates. Both add 20px padding by default (override with `--padding`). Works with `--annotate` too -- annotations are rendered on the full image first, then cropped. Requires `--app`.
+**Area capture with `--ref` or `--region`:** Crops the screenshot to just the specified area. `--ref @eN` resolves the element's bounds from the AX tree. `--region x,y,w,h` uses window-relative coordinates. Both add 20px padding by default (override with `--padding`). Works with `--annotate` too -- annotations are rendered on the full image first, then cropped. Requires `--app`.
 
 ### 4. Annotated screenshot (visual + structural)
 
@@ -112,10 +112,10 @@ Output uses `+` for added lines and `-` for removed lines:
 ```
 [diff: 3 added, 1 removed, 42 unchanged]
 
--   window "Documents" (388,265 1024x678)
-+   window "Recents" (388,265 1024x678)
-- button "Add Tags" (1147,265 40x52)
-+ button "Edit Tags" (1147,265 40x52)
+-   window "Documents" (0,0 1024x678)
++   window "Recents" (0,0 1024x678)
+- button "Add Tags" (759,0 40x52)
++ button "Edit Tags" (759,0 40x52)
 + button "New Item" (500,300 80x30)
 ```
 
@@ -141,11 +141,13 @@ forepaw click @e3 --app "App Name" --double   # double-click
 ### Click by coordinates (from snapshot bounds)
 
 ```bash
-forepaw click 500,300 --app "App Name"    # click at screen position
-forepaw hover 500,300 --app "App Name"    # hover at screen position
+forepaw click 500,300 --app "App Name"    # click at window-relative position
+forepaw hover 500,300 --app "App Name"    # hover at window-relative position
 ```
 
-Use when you have coordinates from snapshot bounds but no ref (e.g. static text, or when refs shift). Read the `(x,y WxH)` from snapshot output and compute the center: `x + W/2, y + H/2`.
+Coordinates are **window-relative** (0,0 = top-left of window). Use when you have coordinates from snapshot bounds but no ref (e.g. static text, or when refs shift). Read the `(x,y WxH)` from snapshot output and compute the center: `x + W/2, y + H/2`.
+
+**Without --app**, `hover` treats coordinates as screen-absolute (for global positioning). All other coordinate commands require `--app`.
 
 ### Click by text (from OCR)
 
@@ -229,10 +231,10 @@ forepaw scroll down --app Orion              # scroll down 3 ticks (default)
 forepaw scroll up --app Orion --amount 10    # scroll up 10 ticks
 forepaw scroll left --app Finder             # horizontal scroll
 forepaw scroll down --app Orion --ref @e5    # scroll within a specific element
-forepaw scroll down --app Discord --at 589,400  # scroll at specific coordinates (e.g. a sidebar)
+forepaw scroll down --app Discord --at 200,400  # scroll at window-relative coordinates (e.g. a sidebar)
 ```
 
-Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks. Use `--at x,y` to scroll a specific panel or sidebar when no ref is available (e.g. Discord's server list). Coordinates are validated against window bounds.
+Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks. Use `--at x,y` to scroll a specific panel or sidebar when no ref is available (e.g. Discord's server list). Coordinates are window-relative and validated against window bounds.
 
 ### Hover (trigger tooltips/hover states)
 
@@ -240,8 +242,8 @@ Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks. Use `--at 
 forepaw hover @e5 --app "App Name"              # by ref (from snapshot)
 forepaw hover "Submit" --app "App Name"          # by text (OCR lookup)
 forepaw hover "8 comments" --app Orion           # hover over a link
-forepaw hover 589,470 --app Discord              # hover at coordinates (triggers tooltips for icon buttons)
-forepaw hover 1100,400 --app Orion --smooth      # smooth mouse movement (dismisses hover-triggered panels)
+forepaw hover 200,470 --app Discord              # hover at window-relative coordinates (triggers tooltips)
+forepaw hover 700,400 --app Orion --smooth      # smooth mouse movement (dismisses hover-triggered panels)
 ```
 
 Moves the mouse without clicking. Accepts either an `@e` ref, text (OCR lookup), or coordinates. Useful for triggering tooltips, hover menus, or preview popups.
@@ -327,7 +329,7 @@ The title shown in quotes in `list-windows` output is what you pass to `--window
 - **AX tree vs OCR.** Try `snapshot -i` first. Electron apps are auto-detected and their web content trees are enabled automatically. If the tree is still sparse after this, fall back to OCR.
 - **App activation.** `--app` brings the app to the foreground. This means the user's screen will change. Warn them before switching apps if they didn't explicitly ask.
 - **Mouse clicks are physical.** OCR-click and mouse-fallback clicks move the actual cursor and click on screen. The user will see this happening.
-- **Coordinate clicks are bounds-checked.** When `--app` is specified, `click` and `hover` with coordinates will error if the point is outside the target window. This prevents destructive misclicks on other apps. If you get a bounds error, re-snapshot -- the window may have moved.
+- **Coordinates are window-relative.** All coordinates in snapshots, OCR output, and action commands are relative to the window's top-left corner (0,0). This means coordinates don't change when the window moves. When `--app` is specified, `click` and `hover` validate that coordinates are within window bounds (0 to width/height). If you get a bounds error, re-snapshot. Without `--app`, `hover` uses screen-absolute coordinates.
 - **Keystroke delay.** Typing is not instant (~8ms per character). Long text takes a moment.
 - **Wait timeout.** `wait` polls via OCR (screenshot + text recognition each poll). Keep intervals reasonable (1s+) to avoid hammering the system. The default 10s timeout covers most UI transitions.
 - **Text starting with dashes.** If text for `keyboard-type`, `type`, `ocr-click`, or `wait` starts with `-` or `--`, use the `--text` option instead of a positional argument:

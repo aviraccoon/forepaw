@@ -32,7 +32,7 @@ forepaw screenshot --app Finder --format png --scale 2  # full-quality Retina PN
 forepaw screenshot --app Finder --annotate  # numbered labels on elements
 forepaw screenshot --app Finder --style spotlight --only @e1 @e3  # highlight specific refs
 forepaw screenshot --app Finder --ref @e5    # crop to element bounds
-forepaw screenshot --app Finder --region 100,200,400,300  # crop to screen region
+forepaw screenshot --app Finder --region 10,50,400,300  # crop to window-relative region
 ```
 
 The agent loop: **observe -> decide -> act -> observe**
@@ -48,9 +48,9 @@ Sources/
 
 `ForepawCore` defines a `DesktopProvider` protocol. `ForepawDarwin` implements it for macOS. A future Linux implementation would use AT-SPI2/DBus with the same CLI interface.
 
-Snapshots include screen coordinates for every element (`(x,y WxH)` format), making element positions visible for debugging and precise coordinate-based targeting.
+All coordinates are **window-relative** -- `(0,0)` is the window's top-left corner. Snapshots show element positions as `(x,y WxH)` in this coordinate space. Action commands (`click`, `hover`, `scroll --at`, `drag`) use the same coordinates. This makes positions portable across window moves.
 
-Coordinate-based actions (`click`, `hover` with coordinates) validate against the target window's bounds when `--app` is specified. Out-of-bounds coordinates error instead of clicking -- a misplaced click could hit a different app or a destructive button.
+Coordinate-based actions validate against the window's bounds when `--app` is specified. Out-of-bounds coordinates error instead of clicking -- a misplaced click could hit a different app or a destructive button.
 
 ## Requirements
 

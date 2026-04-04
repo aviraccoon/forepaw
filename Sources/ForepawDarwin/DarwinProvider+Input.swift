@@ -22,11 +22,12 @@ extension DarwinProvider {
         // is under the cursor, so the app must be frontmost.
         runningApp.activate()
         try await Task.sleep(nanoseconds: 300_000_000)  // 300ms for activation
-        return try clickElement(element, options: options)
+        return try clickElement(element, options: options, pid: runningApp.processIdentifier)
     }
 
     internal func clickElement(
-        _ element: AXUIElement, options: ClickOptions = .normal
+        _ element: AXUIElement, options: ClickOptions = .normal,
+        pid: Int32? = nil
     ) throws -> ActionResult {
         let role = getAttribute(element, kAXRoleAttribute) as? String ?? ""
         let button: CGMouseButton = options.button == .right ? .right : .left
@@ -48,10 +49,14 @@ extension DarwinProvider {
 
         // Mouse click at element center
         if let position = getPosition(of: element), let size = getSize(of: element) {
-            let point = CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2)
+            let screenPoint = CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2)
             let label = isRightClick ? "right-clicked" : isDoubleClick ? "double-clicked" : "clicked"
-            try performMouseClick(at: point, button: button, clickCount: Int64(options.clickCount))
-            return ActionResult(success: true, message: "\(label) at \(Int(point.x)),\(Int(point.y))")
+            try performMouseClick(at: screenPoint, button: button, clickCount: Int64(options.clickCount))
+            // Report window-relative coordinates
+            let windowOrigin = pid.flatMap { try? findWindow(pid: $0, window: nil) }?.origin ?? .zero
+            let relX = Int(screenPoint.x - windowOrigin.x)
+            let relY = Int(screenPoint.y - windowOrigin.y)
+            return ActionResult(success: true, message: "\(label) at \(relX),\(relY)")
         }
 
         // Last resort for links: try AXPress anyway (only for regular left click)
@@ -177,16 +182,17 @@ extension DarwinProvider {
         let scrollPoint: CGPoint
 
         if let point = point {
-            // Scroll at explicit screen coordinates
+            // Scroll at window-relative coordinates
+            let windowSize = Point(x: resolved.size.width, y: resolved.size.height)
             if let error = CoordinateValidation.validate(
-                point: point,
-                bounds: Rect(
-                    x: resolved.origin.x, y: resolved.origin.y,
-                    width: resolved.size.width, height: resolved.size.height)
+                point: point, windowSize: windowSize
             ) {
                 throw ForepawError.actionFailed(error)
             }
-            scrollPoint = CGPoint(x: point.x, y: point.y)
+            // Convert to screen-absolute for CGEvent
+            scrollPoint = CGPoint(
+                x: point.x + resolved.origin.x,
+                y: point.y + resolved.origin.y)
         } else if let ref = ref {
             // Scroll at the center of the referenced element
             let element = try resolveRef(ref, app: app)
@@ -243,11 +249,14 @@ extension DarwinProvider {
             atBoundary = false  // Can't determine -- assume not at boundary
         }
 
+        // Report window-relative coordinates
+        let relX = Int(scrollPoint.x - resolved.origin.x)
+        let relY = Int(scrollPoint.y - resolved.origin.y)
         let boundaryNote = atBoundary ? " (at boundary -- content did not change)" : ""
         return ActionResult(
             success: true,
             message:
-                "scrolled \(direction) \(amount) ticks at \(Int(scrollPoint.x)),\(Int(scrollPoint.y))\(boundaryNote)"
+                "scrolled \(direction) \(amount) ticks at \(relX),\(relY)\(boundaryNote)"
         )
     }
 
@@ -370,22 +379,34 @@ extension DarwinProvider {
         return ActionResult(success: true)
     }
 
-    /// Resolve a ref to its center point in screen coordinates.
+    /// Resolve a ref to its center point in window-relative coordinates.
     public func resolveRefPosition(_ ref: ElementRef, app: String) throws -> Point {
         let element = try resolveRef(ref, app: app)
         guard let pos = getPosition(of: element), let size = getSize(of: element) else {
             throw ForepawError.actionFailed("Cannot determine position of \(ref)")
         }
-        return Point(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
+        let runningApp = try findApp(named: app)
+        let windowOrigin =
+            (try? findWindow(pid: runningApp.processIdentifier, window: nil))?.origin
+            ?? .zero
+        return Point(
+            x: pos.x - windowOrigin.x + size.width / 2,
+            y: pos.y - windowOrigin.y + size.height / 2)
     }
 
-    /// Resolve a ref to its bounding rectangle in screen coordinates.
+    /// Resolve a ref to its bounding rectangle in window-relative coordinates.
     public func resolveRefBounds(_ ref: ElementRef, app: String) throws -> Rect {
         let element = try resolveRef(ref, app: app)
         guard let pos = getPosition(of: element), let size = getSize(of: element) else {
             throw ForepawError.actionFailed("Cannot determine bounds of \(ref)")
         }
-        return Rect(x: pos.x, y: pos.y, width: size.width, height: size.height)
+        let runningApp = try findApp(named: app)
+        let windowOrigin =
+            (try? findWindow(pid: runningApp.processIdentifier, window: nil))?.origin
+            ?? .zero
+        return Rect(
+            x: pos.x - windowOrigin.x, y: pos.y - windowOrigin.y,
+            width: size.width, height: size.height)
     }
 
     /// Move the mouse to a screen point without clicking.
@@ -403,19 +424,26 @@ extension DarwinProvider {
         Thread.sleep(forTimeInterval: 0.05)
     }
 
-    /// Move the mouse to a screen point, optionally activating an app first.
+    /// Move the mouse to a point, optionally activating an app first.
+    ///
+    /// When `app` is specified, coordinates are window-relative (0,0 = window top-left).
+    /// When `app` is nil, coordinates are screen-absolute.
     public func hoverAtPoint(
         _ point: Point, app: String? = nil, smooth: Bool = false
     ) async throws
         -> ActionResult
     {
+        let target: CGPoint
         if let app {
             let runningApp = try findApp(named: app)
             runningApp.activate()
             try await Task.sleep(nanoseconds: 300_000_000)
             try validatePointInWindow(point, pid: runningApp.processIdentifier)
+            target = try toScreenPoint(point, pid: runningApp.processIdentifier)
+        } else {
+            // No app context -- treat as screen-absolute
+            target = CGPoint(x: point.x, y: point.y)
         }
-        let target = CGPoint(x: point.x, y: point.y)
         if smooth {
             try smoothMoveMouse(to: target)
         } else {
@@ -435,10 +463,17 @@ extension DarwinProvider {
         guard let pos = getPosition(of: element), let size = getSize(of: element) else {
             throw ForepawError.actionFailed("Cannot determine position of \(ref)")
         }
-        let point = CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
-        try moveMouse(to: point)
+        // AX returns screen-absolute; use directly for CGEvent
+        let screenPoint = CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
+        try moveMouse(to: screenPoint)
 
-        return ActionResult(success: true, message: "hovered at \(Int(point.x)),\(Int(point.y))")
+        // Report window-relative coordinates to match what agents see in snapshots
+        let windowOrigin =
+            (try? findWindow(pid: runningApp.processIdentifier, window: nil))?.origin
+            ?? .zero
+        let relX = Int(pos.x + size.width / 2 - windowOrigin.x)
+        let relY = Int(pos.y + size.height / 2 - windowOrigin.y)
+        return ActionResult(success: true, message: "hovered at \(relX),\(relY)")
     }
 
     /// Move the mouse to text found via OCR without clicking.
@@ -452,9 +487,15 @@ extension DarwinProvider {
         try await Task.sleep(nanoseconds: 300_000_000)
         try moveMouse(to: match.point)
 
+        // Report window-relative coordinates
+        let windowOrigin =
+            (try? findWindow(pid: runningApp.processIdentifier, window: window))?.origin
+            ?? .zero
+        let relX = Int(match.point.x - windowOrigin.x)
+        let relY = Int(match.point.y - windowOrigin.y)
         return ActionResult(
             success: true,
-            message: "hovered '\(match.text)' at \(Int(match.point.x)),\(Int(match.point.y))")
+            message: "hovered '\(match.text)' at \(relX),\(relY)")
     }
 
     /// Drag along a path of screen coordinates.
@@ -462,12 +503,16 @@ extension DarwinProvider {
     /// For two-point drag, pass a 2-element path.
     /// For multi-point path, pass 3+ points.
     /// If `options.closePath` is true, the first point is appended to close the shape.
+    /// Drag along a path of coordinates.
+    ///
+    /// When `app` is specified, coordinates are window-relative (0,0 = window top-left).
+    /// When `app` is nil, coordinates are screen-absolute.
     public func drag(
         path: [Point], options: DragOptions = DragOptions(),
         app: String? = nil
     ) async throws -> ActionResult {
-        var cgPath = path.map { CGPoint(x: $0.x, y: $0.y) }
-        guard cgPath.count >= 2 else {
+        var cgPath: [CGPoint]
+        guard path.count >= 2 else {
             throw ForepawError.actionFailed("Drag path requires at least 2 points")
         }
 
@@ -475,6 +520,10 @@ extension DarwinProvider {
             let runningApp = try findApp(named: app)
             runningApp.activate()
             try await Task.sleep(nanoseconds: 300_000_000)
+            let pid = runningApp.processIdentifier
+            cgPath = try path.map { try toScreenPoint($0, pid: pid) }
+        } else {
+            cgPath = path.map { CGPoint(x: $0.x, y: $0.y) }
         }
 
         if options.closePath, cgPath.count >= 3, let first = cgPath.first {
@@ -483,17 +532,18 @@ extension DarwinProvider {
 
         try performMouseDrag(path: cgPath, options: options)
 
-        if cgPath.count == 2 {
+        // Report window-relative coordinates (the original input)
+        if path.count == 2 {
             return ActionResult(
                 success: true,
                 message:
-                    "dragged from \(Int(cgPath[0].x)),\(Int(cgPath[0].y)) to \(Int(cgPath[1].x)),\(Int(cgPath[1].y))"
+                    "dragged from \(Int(path[0].x)),\(Int(path[0].y)) to \(Int(path[1].x)),\(Int(path[1].y))"
                     + " (\(options.steps) steps, \(String(format: "%.1f", options.duration))s)")
         }
         return ActionResult(
             success: true,
             message:
-                "dragged through \(cgPath.count) points"
+                "dragged through \(path.count) points"
                 + " (\(options.steps) steps/segment, \(String(format: "%.1f", options.duration))s)")
     }
 
@@ -506,11 +556,14 @@ extension DarwinProvider {
         runningApp.activate()
         try await Task.sleep(nanoseconds: 300_000_000)
 
+        // resolveRefPosition returns window-relative; convert to screen-absolute for CGEvent
         let from = try resolveRefPosition(fromRef, app: app)
         let to = try resolveRefPosition(toRef, app: app)
+        let pid = runningApp.processIdentifier
+        let fromScreen = try toScreenPoint(from, pid: pid)
+        let toScreen = try toScreenPoint(to, pid: pid)
 
-        try performMouseDrag(
-            path: [CGPoint(x: from.x, y: from.y), CGPoint(x: to.x, y: to.y)], options: options)
+        try performMouseDrag(path: [fromScreen, toScreen], options: options)
         return ActionResult(
             success: true,
             message:

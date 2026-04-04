@@ -42,7 +42,7 @@ public protocol DesktopProvider: Sendable {
     /// Click an element by ref, re-walking the tree in the target app.
     func click(ref: ElementRef, app: String, options: ClickOptions) async throws -> ActionResult
 
-    /// Click at a screen coordinate.
+    /// Click at a window-relative coordinate (0,0 = window top-left).
     func clickAtPoint(_ point: Point, app: String, options: ClickOptions) async throws -> ActionResult
 
     /// Type text into an element (focuses via AX, then types).
@@ -70,7 +70,7 @@ public protocol DesktopProvider: Sendable {
     /// Hover over an element by ref (triggers tooltips, hover states).
     func hover(ref: ElementRef, app: String) async throws -> ActionResult
 
-    /// Hover at a screen coordinate.
+    /// Hover at a coordinate. Window-relative when app is set, screen-absolute otherwise.
     func hoverAtPoint(_ point: Point, app: String?, smooth: Bool) async throws -> ActionResult
 
     /// Hover over text found via OCR.
@@ -108,10 +108,10 @@ public protocol DesktopProvider: Sendable {
 
     // MARK: - Utility
 
-    /// Resolve a ref to its center point in screen coordinates.
+    /// Resolve a ref to its center point in window-relative coordinates.
     func resolveRefPosition(_ ref: ElementRef, app: String) throws -> Point
 
-    /// Resolve a ref to its bounding rectangle in screen coordinates.
+    /// Resolve a ref to its bounding rectangle in window-relative coordinates.
     func resolveRefBounds(_ ref: ElementRef, app: String) throws -> Rect
 
     // MARK: - Permissions
