@@ -8,7 +8,10 @@ extension DarwinProvider {
     /// Screenshot + OCR, returning recognized text with screen coordinates.
     /// When `find` is provided, uses word-level bounding boxes for precise targeting.
     public func ocr(app: String?, window: String? = nil, find: String? = nil) async throws -> [OCRResult] {
-        let screenshotResult = try await screenshot(app: app, window: window, style: nil, only: nil)
+        // OCR needs full-res PNG for accurate text recognition
+        let ocrOptions = ScreenshotOptions(format: .png, scale: 2, cursor: false)
+        let screenshotResult = try await screenshot(
+            app: app, window: window, style: nil, only: nil, options: ocrOptions)
         guard let image = NSImage(contentsOfFile: screenshotResult.path),
             let rep = image.representations.first
         else {
@@ -115,13 +118,15 @@ extension DarwinProvider {
     /// - Returns: The resolved window
 
     public func screenshot(
-        app: String?, window: String? = nil, style: AnnotationStyle? = nil, only: [ElementRef]? = nil
+        app: String?, window: String? = nil, style: AnnotationStyle? = nil, only: [ElementRef]? = nil,
+        options: ScreenshotOptions = .default
     ) async throws -> ScreenshotResult {
         guard CGPreflightScreenCaptureAccess() else {
             throw ForepawError.screenRecordingDenied
         }
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let rawPath = "/tmp/forepaw-\(timestamp).png"
+        let tag = "\(Int(Date().timeIntervalSince1970))-\(UInt32.random(in: 0...0xFFFF))"
+        // Always capture as PNG first (needed for annotations, OCR, and clean downscaling)
+        let rawPath = "/tmp/forepaw-\(tag).png"
 
         var resolvedWindow: ResolvedWindow?
         if let appName = app {
@@ -130,26 +135,35 @@ extension DarwinProvider {
             try await Task.sleep(nanoseconds: 300_000_000)
             let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
             resolvedWindow = resolved
+            var args = ["-x", "-o", "-l", String(resolved.windowID)]
+            if options.cursor { args.insert("-C", at: 0) }
+            args.append(rawPath)
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            process.arguments = ["-x", "-o", "-l", String(resolved.windowID), rawPath]
+            process.arguments = args
             try process.run()
             process.waitUntilExit()
         } else {
+            var args = ["-x"]
+            if options.cursor { args.insert("-C", at: 0) }
+            args.append(rawPath)
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            process.arguments = ["-x", rawPath]
+            process.arguments = args
             try process.run()
             process.waitUntilExit()
         }
 
         guard let style = style, let appName = app else {
-            return ScreenshotResult(path: rawPath, annotations: nil, legend: nil)
+            let finalPath = try postProcessScreenshot(
+                rawPath: rawPath, tag: tag, options: options)
+            return ScreenshotResult(path: finalPath, annotations: nil, legend: nil)
         }
 
         // Get the AX tree for annotations
-        let options = SnapshotOptions(interactiveOnly: true, maxDepth: SnapshotOptions.defaultDepth, compact: false)
-        let tree = try await snapshot(app: appName, options: options)
+        let snapshotOpts = SnapshotOptions(
+            interactiveOnly: true, maxDepth: SnapshotOptions.defaultDepth, compact: false)
+        let tree = try await snapshot(app: appName, options: snapshotOpts)
 
         // Determine window bounds for coordinate conversion
         let windowBounds: Rect
@@ -181,7 +195,7 @@ extension DarwinProvider {
         }
 
         // Render annotated image
-        let annotatedPath = "/tmp/forepaw-\(timestamp)-annotated.png"
+        let annotatedPath = "/tmp/forepaw-\(tag)-annotated.png"
         let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
         let renderer = AnnotationRenderer()
         try renderer.render(
@@ -195,7 +209,62 @@ extension DarwinProvider {
         // Generate legend
         let legend = AnnotationLegend().format(annotations: annotations)
 
-        return ScreenshotResult(path: annotatedPath, annotations: annotations, legend: legend)
+        // Post-process the annotated image (scale + format conversion)
+        let finalPath = try postProcessScreenshot(
+            rawPath: annotatedPath, tag: tag, options: options,
+            suffix: "-annotated")
+        return ScreenshotResult(path: finalPath, annotations: annotations, legend: legend)
     }
 
+    /// Post-process a screenshot: downscale to 1x and/or convert to JPEG.
+    /// Returns the final output path (may be the same as input if no conversion needed).
+    private func postProcessScreenshot(
+        rawPath: String, tag: String, options: ScreenshotOptions,
+        suffix: String = ""
+    ) throws -> String {
+        let needsScale = options.scale == 1
+        let needsFormat = options.format == .jpeg
+
+        guard needsScale || needsFormat else {
+            return rawPath
+        }
+
+        let ext = options.format == .jpeg ? "jpg" : "png"
+        let outputPath = "/tmp/forepaw-\(tag)\(suffix).\(ext)"
+
+        var sipsArgs: [String] = []
+
+        // Scale down to 1x (half the Retina 2x dimensions)
+        if needsScale {
+            guard let image = NSImage(contentsOfFile: rawPath),
+                let rep = image.representations.first
+            else {
+                return rawPath
+            }
+            let targetWidth = rep.pixelsWide / 2
+            sipsArgs += ["--resampleWidth", String(targetWidth)]
+        }
+
+        // Convert format
+        if needsFormat {
+            sipsArgs += ["-s", "format", "jpeg", "-s", "formatOptions", String(options.quality)]
+        }
+
+        sipsArgs += [rawPath, "--out", outputPath]
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sips")
+        process.arguments = sipsArgs
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+
+        // Clean up intermediate PNG if we converted to a different file
+        if outputPath != rawPath {
+            try? FileManager.default.removeItem(atPath: rawPath)
+        }
+
+        return outputPath
+    }
 }

@@ -53,16 +53,45 @@ struct Screenshot: AsyncParsableCommand {
         help: "Only annotate these refs (e.g. --only @e5 @e8 @e12)")
     var only: [String] = []
 
+    @Option(name: .long, help: "Image format: jpeg (default) or png")
+    var format: String?
+
+    @Option(name: .long, help: "JPEG quality 1-100 (default 85)")
+    var quality: Int?
+
+    @Option(name: .long, help: "Output scale: 1 (default, logical pixels) or 2 (Retina)")
+    var scale: Int?
+
+    @Flag(name: .long, help: "Exclude mouse cursor from screenshot")
+    var noCursor: Bool = false
+
     mutating func run() async throws {
         let annotationStyle = resolveAnnotationStyle()
         let refFilter = only.isEmpty ? nil : only.compactMap { ElementRef.parse($0) }
+        let ssOptions = buildScreenshotOptions()
         let result = try await provider.screenshot(
             app: global.app, window: global.window,
-            style: annotationStyle, only: refFilter)
+            style: annotationStyle, only: refFilter,
+            options: ssOptions)
         print(result.path)
         if let legend = result.legend {
             print(legend)
         }
+    }
+
+    private func buildScreenshotOptions() -> ScreenshotOptions {
+        let fmt: ImageFormat
+        if let f = format {
+            fmt = ImageFormat(rawValue: f) ?? .jpeg
+        } else {
+            fmt = .jpeg
+        }
+        return ScreenshotOptions(
+            format: fmt,
+            quality: quality ?? 85,
+            scale: scale ?? 1,
+            cursor: !noCursor
+        )
     }
 
     private func resolveAnnotationStyle() -> AnnotationStyle? {
