@@ -274,6 +274,7 @@ The title shown in quotes in `list-windows` output is what you pass to `--window
 - **AX tree vs OCR.** Try `snapshot -i` first. Electron apps are auto-detected and their web content trees are enabled automatically. If the tree is still sparse after this, fall back to OCR.
 - **App activation.** `--app` brings the app to the foreground. This means the user's screen will change. Warn them before switching apps if they didn't explicitly ask.
 - **Mouse clicks are physical.** OCR-click and mouse-fallback clicks move the actual cursor and click on screen. The user will see this happening.
+- **Coordinate clicks are bounds-checked.** When `--app` is specified, `click` and `hover` with coordinates will error if the point is outside the target window. This prevents destructive misclicks on other apps. If you get a bounds error, re-snapshot -- the window may have moved.
 - **Keystroke delay.** Typing is not instant (~8ms per character). Long text takes a moment.
 - **Wait timeout.** `wait` polls via OCR (screenshot + text recognition each poll). Keep intervals reasonable (1s+) to avoid hammering the system. The default 10s timeout covers most UI transitions.
 - **Text starting with dashes.** If text for `keyboard-type`, `type`, `ocr-click`, or `wait` starts with `-` or `--`, use the `--text` option instead of a positional argument:

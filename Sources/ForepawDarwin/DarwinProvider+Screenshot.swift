@@ -26,10 +26,14 @@ extension DarwinProvider {
     public func clickAtPoint(
         _ point: Point, app: String, options: ClickOptions = .normal
     ) async throws -> ActionResult {
-        let cgPoint = CGPoint(x: point.x, y: point.y)
         let runningApp = try findApp(named: app)
         runningApp.activate()
         try await Task.sleep(nanoseconds: 300_000_000)
+
+        // Reject coordinates outside the window -- a misplaced click could be destructive
+        try validatePointInWindow(point, pid: runningApp.processIdentifier)
+        let cgPoint = CGPoint(x: point.x, y: point.y)
+
         let button: CGMouseButton = options.button == .right ? .right : .left
         try performMouseClick(at: cgPoint, button: button, clickCount: Int64(options.clickCount))
         let isRight = options.button == .right
@@ -214,6 +218,21 @@ extension DarwinProvider {
             rawPath: annotatedPath, tag: tag, options: options,
             suffix: "-annotated")
         return ScreenshotResult(path: finalPath, annotations: annotations, legend: legend)
+    }
+
+    /// Validate that a point falls within the app's window bounds.
+    /// Throws if outside -- a misplaced click could hit the wrong element or a different app.
+    internal func validatePointInWindow(_ point: Point, pid: Int32) throws {
+        guard let resolved = try? findWindow(pid: pid, window: nil) else {
+            return  // Can't validate without window info -- allow the action
+        }
+        let bounds = Rect(
+            x: resolved.origin.x, y: resolved.origin.y,
+            width: resolved.size.width, height: resolved.size.height
+        )
+        if let error = CoordinateValidation.validate(point: point, bounds: bounds) {
+            throw ForepawError.actionFailed(error)
+        }
     }
 
     /// Post-process a screenshot: downscale to 1x and/or convert to JPEG.

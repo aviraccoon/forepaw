@@ -320,6 +320,7 @@ extension DarwinProvider {
             let runningApp = try findApp(named: app)
             runningApp.activate()
             try await Task.sleep(nanoseconds: 300_000_000)
+            try validatePointInWindow(point, pid: runningApp.processIdentifier)
         }
         try moveMouse(to: CGPoint(x: point.x, y: point.y))
         return ActionResult(success: true, message: "hovered at \(Int(point.x)),\(Int(point.y))")
