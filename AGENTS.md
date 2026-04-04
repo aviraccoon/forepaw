@@ -5,14 +5,12 @@ Desktop automation CLI for AI agents. Swift, macOS-first with cross-platform int
 ## Quick Reference
 
 ```bash
-swift build                              # Build
-swift test                               # Run tests (ForepawCore only)
-swift run forepaw <command>              # Run CLI
-swift run forepaw snapshot --app Finder -i  # Quick smoke test
-xcrun swift-format lint -r Sources/ Tests/ TestApps/  # Lint
-xcrun swift-format format -i -r Sources/ Tests/ TestApps/  # Auto-format
-mise run check                           # Lint + build + test
+mise run check                           # Lint + build + test (use before committing)
 mise run dev <command>                   # Build + run (e.g. mise run dev snapshot --app Finder -i)
+mise run fmt                             # Auto-format
+mise run lint                            # Lint only
+mise run build                           # Build only
+mise run test                            # Test only
 ```
 
 ## Key Paths
@@ -45,12 +43,13 @@ mise run dev <command>                   # Build + run (e.g. mise run dev snapsh
 
 - **swift-format** (ships with Xcode toolchain). Config in `.swift-format`.
 - 4-space indent, 120 char line length.
-- Run `xcrun swift-format format -i -r Sources/ Tests/ TestApps/` before committing.
-- Lint with `xcrun swift-format lint -r Sources/ Tests/ TestApps/` -- must be zero warnings.
+- Run `mise run fmt` before committing.
+- Lint with `mise run lint` -- must be zero warnings.
+- `mise run check` does lint + test in one shot (`swift test` builds all targets).
 
 ## Guidelines
 
-- Keep `ForepawCore` free of platform imports (`ApplicationServices`, `Cocoa`, `Carbon`, `Vision`). All macOS-specific code goes in `ForepawDarwin`. The CLI target (`Forepaw`) also stays platform-agnostic -- no `Cocoa` imports.
+- Keep `ForepawCore` free of platform imports (`ApplicationServices`, `Cocoa`, `Carbon`, `Vision`). `Foundation` is allowed in ForepawCore (used by `EncoderDetection`, `OutputFormatter`). All macOS-specific code goes in `ForepawDarwin`. The CLI target (`Forepaw`) also stays platform-agnostic -- no `Cocoa` imports.
 - **Every new public API in `ForepawDarwin` must have a corresponding method on the `DesktopProvider` protocol in `ForepawCore`.** Use platform-agnostic types (`Point`, `Rect`, not `CGPoint`, `CGRect`) in the protocol. Convert to platform types inside the Darwin implementation. The CLI target should only depend on `ForepawCore` types.
 - Mirror `agent-browser`'s CLI patterns where applicable (same flag names, similar output format, `@e` ref syntax).
 - `--app` activates the target app before mouse/keyboard actions. Make it optional for commands where global input makes sense (e.g. `press` for system hotkeys, `keyboard-type` for typing into current focus).

@@ -12,11 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build
-        run: swift build
+      - name: Install mise
+        uses: jdx/mise-action@v2
 
-      - name: Test
-        run: swift test
-
-      - name: Lint
-        run: xcrun swift-format lint -r Sources/ Tests/ --strict
+      - name: Check (lint + build + test)
+        run: mise run check

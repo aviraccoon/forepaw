@@ -14,10 +14,9 @@ run = "swift build && swift run forepaw ${usage_command}"
 run = "swift test"
 
 [tasks.check]
-description = "Lint, build, and test"
+description = "Lint and test"
 run = [
     "xcrun swift-format lint -r {{vars.swift_dirs}} --strict",
-    "swift build",
     "swift test",
 ]
 

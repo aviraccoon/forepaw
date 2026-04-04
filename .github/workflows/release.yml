@@ -14,13 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build
-        run: swift build -c release
+      - name: Install mise
+        uses: jdx/mise-action@v2
+
+      - name: Check (lint + build + test)
+        run: mise run check
+
+      - name: Build release
+        run: mise run release-build
         env:
           FOREPAW_VERSION: ${{ github.ref_name }}
-
-      - name: Test
-        run: swift test
 
       - name: Package
         run: |
