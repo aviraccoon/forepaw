@@ -12,3 +12,16 @@ public struct OCRResult: Sendable {
         self.bounds = bounds
     }
 }
+
+/// Combined OCR output: recognized text results plus optional display screenshot.
+public struct OCROutput: Sendable {
+    /// Recognized text with coordinates.
+    public let results: [OCRResult]
+    /// Path to agent-friendly screenshot (JPEG 1x), if requested.
+    public let screenshotPath: String?
+
+    public init(results: [OCRResult], screenshotPath: String? = nil) {
+        self.results = results
+        self.screenshotPath = screenshotPath
+    }
+}

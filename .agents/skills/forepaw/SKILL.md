@@ -41,11 +41,16 @@ Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' ch
 ### 2. OCR (fallback for Electron apps)
 
 ```bash
-forepaw ocr --app Discord                    # all text with coordinates
-forepaw ocr --app Discord --find "Settings"  # filter
+forepaw ocr --app Discord                    # all text with coordinates + screenshot
+forepaw ocr --app Discord --find "Settings"  # filter for specific text
+forepaw ocr --app Discord --no-screenshot    # text only, no screenshot saved
 ```
 
-Returns text with click coordinates. Use when `snapshot` returns an empty or useless tree (Discord, Slack, VS Code, most Electron apps).
+Returns a screenshot path (first line) followed by recognized text with click coordinates. The screenshot is saved as JPEG 1x by default -- same agent-friendly format as `screenshot`. Use when `snapshot` returns an empty or useless tree (Discord, Slack, VS Code, most Electron apps).
+
+**OCR replaces separate screenshot + OCR calls.** Since OCR already captures a screenshot internally for text recognition, it saves and returns that screenshot automatically. No need to run `screenshot` + `ocr` separately.
+
+Screenshot format options: `--format`, `--quality`, `--scale`, `--no-cursor` (same as `screenshot` command).
 
 ### 3. Screenshot (for visual inspection)
 
@@ -54,7 +59,7 @@ forepaw screenshot --app "App Name"   # plain screenshot
 forepaw screenshot                    # full screen
 ```
 
-Returns a PNG path. Use when you need to see what's on screen (debugging visual issues, checking layout). The image can be read with the `read` tool.
+Returns a JPEG path (1x scale by default). Use when you need to see what's on screen without OCR text. The image can be read with the `read` tool.
 
 ### 4. Annotated screenshot (visual + structural)
 

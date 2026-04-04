@@ -27,7 +27,8 @@ forepaw drag 100,100 500,300 --app Finder --modifiers shift  # constrained drag
 forepaw hover @e5 --app Finder      # move mouse to element (tooltip)
 forepaw wait "Done" --app MyApp     # poll until text appears
 forepaw batch --app Notes "click @e3 ;; keyboard-type hello ;; press return"
-forepaw screenshot --app Finder     # take a screenshot
+forepaw screenshot --app Finder     # take a screenshot (JPEG, 1x, with cursor)
+forepaw screenshot --app Finder --format png --scale 2  # full-quality Retina PNG
 forepaw screenshot --app Finder --annotate  # numbered labels on elements
 forepaw screenshot --app Finder --style spotlight --only @e1 @e3  # highlight specific refs
 ```
@@ -46,6 +47,8 @@ Sources/
 `ForepawCore` defines a `DesktopProvider` protocol. `ForepawDarwin` implements it for macOS. A future Linux implementation would use AT-SPI2/DBus with the same CLI interface.
 
 Snapshots include screen coordinates for every element (`(x,y WxH)` format), making element positions visible for debugging and precise coordinate-based targeting.
+
+Coordinate-based actions (`click`, `hover` with coordinates) validate against the target window's bounds when `--app` is specified. Out-of-bounds coordinates error instead of clicking -- a misplaced click could hit a different app or a destructive button.
 
 ## Requirements
 
@@ -74,8 +77,8 @@ swift run forepaw list-apps
 | Command | Description |
 |---------|-------------|
 | `snapshot --app <name> [-i] [-c]` | Accessibility tree with `@e` refs |
-| `screenshot [--app <name>] [--window <title\|id>] [--annotate\|--style <style>] [--only @eN...]` | Take a screenshot (PNG), optionally annotated |
-| `ocr [--app <name>] [--window <title\|id>] [--find <text>]` | Screenshot + OCR, returns text with coordinates |
+| `screenshot [--app <name>] [--window <title\|id>] [--annotate\|--style <style>] [--only @eN...] [--format jpeg\|png] [--quality N] [--scale 1\|2] [--no-cursor]` | Take a screenshot, optionally annotated |
+| `ocr [--app <name>] [--window <title\|id>] [--find <text>] [--no-screenshot] [--format jpeg\|png] [--quality N] [--scale 1\|2] [--no-cursor]` | Screenshot + OCR, returns screenshot path + text with coordinates |
 | `list-apps [--json]` | Running GUI applications |
 | `list-windows [--app <name>]` | Visible windows with titles and IDs |
 
@@ -134,12 +137,15 @@ Interactive roles: button, text field, text area, checkbox, radio button, slider
 For apps where the accessibility tree is empty or useless (Electron apps like Discord, Slack):
 
 ```bash
-forepaw ocr --app Discord                    # all recognized text
+forepaw ocr --app Discord                    # screenshot + all recognized text
 forepaw ocr --app Discord --find "Bobby Tables"  # filter results
+forepaw ocr --app Discord --no-screenshot    # text only, no screenshot saved
 forepaw ocr-click "Bobby Tables" --app Discord   # find and click
 ```
 
 OCR uses the macOS Vision framework (`VNRecognizeTextRequest`). No external dependencies. Coordinates are automatically adjusted for Retina displays and window position.
+
+The `ocr` command saves an agent-friendly screenshot (JPEG 1x) alongside the text results, since it already captures one internally for text recognition. The screenshot path is printed first, followed by OCR results. Use `--no-screenshot` to skip saving the screenshot. Screenshot format options (`--format`, `--quality`, `--scale`, `--no-cursor`) work the same as the `screenshot` command.
 
 ## Action strategies
 
@@ -160,6 +166,8 @@ OCR uses the macOS Vision framework (`VNRecognizeTextRequest`). No external depe
 **Wait**: Polls the screen via OCR (screenshot + text recognition) at a configurable interval until the target text appears or the timeout expires. Default 10s timeout, 1s interval.
 
 **Batch**: Executes multiple actions sequentially in one process invocation. Actions are separated by `;;`. The `--app` and `--window` flags apply to all actions unless overridden per-action. Default 100ms delay between actions. Supported actions: click, drag, hover, type, keyboard-type, press, scroll, ocr-click, wait. **Use batch for any multi-step interaction** -- separate CLI invocations return control to the terminal between commands, which steals focus from the target app. Any click-then-type pattern needs batch.
+
+**Screenshots**: Default output is JPEG at 1x logical pixels with the mouse cursor visible -- optimized for agent consumption (~150KB per window vs ~650KB+ for Retina PNGs). Use `--format png --scale 2` for full-quality Retina output. `--no-cursor` hides the cursor. OCR internally uses full-resolution PNG regardless of display options.
 
 **Annotated screenshots**: Captures a window screenshot, walks the AX tree for the same window, then overlays numbered labels on interactive elements using CoreGraphics. Labels use sequential display numbers (1, 2, 3...) with a legend mapping to `@e` refs. Three styles: `badges` (small colored pills -- agent-optimized), `labeled` (bounding boxes with role+name -- human-readable), `spotlight` (dims non-interactive areas). Color-coded by element category: green=buttons, yellow=text fields, blue=selection controls, purple=navigation. `--only @eN...` filters to specific refs. The annotation pipeline is split: `AnnotationCollector` (ForepawCore, platform-agnostic) walks the tree and collects annotation data, `AnnotationRenderer` (ForepawDarwin) draws on the image via CoreGraphics.
 

@@ -164,23 +164,61 @@ struct OCR: AsyncParsableCommand {
     @Option(name: .long, help: "Filter results containing this text")
     var find: String?
 
+    @Flag(name: .long, help: "Skip saving the display screenshot (only output OCR text)")
+    var noScreenshot: Bool = false
+
+    @Option(name: .long, help: "Image format for screenshot: jpeg (default) or png")
+    var format: String?
+
+    @Option(name: .long, help: "JPEG quality 1-100 (default 85)")
+    var quality: Int?
+
+    @Option(name: .long, help: "Output scale: 1 (default, logical pixels) or 2 (Retina)")
+    var scale: Int?
+
+    @Flag(name: .long, help: "Exclude mouse cursor from screenshot")
+    var noCursor: Bool = false
+
     mutating func run() async throws {
-        let results = try await provider.ocr(app: global.app, window: global.window, find: find)
+        let ssOptions: ScreenshotOptions? = noScreenshot ? nil : buildScreenshotOptions()
+        let output = try await provider.ocr(
+            app: global.app, window: global.window, find: find,
+            screenshotOptions: ssOptions)
+
+        // Print screenshot path first (most useful to agents)
+        if let path = output.screenshotPath {
+            print(path)
+        }
 
         if global.json {
-            for r in results {
+            for r in output.results {
                 print(
                     "{\"text\": \"\(r.text)\", \"x\": \(Int(r.center.x)), \"y\": \(Int(r.center.y)), \"bounds\": {\"x\": \(Int(r.bounds.x)), \"y\": \(Int(r.bounds.y)), \"w\": \(Int(r.bounds.width)), \"h\": \(Int(r.bounds.height))}}"
                 )
             }
         } else {
-            for r in results {
+            for r in output.results {
                 print("\(r.text)  [\(Int(r.center.x)),\(Int(r.center.y))]")
             }
         }
 
-        if results.isEmpty {
+        if output.results.isEmpty {
             print(find != nil ? "No text matching '\(find!)' found" : "No text recognized")
         }
+    }
+
+    private func buildScreenshotOptions() -> ScreenshotOptions {
+        let fmt: ImageFormat
+        if let f = format {
+            fmt = ImageFormat(rawValue: f) ?? .jpeg
+        } else {
+            fmt = .jpeg
+        }
+        return ScreenshotOptions(
+            format: fmt,
+            quality: quality ?? 85,
+            scale: scale ?? 1,
+            cursor: !noCursor
+        )
     }
 }

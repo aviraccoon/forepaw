@@ -30,7 +30,11 @@ public protocol DesktopProvider: Sendable {
         -> ScreenshotResult
 
     /// Screenshot + OCR, returning recognized text with screen coordinates.
-    func ocr(app: String?, window: String?, find: String?) async throws -> [OCRResult]
+    /// When `screenshotOptions` is provided, also saves an agent-friendly display copy.
+    func ocr(
+        app: String?, window: String?, find: String?,
+        screenshotOptions: ScreenshotOptions?
+    ) async throws -> OCROutput
 
     // MARK: - Actions (element-based)
 

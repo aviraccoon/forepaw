@@ -526,7 +526,7 @@ extension DarwinProvider {
         let deadline = Date().addingTimeInterval(timeout)
 
         while Date() < deadline {
-            let matches = try await ocr(app: app, window: window, find: text)
+            let matches = try await ocr(app: app, window: window, find: text, screenshotOptions: nil).results
             if let match = matches.first {
                 return ActionResult(success: true, message: "found '\(match.text)' after waiting")
             }

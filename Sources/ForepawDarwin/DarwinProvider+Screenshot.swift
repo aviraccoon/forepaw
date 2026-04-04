@@ -7,7 +7,11 @@ import ForepawCore
 extension DarwinProvider {
     /// Screenshot + OCR, returning recognized text with screen coordinates.
     /// When `find` is provided, uses word-level bounding boxes for precise targeting.
-    public func ocr(app: String?, window: String? = nil, find: String? = nil) async throws -> [OCRResult] {
+    /// When `screenshotOptions` is provided, also saves an agent-friendly display copy.
+    public func ocr(
+        app: String?, window: String? = nil, find: String? = nil,
+        screenshotOptions: ScreenshotOptions? = nil
+    ) async throws -> OCROutput {
         // OCR needs full-res PNG for accurate text recognition
         let ocrOptions = ScreenshotOptions(format: .png, scale: 2, cursor: false)
         let screenshotResult = try await screenshot(
@@ -18,8 +22,21 @@ extension DarwinProvider {
             throw ForepawError.actionFailed("Failed to load screenshot at \(screenshotResult.path)")
         }
         let engine = OCREngine()
-        return try engine.recognize(
+        let results = try engine.recognize(
             imagePath: screenshotResult.path, imageHeight: Double(rep.pixelsHigh), find: find)
+
+        // Optionally produce an agent-friendly display copy from the same capture
+        var displayPath: String?
+        if let displayOptions = screenshotOptions {
+            let tag = "\(Int(Date().timeIntervalSince1970))-\(UInt32.random(in: 0...0xFFFF))"
+            displayPath = try postProcessScreenshot(
+                rawPath: screenshotResult.path, tag: tag, options: displayOptions)
+        } else {
+            // Clean up the full-res PNG when no display copy needed
+            try? FileManager.default.removeItem(atPath: screenshotResult.path)
+        }
+
+        return OCROutput(results: results, screenshotPath: displayPath)
     }
 
     /// Click at a specific screen coordinate with app activation.
@@ -54,7 +71,8 @@ extension DarwinProvider {
     internal func resolveOCRText(
         _ text: String, app: String, window: String? = nil, index: Int? = nil
     ) async throws -> (text: String, point: CGPoint) {
-        let matches = try await ocr(app: app, window: window, find: text)
+        let output = try await ocr(app: app, window: window, find: text, screenshotOptions: nil)
+        let matches = output.results
         guard !matches.isEmpty else {
             throw ForepawError.actionFailed("No text matching '\(text)' found on screen")
         }
@@ -237,7 +255,7 @@ extension DarwinProvider {
 
     /// Post-process a screenshot: downscale to 1x and/or convert to JPEG.
     /// Returns the final output path (may be the same as input if no conversion needed).
-    private func postProcessScreenshot(
+    internal func postProcessScreenshot(
         rawPath: String, tag: String, options: ScreenshotOptions,
         suffix: String = ""
     ) throws -> String {
