@@ -90,14 +90,24 @@ struct Screenshot: AsyncParsableCommand {
     @Flag(name: .long, help: "Exclude mouse cursor from screenshot")
     var noCursor: Bool = false
 
+    @Option(name: .long, help: "Crop to element ref bounds (e.g. --ref @e5). Requires --app.")
+    var ref: String?
+
+    @Option(name: .long, help: "Crop to screen region: x,y,w,h (e.g. --region 100,200,400,300). Requires --app.")
+    var region: String?
+
+    @Option(name: .long, help: "Padding around cropped area in logical pixels (default 20)")
+    var padding: Int?
+
     mutating func run() async throws {
         let annotationStyle = resolveAnnotationStyle()
         let refFilter = only.isEmpty ? nil : only.compactMap { ElementRef.parse($0) }
         let ssOptions = buildScreenshotOptions()
+        let cropRegion = try resolveCropRegion()
         let result = try await provider.screenshot(
             app: global.app, window: global.window,
             style: annotationStyle, only: refFilter,
-            options: ssOptions)
+            options: ssOptions, crop: cropRegion)
         print(result.path)
         if let legend = result.legend {
             print(legend)
@@ -117,6 +127,32 @@ struct Screenshot: AsyncParsableCommand {
             scale: scale ?? 1,
             cursor: !noCursor
         )
+    }
+
+    private func resolveCropRegion() throws -> CropRegion? {
+        let pad = Double(padding ?? 20)
+
+        if let ref = ref {
+            guard let app = global.app else {
+                throw ValidationError("--ref requires --app")
+            }
+            guard let elementRef = ElementRef.parse(ref) else {
+                throw ValidationError("Invalid ref format: \(ref). Expected @eN (e.g. @e5)")
+            }
+            let bounds = try provider.resolveRefBounds(elementRef, app: app)
+            return CropRegion(screenRect: bounds, padding: pad)
+        }
+
+        if let region = region {
+            let parts = region.split(separator: ",").compactMap { Double($0) }
+            guard parts.count == 4 else {
+                throw ValidationError("Invalid region format: \(region). Expected x,y,w,h (e.g. 100,200,400,300)")
+            }
+            let rect = Rect(x: parts[0], y: parts[1], width: parts[2], height: parts[3])
+            return CropRegion(screenRect: rect, padding: pad)
+        }
+
+        return nil
     }
 
     private func resolveAnnotationStyle() -> AnnotationStyle? {

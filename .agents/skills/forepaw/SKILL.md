@@ -58,9 +58,14 @@ Screenshot format options: `--format`, `--quality`, `--scale`, `--no-cursor` (sa
 ```bash
 forepaw screenshot --app "App Name"   # plain screenshot
 forepaw screenshot                    # full screen
+forepaw screenshot --app "App Name" --ref @e5              # crop to element bounds
+forepaw screenshot --app "App Name" --ref @e5 --padding 40 # more context around element
+forepaw screenshot --app "App Name" --region 100,200,400,300  # crop to screen region (x,y,w,h)
 ```
 
 Returns a screenshot path (WebP if `cwebp` is installed, else JPEG; 1x scale by default). Use when you need to see what's on screen without OCR text. The image can be read with the `read` tool.
+
+**Area capture with `--ref` or `--region`:** Crops the screenshot to just the specified area. `--ref @eN` resolves the element's bounds from the AX tree. `--region x,y,w,h` uses screen coordinates. Both add 20px padding by default (override with `--padding`). Works with `--annotate` too -- annotations are rendered on the full image first, then cropped. Requires `--app`.
 
 ### 4. Annotated screenshot (visual + structural)
 

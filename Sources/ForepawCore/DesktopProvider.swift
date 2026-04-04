@@ -23,9 +23,10 @@ public protocol DesktopProvider: Sendable {
     /// Take a screenshot. If `app` is nil, captures full screen.
     /// When `style` is provided, overlays annotations on interactive elements.
     /// When `only` is provided, only those refs are annotated.
+    /// When `crop` is provided, the image is cropped to that region.
     func screenshot(
         app: String?, window: String?, style: AnnotationStyle?, only: [ElementRef]?,
-        options: ScreenshotOptions
+        options: ScreenshotOptions, crop: CropRegion?
     ) async throws
         -> ScreenshotResult
 
@@ -109,6 +110,9 @@ public protocol DesktopProvider: Sendable {
 
     /// Resolve a ref to its center point in screen coordinates.
     func resolveRefPosition(_ ref: ElementRef, app: String) throws -> Point
+
+    /// Resolve a ref to its bounding rectangle in screen coordinates.
+    func resolveRefBounds(_ ref: ElementRef, app: String) throws -> Rect
 
     // MARK: - Permissions
 

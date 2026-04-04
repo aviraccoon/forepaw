@@ -15,7 +15,7 @@ extension DarwinProvider {
         // OCR needs full-res PNG for accurate text recognition
         let ocrOptions = ScreenshotOptions(format: .png, scale: 2, cursor: false)
         let screenshotResult = try await screenshot(
-            app: app, window: window, style: nil, only: nil, options: ocrOptions)
+            app: app, window: window, style: nil, only: nil, options: ocrOptions, crop: nil)
         guard let image = NSImage(contentsOfFile: screenshotResult.path),
             let rep = image.representations.first
         else {
@@ -141,7 +141,7 @@ extension DarwinProvider {
 
     public func screenshot(
         app: String?, window: String? = nil, style: AnnotationStyle? = nil, only: [ElementRef]? = nil,
-        options: ScreenshotOptions = .default
+        options: ScreenshotOptions = .default, crop: CropRegion? = nil
     ) async throws -> ScreenshotResult {
         guard CGPreflightScreenCaptureAccess() else {
             throw ForepawError.screenRecordingDenied
@@ -176,9 +176,15 @@ extension DarwinProvider {
             process.waitUntilExit()
         }
 
+        // Non-annotated path: crop (if requested) then post-process
         guard let style = style, let appName = app else {
+            var currentPath = rawPath
+            if let crop = crop, let resolved = resolvedWindow {
+                currentPath = try applyCrop(
+                    crop, resolved: resolved, inputPath: currentPath, tag: tag)
+            }
             let finalPath = try postProcessScreenshot(
-                rawPath: rawPath, tag: tag, options: options)
+                rawPath: currentPath, tag: tag, options: options)
             return ScreenshotResult(path: finalPath, annotations: nil, legend: nil)
         }
 
@@ -213,10 +219,16 @@ extension DarwinProvider {
         }
 
         guard !annotations.isEmpty else {
-            return ScreenshotResult(path: rawPath, annotations: nil, legend: "No interactive elements found")
+            var currentPath = rawPath
+            if let crop = crop, let resolved = resolvedWindow {
+                currentPath = try applyCrop(
+                    crop, resolved: resolved, inputPath: currentPath, tag: tag)
+            }
+            return ScreenshotResult(
+                path: currentPath, annotations: nil, legend: "No interactive elements found")
         }
 
-        // Render annotated image
+        // Render annotations on the full window image first
         let annotatedPath = "/tmp/forepaw-\(tag)-annotated.png"
         let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
         let renderer = AnnotationRenderer()
@@ -227,13 +239,22 @@ extension DarwinProvider {
             scaleFactor: scaleFactor,
             outputPath: annotatedPath
         )
+        try? FileManager.default.removeItem(atPath: rawPath)
+
+        // Crop the annotated image if requested (annotations are already placed correctly)
+        var currentAnnotated = annotatedPath
+        if let crop = crop, let resolved = resolvedWindow {
+            currentAnnotated = try applyCrop(
+                crop, resolved: resolved, inputPath: currentAnnotated, tag: tag,
+                suffix: "-annotated")
+        }
 
         // Generate legend
         let legend = AnnotationLegend().format(annotations: annotations)
 
         // Post-process the annotated image (scale + format conversion)
         let finalPath = try postProcessScreenshot(
-            rawPath: annotatedPath, tag: tag, options: options,
+            rawPath: currentAnnotated, tag: tag, options: options,
             suffix: "-annotated")
         return ScreenshotResult(path: finalPath, annotations: annotations, legend: legend)
     }
@@ -251,6 +272,28 @@ extension DarwinProvider {
         if let error = CoordinateValidation.validate(point: point, bounds: bounds) {
             throw ForepawError.actionFailed(error)
         }
+    }
+
+    /// Apply a crop region to an image file.
+    /// Returns the path to the cropped image (or the original if crop doesn't overlap).
+    internal func applyCrop(
+        _ crop: CropRegion, resolved: ResolvedWindow, inputPath: String,
+        tag: String, suffix: String = ""
+    ) throws -> String {
+        let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
+        let windowOrigin = Point(x: resolved.origin.x, y: resolved.origin.y)
+        let windowSize = Point(x: resolved.size.width, y: resolved.size.height)
+        guard
+            let cropRect = crop.imageCropRect(
+                windowOrigin: windowOrigin, windowSize: windowSize, scaleFactor: scaleFactor
+            )
+        else {
+            return inputPath  // No overlap -- return original
+        }
+        let croppedPath = "/tmp/forepaw-\(tag)\(suffix)-cropped.png"
+        try cropImage(at: inputPath, to: croppedPath, rect: cropRect)
+        try? FileManager.default.removeItem(atPath: inputPath)
+        return croppedPath
     }
 
     /// Post-process a screenshot: downscale and/or convert format.
@@ -341,5 +384,41 @@ extension DarwinProvider {
         }
 
         return outputPath
+    }
+
+    /// Crop an image to a pixel rectangle using CoreGraphics.
+    internal func cropImage(
+        at inputPath: String, to outputPath: String,
+        rect: (x: Int, y: Int, width: Int, height: Int)
+    ) throws {
+        guard let dataProvider = CGDataProvider(filename: inputPath),
+            let cgImage = CGImage(
+                pngDataProviderSource: dataProvider, decode: nil,
+                shouldInterpolate: false, intent: .defaultIntent)
+        else {
+            throw ForepawError.actionFailed("Failed to load image for cropping: \(inputPath)")
+        }
+
+        // Clamp rect to image bounds
+        let imgW = cgImage.width
+        let imgH = cgImage.height
+        let cx = max(0, min(rect.x, imgW - 1))
+        let cy = max(0, min(rect.y, imgH - 1))
+        let cw = max(1, min(rect.width, imgW - cx))
+        let ch = max(1, min(rect.height, imgH - cy))
+
+        let cropCGRect = CGRect(x: cx, y: cy, width: cw, height: ch)
+        guard let cropped = cgImage.cropping(to: cropCGRect) else {
+            throw ForepawError.actionFailed("Failed to crop image")
+        }
+
+        let url = URL(fileURLWithPath: outputPath) as CFURL
+        guard let dest = CGImageDestinationCreateWithURL(url, "public.png" as CFString, 1, nil) else {
+            throw ForepawError.actionFailed("Failed to create image destination: \(outputPath)")
+        }
+        CGImageDestinationAddImage(dest, cropped, nil)
+        guard CGImageDestinationFinalize(dest) else {
+            throw ForepawError.actionFailed("Failed to write cropped image: \(outputPath)")
+        }
     }
 }

@@ -128,17 +128,23 @@ extension DarwinProvider {
     ///   - deltaY: Vertical scroll amount in "lines". Positive = up, negative = down.
     ///   - deltaX: Horizontal scroll amount. Positive = left, negative = right.
     public func scroll(at point: CGPoint, deltaY: Int32, deltaX: Int32 = 0) throws {
-        // Move mouse to the scroll target so the scroll event hits the right element.
+        moveMouseToScrollTarget(point)
+        try postScrollEvent(deltaY: deltaY, deltaX: deltaX)
+    }
+
+    /// Move the mouse to the scroll target point and wait for hover effects to settle.
+    internal func moveMouseToScrollTarget(_ point: CGPoint) {
         guard
             let moveEvent = CGEvent(
                 mouseEventSource: nil, mouseType: .mouseMoved,
                 mouseCursorPosition: point, mouseButton: .left)
-        else {
-            throw ForepawError.actionFailed("Failed to create mouse move event")
-        }
+        else { return }
         moveEvent.post(tap: .cghidEventTap)
-        Thread.sleep(forTimeInterval: 0.05)  // let the move settle
+        Thread.sleep(forTimeInterval: 0.05)
+    }
 
+    /// Post a scroll wheel event at the current mouse position.
+    internal func postScrollEvent(deltaY: Int32, deltaX: Int32 = 0) throws {
         guard
             let scrollEvent = CGEvent(
                 scrollWheelEvent2Source: nil, units: .line,
@@ -166,6 +172,7 @@ extension DarwinProvider {
         runningApp.activate()
         try await Task.sleep(nanoseconds: 300_000_000)
 
+        let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
         let scrollPoint: CGPoint
 
         if let ref = ref {
@@ -176,8 +183,6 @@ extension DarwinProvider {
             }
             scrollPoint = CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
         } else {
-            // Scroll at the center of the targeted window
-            let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
             scrollPoint = resolved.center
         }
 
@@ -200,10 +205,70 @@ extension DarwinProvider {
             throw ForepawError.actionFailed("Unknown direction '\(direction)'. Use up, down, left, or right.")
         }
 
-        try scroll(at: scrollPoint, deltaY: deltaY, deltaX: deltaX)
+        // Move mouse to scroll target first, then capture fingerprint.
+        // This ensures hover effects (e.g. Discord message highlight) are present
+        // in both before and after captures.
+        moveMouseToScrollTarget(scrollPoint)
+
+        // Wait for hover effects to settle after mouse move
+        try await Task.sleep(nanoseconds: 150_000_000)
+
+        // Capture content fingerprint before scrolling for boundary detection
+        let beforeFingerprint = captureScrollFingerprint(windowID: resolved.windowID)
+
+        try postScrollEvent(deltaY: deltaY, deltaX: deltaX)
+
+        // Wait for scroll to take effect before comparing.
+        try await Task.sleep(nanoseconds: 150_000_000)
+
+        // Detect boundary: compare content before and after
+        let atBoundary: Bool
+        if let before = beforeFingerprint,
+            let after = captureScrollFingerprint(windowID: resolved.windowID)
+        {
+            atBoundary = before == after
+        } else {
+            atBoundary = false  // Can't determine -- assume not at boundary
+        }
+
+        let boundaryNote = atBoundary ? " (at boundary -- content did not change)" : ""
         return ActionResult(
             success: true,
-            message: "scrolled \(direction) \(amount) ticks at \(Int(scrollPoint.x)),\(Int(scrollPoint.y))")
+            message:
+                "scrolled \(direction) \(amount) ticks at \(Int(scrollPoint.x)),\(Int(scrollPoint.y))\(boundaryNote)"
+        )
+    }
+
+    /// Capture a fingerprint of the window's content for scroll boundary detection.
+    /// Returns raw pixel data of a thin horizontal strip from the center of the window.
+    /// Fast: uses in-memory CGWindowListCreateImage, no file I/O.
+    ///
+    /// Uses CGWindowListCreateImage (deprecated macOS 14, to be replaced by ScreenCaptureKit).
+    /// SCK is async and requires setup -- overkill for a synchronous pixel comparison.
+    /// Migrate when Apple removes the API or we bump the deployment target.
+    private func captureScrollFingerprint(windowID: CGWindowID) -> Data? {
+        guard
+            let image = CGWindowListCreateImage(
+                .null, .optionIncludingWindow, windowID,
+                [.boundsIgnoreFraming, .nominalResolution])
+        else { return nil }
+
+        let h = image.height
+        let w = image.width
+        guard h > 40 && w > 0 else { return nil }
+
+        // Crop a 20px tall strip from the vertical center of the window.
+        // This avoids title bars, toolbars, and status bars which don't change on scroll.
+        // Exclude the rightmost 30px to avoid transient scrollbar overlays
+        // (Electron apps like Discord show a fade-in/fade-out scrollbar on scroll).
+        let stripY = h / 2 - 10
+        let stripW = max(1, w - 30)
+        let stripRect = CGRect(x: 0, y: stripY, width: stripW, height: 20)
+        guard let strip = image.cropping(to: stripRect),
+            let provider = strip.dataProvider,
+            let data = provider.data
+        else { return nil }
+        return data as Data
     }
 
     internal func performMouseClick(
@@ -300,6 +365,15 @@ extension DarwinProvider {
             throw ForepawError.actionFailed("Cannot determine position of \(ref)")
         }
         return Point(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
+    }
+
+    /// Resolve a ref to its bounding rectangle in screen coordinates.
+    public func resolveRefBounds(_ ref: ElementRef, app: String) throws -> Rect {
+        let element = try resolveRef(ref, app: app)
+        guard let pos = getPosition(of: element), let size = getSize(of: element) else {
+            throw ForepawError.actionFailed("Cannot determine bounds of \(ref)")
+        }
+        return Rect(x: pos.x, y: pos.y, width: size.width, height: size.height)
     }
 
     /// Move the mouse to a screen point without clicking.

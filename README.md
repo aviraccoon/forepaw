@@ -31,6 +31,8 @@ forepaw screenshot --app Finder     # take a screenshot (JPEG, 1x, with cursor)
 forepaw screenshot --app Finder --format png --scale 2  # full-quality Retina PNG
 forepaw screenshot --app Finder --annotate  # numbered labels on elements
 forepaw screenshot --app Finder --style spotlight --only @e1 @e3  # highlight specific refs
+forepaw screenshot --app Finder --ref @e5    # crop to element bounds
+forepaw screenshot --app Finder --region 100,200,400,300  # crop to screen region
 ```
 
 The agent loop: **observe -> decide -> act -> observe**
@@ -77,7 +79,7 @@ swift run forepaw list-apps
 | Command | Description |
 |---------|-------------|
 | `snapshot --app <name> [-i] [-c] [--diff] [--context N]` | Accessibility tree with `@e` refs (--diff compares to previous) |
-| `screenshot [--app <name>] [--window <title\|id>] [--annotate\|--style <style>] [--only @eN...] [--format jpeg\|png\|webp] [--quality N] [--scale 1\|2] [--no-cursor]` | Take a screenshot, optionally annotated |
+| `screenshot [--app <name>] [--window <title\|id>] [--annotate\|--style <style>] [--only @eN...] [--ref @eN] [--region x,y,w,h] [--padding N] [--format jpeg\|png\|webp] [--quality N] [--scale 1\|2] [--no-cursor]` | Take a screenshot, optionally annotated or cropped to an element/region |
 | `ocr [--app <name>] [--window <title\|id>] [--find <text>] [--no-screenshot] [--format jpeg\|png\|webp] [--quality N] [--scale 1\|2] [--no-cursor]` | Screenshot + OCR, returns screenshot path + text with coordinates |
 | `list-apps [--json]` | Running GUI applications |
 | `list-windows [--app <name>]` | Visible windows with titles and IDs |
@@ -189,7 +191,7 @@ The `ocr` command saves an agent-friendly screenshot alongside the text results,
 
 **Batch**: Executes multiple actions sequentially in one process invocation. Actions are separated by `;;`. The `--app` and `--window` flags apply to all actions unless overridden per-action. Default 100ms delay between actions. Supported actions: click, drag, hover, type, keyboard-type, press, scroll, ocr-click, wait. **Use batch for any multi-step interaction** -- separate CLI invocations return control to the terminal between commands, which steals focus from the target app. Any click-then-type pattern needs batch.
 
-**Screenshots**: Default output uses the best available format at 1x logical pixels with the mouse cursor visible. If `cwebp` is installed, uses WebP (~85KB per window). Otherwise falls back to JPEG (~150KB). Both are dramatically smaller than Retina PNGs (~650KB+). Use `--format png --scale 2` for full-quality Retina output. `--no-cursor` hides the cursor. OCR internally uses full-resolution PNG regardless of display options.
+**Screenshots**: Default output uses the best available format at 1x logical pixels with the mouse cursor visible. If `cwebp` is installed, uses WebP (~85KB per window). Otherwise falls back to JPEG (~150KB). Both are dramatically smaller than Retina PNGs (~650KB+). Use `--format png --scale 2` for full-quality Retina output. `--no-cursor` hides the cursor. OCR internally uses full-resolution PNG regardless of display options. **Area capture**: `--ref @eN` crops to the element's bounds (resolved from the AX tree), `--region x,y,w,h` crops to a screen rectangle. Both add 20px padding by default (`--padding N` to override). Works with `--annotate` -- annotations are rendered on the full image first, then cropped.
 
 **Annotated screenshots**: Captures a window screenshot, walks the AX tree for the same window, then overlays numbered labels on interactive elements using CoreGraphics. Labels use sequential display numbers (1, 2, 3...) with a legend mapping to `@e` refs. Three styles: `badges` (small colored pills -- agent-optimized), `labeled` (bounding boxes with role+name -- human-readable), `spotlight` (dims non-interactive areas). Color-coded by element category: green=buttons, yellow=text fields, blue=selection controls, purple=navigation. `--only @eN...` filters to specific refs. The annotation pipeline is split: `AnnotationCollector` (ForepawCore, platform-agnostic) walks the tree and collects annotation data, `AnnotationRenderer` (ForepawDarwin) draws on the image via CoreGraphics.
 
