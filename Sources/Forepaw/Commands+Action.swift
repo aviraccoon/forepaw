@@ -7,7 +7,8 @@ struct Click: AsyncParsableCommand {
         abstract: "Click an element by ref or at coordinates"
     )
 
-    @Argument(help: "Element ref (e.g. @e3) or window-relative coordinates (e.g. 500,300)")
+    @Argument(
+        help: "Element ref (@e3), coordinates (500,300), or region (400,280,80,80)")
     var target: String
 
     @Option(name: .long, help: "Target application name (required; coordinates are relative to window)")
@@ -34,6 +35,12 @@ struct Click: AsyncParsableCommand {
                 throw ValidationError("--app is required for ref-based click")
             }
             result = try await provider.click(ref: elementRef, app: app, options: options)
+        } else if let region = parseRegion(target) {
+            // Region click: find and click the most prominent visual element
+            guard let app else {
+                throw ValidationError("--app is required for region-based click")
+            }
+            result = try await provider.clickRegion(region, app: app, window: nil, options: options)
         } else if let point = parseCoordinate(target) {
             guard let app else {
                 throw ValidationError("--app is required for coordinate-based click")
@@ -41,7 +48,7 @@ struct Click: AsyncParsableCommand {
             result = try await provider.clickAtPoint(point, app: app, options: options)
         } else {
             throw ValidationError(
-                "Invalid target: \(target). Expected a ref (@e1) or coordinates (500,300).")
+                "Invalid target: \(target). Expected a ref (@e1), coordinates (500,300), or region (400,280,80,80).")
         }
 
         let formatter = OutputFormatter(json: json)
@@ -727,6 +734,18 @@ func parseCoordinate(_ string: String) -> Point? {
         let y = Double(parts[1].trimmingCharacters(in: .whitespaces))
     else { return nil }
     return Point(x: x, y: y)
+}
+
+/// Parse "x,y,w,h" into a Rect (4 components = region, distinct from 2-component coordinates).
+func parseRegion(_ string: String) -> Rect? {
+    let parts = string.split(separator: ",")
+    guard parts.count == 4,
+        let x = Double(parts[0].trimmingCharacters(in: .whitespaces)),
+        let y = Double(parts[1].trimmingCharacters(in: .whitespaces)),
+        let w = Double(parts[2].trimmingCharacters(in: .whitespaces)),
+        let h = Double(parts[3].trimmingCharacters(in: .whitespaces))
+    else { return nil }
+    return Rect(x: x, y: y, width: w, height: h)
 }
 
 struct Scroll: AsyncParsableCommand {

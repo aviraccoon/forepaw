@@ -59,6 +59,62 @@ extension DarwinProvider {
         return OCROutput(results: results, screenshotPath: displayPath)
     }
 
+    /// Click the most visually prominent element in a window-relative region.
+    /// Uses saturation-based centroid detection -- colored buttons (green play,
+    /// blue links, red close) stand out against desaturated backgrounds.
+    ///
+    /// The agent provides a rough bounding box; forepaw handles pixel precision.
+    public func clickRegion(
+        _ region: Rect, app: String, window: String? = nil,
+        options: ClickOptions = .normal
+    ) async throws -> ActionResult {
+        guard CGPreflightScreenCaptureAccess() else {
+            throw ForepawError.screenRecordingDenied
+        }
+        let runningApp = try findApp(named: app)
+        runningApp.activate()
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        let resolved = try findWindow(pid: runningApp.processIdentifier, window: window)
+        let tag = "\(Int(Date().timeIntervalSince1970))-\(UInt32.random(in: 0...0xFFFF))"
+        let rawPath = "/tmp/forepaw-\(tag)-probe.png"
+
+        // Capture the window
+        var args = ["-x", "-o", "-l", String(resolved.windowID), rawPath]
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = args
+        try process.run()
+        process.waitUntilExit()
+        defer { try? FileManager.default.removeItem(atPath: rawPath) }
+
+        let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
+        let detector = SaliencyDetector()
+        guard
+            let target = detector.findTarget(
+                imagePath: rawPath, region: region, scaleFactor: scaleFactor
+            )
+        else {
+            throw ForepawError.actionFailed(
+                "No prominent visual element found in region "
+                    + "\(Int(region.x)),\(Int(region.y)) \(Int(region.width))x\(Int(region.height))")
+        }
+
+        // Click at the detected centroid
+        try validatePointInWindow(target, pid: runningApp.processIdentifier)
+        let screenPoint = try toScreenPoint(target, pid: runningApp.processIdentifier)
+        let button: CGMouseButton = options.button == .right ? .right : .left
+        try performMouseClick(at: screenPoint, button: button, clickCount: Int64(options.clickCount))
+
+        let isRight = options.button == .right
+        let isDouble = options.clickCount > 1
+        let label = isRight ? "right-clicked" : isDouble ? "double-clicked" : "clicked"
+        return ActionResult(
+            success: true,
+            message: "\(label) prominent element at \(Int(target.x)),\(Int(target.y))"
+                + " (in region \(Int(region.x)),\(Int(region.y)) \(Int(region.width))x\(Int(region.height)))")
+    }
+
     /// Click at a window-relative coordinate with app activation.
     ///
     /// Coordinates are window-relative: (0,0) = window top-left.
@@ -169,7 +225,8 @@ extension DarwinProvider {
 
     public func screenshot(
         app: String?, window: String? = nil, style: AnnotationStyle? = nil, only: [ElementRef]? = nil,
-        options: ScreenshotOptions = .default, crop: CropRegion? = nil
+        options: ScreenshotOptions = .default, crop: CropRegion? = nil,
+        gridSpacing: Int? = nil
     ) async throws -> ScreenshotResult {
         guard CGPreflightScreenCaptureAccess() else {
             throw ForepawError.screenRecordingDenied
@@ -204,12 +261,30 @@ extension DarwinProvider {
             process.waitUntilExit()
         }
 
-        // Non-annotated path: crop (if requested) then post-process
+        // Non-annotated path: crop (if requested), grid, then post-process
         guard let style = style, let appName = app else {
             var currentPath = rawPath
             if let crop = crop, let resolved = resolvedWindow {
                 currentPath = try applyCrop(
                     crop, resolved: resolved, inputPath: currentPath, tag: tag)
+            }
+            if let spacing = gridSpacing {
+                let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
+                let gridPath = "/tmp/forepaw-\(tag)-grid.png"
+                let renderer = AnnotationRenderer()
+                // Pass crop origin so grid labels show window-relative coords
+                let cropOrigin: (x: Double, y: Double)
+                if let crop = crop {
+                    cropOrigin = (crop.rect.x - crop.padding, crop.rect.y - crop.padding)
+                } else {
+                    cropOrigin = (0, 0)
+                }
+                try renderer.renderGrid(
+                    imagePath: currentPath, spacing: spacing,
+                    scaleFactor: scaleFactor, outputPath: gridPath,
+                    originOffset: cropOrigin)
+                try? FileManager.default.removeItem(atPath: currentPath)
+                currentPath = gridPath
             }
             let finalPath = try postProcessScreenshot(
                 rawPath: currentPath, tag: tag, options: options)

@@ -26,7 +26,8 @@ public protocol DesktopProvider: Sendable {
     /// When `crop` is provided, the image is cropped to that region.
     func screenshot(
         app: String?, window: String?, style: AnnotationStyle?, only: [ElementRef]?,
-        options: ScreenshotOptions, crop: CropRegion?
+        options: ScreenshotOptions, crop: CropRegion?,
+        gridSpacing: Int?
     ) async throws
         -> ScreenshotResult
 
@@ -44,6 +45,10 @@ public protocol DesktopProvider: Sendable {
 
     /// Click at a window-relative coordinate (0,0 = window top-left).
     func clickAtPoint(_ point: Point, app: String, options: ClickOptions) async throws -> ActionResult
+    func clickRegion(
+        _ region: Rect, app: String, window: String?, options: ClickOptions
+    ) async throws
+        -> ActionResult
 
     /// Type text into an element (focuses via AX, then types).
     func type(ref: ElementRef, text: String, app: String) async throws -> ActionResult
