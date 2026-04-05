@@ -123,6 +123,36 @@ The titled-window preference avoids Finder's full-screen desktop window (larger 
 
 Window info comes from `CGWindowListCopyWindowInfo(.optionOnScreenOnly, ...)`. The `ResolvedWindow` struct wraps the window ID, title, and bounds dict.
 
+### Multi-process app fallback
+
+> **The raccoon version:** Some trash cans are two-part: one bin for the lid, another for the bag. Steam is like that -- the app you see in the Dock has no real windows, while a hidden helper process holds the actual UI. forepaw checks both bins.
+
+Some apps (Steam) render their UI in a helper process with `accessory` activation policy. The main process (shown in `list-apps`) has only phantom windows (1x1 at offscreen coordinates). When `findWindow` finds no usable windows for the main PID, it falls back to searching `CGWindowList` for onscreen windows owned by processes with the same bundle ID prefix (e.g., `com.valvesoftware.steam` matches `com.valvesoftware.steam.helper`). This enables screenshots, OCR, and coordinate-based actions on Steam and similar multi-process apps.
+
+### CEF vs Electron
+
+CEF (Chromium Embedded Framework) apps like Spotify and Steam use the same Chromium engine as Electron but don't respond to `AXManualAccessibility`. The CEF accessibility bridge requires each embedding application to implement it -- unlike Electron, which provides a universal activation mechanism. CEF apps are detected by `Chromium Embedded Framework.framework` in the bundle but are NOT treated as Electron apps. They are OCR-only.
+
+## Region click (saliency detection)
+
+> **The raccoon version:** A raccoon can't describe *exactly* where the shiny thing is in the garbage bag, but it knows which *part* of the bag it's in. It reaches into that area and grabs the most interesting thing it touches. Region click works the same way -- point at an area, and forepaw finds the shiniest thing in it.
+
+`click x,y,w,h` targets a rough area instead of precise coordinates. `SaliencyDetector` captures a screenshot, crops the specified region, and finds the centroid of high-saturation pixels.
+
+Why saturation? UI buttons are colored (green play, blue links, red close, orange warnings). Backgrounds are desaturated (gray, black, white). The most saturated pixels in a small region are almost always the target button.
+
+### Pipeline
+
+1. Capture window screenshot via `screencapture -l`
+2. Crop to the specified region (in Retina pixel coordinates)
+3. Render pixels into an RGBA buffer via `CGContext`
+4. Compute HSL saturation per pixel; also track brightness deviation from median as fallback for desaturated icons (white on dark)
+5. Weighted centroid of pixels above saturation threshold (0.25) or brightness deviation threshold (0.3)
+6. Convert centroid from crop-pixel coordinates to window-relative logical coordinates
+7. Click at the centroid via the standard mouse click path
+
+The agent's job becomes "draw a rough box around the target" (which LLMs can do from screenshots) instead of "predict exact pixel coordinates" (which LLMs cannot reliably do -- see Anthropic's computer use research on pixel counting difficulty).
+
 ## OCR (Vision framework)
 
 > **The raccoon version:** Sometimes the trash can is sealed and you can't feel inside -- you have to *look* at it. OCR takes a picture of the window and reads the text, like a raccoon squinting at a label through the plastic.
@@ -261,3 +291,5 @@ A Linux implementation would use AT-SPI2 over DBus for the accessibility tree an
 - **Hover teleportation**: Without `--smooth`, hover teleports the cursor, which doesn't trigger `mouseEnter`/`mouseLeave` tracking areas. Some apps (e.g., Orion's sidebar) don't register the mouse leaving their hover zone.
 - **Scroll fingerprinting**: Uses `CGWindowListCreateImage` (deprecated in macOS 14). Works but should migrate to ScreenCaptureKit when Apple removes it or deployment target is bumped.
 - **VM guest typing**: `keyboard-type` sends wrong characters into VM guests (UTM). `press` commands work. VM hypervisors intercept CGEvent keystrokes differently.
+- **CEF apps have no AX tree**: Spotify, Steam, and other CEF apps expose zero accessibility tree content. Only OCR, screenshots, and coordinate/region-based actions work. No `@e` refs.
+- **Region click assumes colored targets**: `SaliencyDetector` uses pixel saturation to find button centers. Works well for colored buttons on desaturated backgrounds (most dark and light themes). May struggle with monochrome UIs where buttons and background have similar saturation.

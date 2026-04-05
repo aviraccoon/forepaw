@@ -69,6 +69,7 @@ That's it. Snapshot gives you refs (`@e1`, `@e2`, ...), you use those refs to ac
 | **Click** | `click @e3 --app Finder` | Click an element (AX action, mouse fallback) |
 | | `click @e3 --app Finder --right` | Right-click (context menu) |
 | | `click 500,300 --app Finder` | Click at window-relative coordinates |
+| | `click 310,420,80,70 --app Spotify` | Find & click prominent element in a region |
 | | `ocr-click "Settings" --app Discord` | Find text on screen and click it |
 | **Type** | `type @e2 "hello" --app Notes` | Focus element and type into it |
 | | `keyboard-type "hello" --app Notes` | Type into whatever is focused |
@@ -90,6 +91,20 @@ Some trash cans have a hidden compartment. Discord, Slack, VS Code, Cursor, Obsi
 Electron apps with icon libraries (Lucide, Tabler, FontAwesome, etc.) get automatic icon name resolution from CSS classes. An unnamed button with a `lucide-settings` class becomes `button @e5 "settings"`.
 
 For the rare Electron app where the tree is still sparse, `ocr` and `ocr-click` fill the gaps with Vision framework text recognition.
+
+## CEF apps (Spotify, Steam)
+
+Some apps use Chromium Embedded Framework instead of Electron. CEF doesn't respond to `AXManualAccessibility`, so the accessibility tree is empty. forepaw operates these through OCR and screenshots instead:
+
+```bash
+forepaw ocr-click "LIBRARY" --app Steam             # text navigation works via OCR
+forepaw ocr-click "Shelter" --app Spotify --double  # double-click to play a song
+forepaw click 310,420,80,70 --app Spotify           # region click for icon buttons
+```
+
+The **region click** (`click x,y,w,h`) solves the icon button problem. LLMs can't predict precise pixel coordinates from screenshots, but they can draw rough bounding boxes. forepaw analyzes pixel saturation in the region, finds the centroid of the most colorful element (buttons are colored, backgrounds aren't), and clicks it. No vision model required.
+
+Multi-process apps like Steam render their UI in a helper process. forepaw discovers these windows automatically -- `--app Steam` just works.
 
 ## Annotated screenshots
 

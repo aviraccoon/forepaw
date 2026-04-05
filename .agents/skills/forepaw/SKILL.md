@@ -43,6 +43,10 @@ Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' ch
 
 **Electron icon naming:** Electron apps using icon libraries (Lucide, Tabler, FontAwesome, etc.) get automatic icon names from CSS classes. An unnamed button with a Lucide settings icon becomes `button @e5 "settings"`. Also checks AXHelp, AXPlaceholderValue, and AXRoleDescription for additional names. Try `snapshot -i` first on any Electron app -- the tree is often better than expected.
 
+**CEF apps (Spotify, Steam):** Apps using Chromium Embedded Framework (not Electron) expose zero AX tree content. `snapshot` returns only window chrome. These apps are **OCR-only** -- use `ocr`, `ocr-click`, `screenshot`, and coordinate-based `click` to operate them. Text-based navigation works well (`ocr-click "LIBRARY"` navigates Steam). For icon-only buttons (play, shuffle, gear), use `click x,y,w,h` (region click) -- see "Icon-only buttons in CEF apps" below.
+
+**Multi-process apps (Steam):** Some apps render their UI in a helper process (e.g. `Steam Helper`). forepaw automatically discovers these windows when the main process has none -- just use `--app Steam` normally. The helper's window appears in `list-windows` output.
+
 **Performance:** Offscreen elements (outside the visible window area) are automatically excluded in all modes. With `-i`, menu bar and zero-size (hidden/collapsed) elements are also excluded. This dramatically speeds up apps like Music that expose large amounts of invisible content in their AX tree (e.g. play history at negative Y coordinates). Use `--offscreen` to include offscreen elements, `--menu` or `--zero-size` to include those back with `-i`.
 
 ### 2. OCR (fallback for sparse trees)
@@ -70,6 +74,8 @@ forepaw screenshot --app "App Name" --region 10,50,400,300  # crop to window-rel
 ```
 
 Returns a screenshot path (WebP if `cwebp` is installed, else JPEG; 1x scale by default). Use when you need to see what's on screen without OCR text. The image can be read with the `read` tool.
+
+**Coordinate grid:** `--grid N` overlays labeled grid lines every N pixels with window-relative coordinates. Useful for human debugging -- prefer `click x,y,w,h` (region click) for agent-driven icon targeting.
 
 **Area capture with `--ref` or `--region`:** Crops the screenshot to just the specified area. `--ref @eN` resolves the element's bounds from the AX tree. `--region x,y,w,h` uses window-relative coordinates. Both add 20px padding by default (override with `--padding`). Works with `--annotate` too -- annotations are rendered on the full image first, then cropped. Requires `--app`.
 
@@ -147,6 +153,14 @@ forepaw hover 500,300 --app "App Name"    # hover at window-relative position
 ```
 
 Coordinates are **window-relative** (0,0 = top-left of window). Use when you have coordinates from snapshot bounds but no ref (e.g. static text, or when refs shift). Read the `(x,y WxH)` from snapshot output and compute the center: `x + W/2, y + H/2`.
+
+### Click by region (for icon buttons without AX or text)
+
+```bash
+forepaw click 310,420,80,70 --app Spotify  # find & click prominent element in region
+```
+
+Pass 4 values `x,y,w,h` to target a rough area. forepaw captures a screenshot, analyzes pixel saturation in that region, finds the centroid of the most colorful element, and clicks it. Ideal for icon-only buttons in CEF apps (play, shuffle, close) where there's no AX ref and no text for OCR. The region doesn't need to be precise -- a box that contains the target works.
 
 **Without --app**, `hover` treats coordinates as screen-absolute (for global positioning). All other coordinate commands require `--app`.
 
@@ -342,6 +356,40 @@ The title shown in quotes in `list-windows` output is what you pass to `--window
   forepaw ocr-click --text "--Settings" --app App
   ```
   `--text` unconditionally takes the next argument as its value, even if it looks like a flag.
+
+## Icon-only buttons in CEF apps
+
+CEF apps (Spotify, Steam) have no AX tree. OCR finds text but not icon buttons (play, skip, heart, gear). Use these techniques:
+
+### Region click (preferred for icon buttons)
+Pass a 4-component target `x,y,w,h` to `click` to target a rough region. forepaw finds the most visually prominent element by pixel saturation and clicks its center:
+```bash
+forepaw click 310,420,80,70 --app Spotify   # clicks green play button in that region
+forepaw click 440,420,60,60 --app Spotify   # clicks shuffle icon in that region
+```
+The agent provides a rough bounding box (doesn't need to be precise); forepaw handles pixel-level targeting. Works because colored UI elements (green play, blue links, red close) have high saturation against desaturated backgrounds (gray, black, white).
+
+Output includes the detected coordinates: `clicked prominent element at 349,453 (in region 310,420 80x70)`
+
+### Double-click for list items
+In Spotify and similar apps, double-click a song title to play it:
+```bash
+forepaw ocr-click "Song Title" --app Spotify --double
+```
+
+### Grid overlay (for human debugging)
+`--grid N` overlays labeled coordinate gridlines on screenshots. Useful for humans verifying positions, but LLMs cannot accurately read pixel coordinates from grid labels -- use region click instead.
+```bash
+forepaw screenshot --app Spotify --grid 100
+forepaw screenshot --app Spotify --region 380,260,150,100 --grid 25
+```
+
+### General strategy for CEF apps
+1. Use `ocr-click` for all text-labeled controls (tabs, menu items, links, song titles)
+2. Use `click x,y,w,h` (region click) for icon-only buttons -- draw a rough box around the target
+3. Use `ocr-click "text" --double` to activate list items (play songs, open files)
+4. Use keyboard shortcuts when available (`space` for play/pause in media apps)
+5. Use `hover` + screenshot to discover interactive regions via hover states
 
 ## Permissions
 
