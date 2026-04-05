@@ -45,7 +45,7 @@ Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' ch
 
 **Performance:** Offscreen elements (outside the visible window area) are automatically excluded in all modes. With `-i`, menu bar and zero-size (hidden/collapsed) elements are also excluded. This dramatically speeds up apps like Music that expose large amounts of invisible content in their AX tree (e.g. play history at negative Y coordinates). Use `--offscreen` to include offscreen elements, `--menu` or `--zero-size` to include those back with `-i`.
 
-### 2. OCR (fallback for Electron apps)
+### 2. OCR (fallback for sparse trees)
 
 ```bash
 forepaw ocr --app Discord                    # all text with coordinates + screenshot
@@ -237,6 +237,8 @@ forepaw scroll down --app Discord --at 200,400  # scroll at window-relative coor
 
 Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks. Use `--at x,y` to scroll a specific panel or sidebar when no ref is available (e.g. Discord's server list). Coordinates are window-relative and validated against window bounds.
 
+**Boundary detection:** When scroll hits the edge, the result message includes `(at boundary -- content did not change)`. Stop scrolling in that direction when you see this.
+
 ### Hover (trigger tooltips/hover states)
 
 ```bash
@@ -271,7 +273,7 @@ forepaw batch --app Finder --delay 200 "click @e1 ;; wait \"Documents\" ;; click
 
 Executes actions sequentially, separated by `;;`. The `--app` and `--window` flags apply to all actions unless overridden per-action. Default 100ms delay between actions (configurable with `--delay`).
 
-Supported actions: `click`, `hover`, `type`, `keyboard-type`, `press`, `scroll`, `ocr-click`, `wait`.
+Supported actions: `click`, `drag`, `hover`, `type`, `keyboard-type`, `press`, `scroll`, `ocr-click`, `wait`.
 
 Per-action overrides:
 ```bash
