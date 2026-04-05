@@ -18,9 +18,10 @@ Always snapshot or screenshot before acting. Never assume UI state from a previo
 ### 1. Accessibility tree (prefer this)
 
 ```bash
-forepaw snapshot --app "App Name" -i         # interactive elements only (skips menus + hidden)
+forepaw snapshot --app "App Name" -i         # interactive elements only (skips menus + hidden + offscreen)
 forepaw snapshot --app "App Name" -i --diff  # diff against previous snapshot
 forepaw snapshot --app "App Name" -i --menu  # include menu bar (excluded by default with -i)
+forepaw snapshot --app "App Name" --timing   # show per-subtree timing breakdown on stderr
 ```
 
 Returns structured text with `@e` refs and window-relative positions:
@@ -42,7 +43,7 @@ Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' ch
 
 **Electron icon naming:** Electron apps using icon libraries (Lucide, Tabler, FontAwesome, etc.) get automatic icon names from CSS classes. An unnamed button with a Lucide settings icon becomes `button @e5 "settings"`. Also checks AXHelp, AXPlaceholderValue, and AXRoleDescription for additional names. Try `snapshot -i` first on any Electron app -- the tree is often better than expected.
 
-**Performance:** With `-i`, menu bar and zero-size (hidden/collapsed) elements are automatically excluded. This significantly speeds up apps with large menus (Music: 300+ menu items skipped). Use `--menu` or `--zero-size` to include them back if needed. Some apps (Music, other Catalyst apps) have inherently slow AX responses (~55s even optimized) -- for these, consider using OCR instead.
+**Performance:** Offscreen elements (outside the visible window area) are automatically excluded in all modes. With `-i`, menu bar and zero-size (hidden/collapsed) elements are also excluded. This dramatically speeds up apps like Music that expose large amounts of invisible content in their AX tree (e.g. play history at negative Y coordinates). Use `--offscreen` to include offscreen elements, `--menu` or `--zero-size` to include those back with `-i`.
 
 ### 2. OCR (fallback for Electron apps)
 

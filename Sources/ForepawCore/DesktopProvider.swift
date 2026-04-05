@@ -195,16 +195,30 @@ public struct SnapshotOptions: Sendable {
     /// Skip subtrees rooted at elements with zero-size bounds (0x0).
     /// These are typically collapsed menus, hidden panels, or offscreen content.
     public let skipZeroSize: Bool
+    /// Skip subtrees whose bounds are entirely outside the window bounds.
+    /// Offscreen elements can't be interacted with until scrolled into view,
+    /// and agents re-snapshot after scrolling. Default-on in `-i` mode.
+    public let skipOffscreen: Bool
+    /// Window bounds for offscreen pruning. Required when `skipOffscreen` is true.
+    /// Elements whose bounds don't intersect this rect are skipped.
+    public let windowBounds: Rect?
+    /// Collect per-subtree timing data. Results are stored in `ElementTree.timing`.
+    public let timing: Bool
 
     public init(
         interactiveOnly: Bool = false, maxDepth: Int = defaultDepth,
-        compact: Bool = false, skipMenuBar: Bool = false, skipZeroSize: Bool = false
+        compact: Bool = false, skipMenuBar: Bool = false, skipZeroSize: Bool = false,
+        skipOffscreen: Bool = false, windowBounds: Rect? = nil,
+        timing: Bool = false
     ) {
         self.interactiveOnly = interactiveOnly
         self.maxDepth = maxDepth
         self.compact = compact
         self.skipMenuBar = skipMenuBar
         self.skipZeroSize = skipZeroSize
+        self.skipOffscreen = skipOffscreen
+        self.windowBounds = windowBounds
+        self.timing = timing
     }
 }
 

@@ -54,15 +54,93 @@ public struct ElementTree: Sendable {
     /// Window bounds in screen coordinates. Used to convert element bounds
     /// to window-relative coordinates for display and input.
     public let windowBounds: Rect?
+    /// Performance timing breakdown, populated when `SnapshotOptions.timing` is true.
+    public let timing: SnapshotTiming?
 
     public init(
         app: String, root: ElementNode, refs: [ElementRef: ElementRefInfo],
-        windowBounds: Rect? = nil
+        windowBounds: Rect? = nil, timing: SnapshotTiming? = nil
     ) {
         self.app = app
         self.root = root
         self.refs = refs
         self.windowBounds = windowBounds
+        self.timing = timing
+    }
+}
+
+/// Performance timing for a snapshot.
+public struct SnapshotTiming: Sendable {
+    /// Total wall time for the tree walk in milliseconds.
+    public let totalMs: Double
+    /// Total number of nodes visited.
+    public let nodeCount: Int
+    /// The root of the tree (for adaptive breakdown).
+    public let root: ElementNode
+
+    public init(totalMs: Double, nodeCount: Int, root: ElementNode) {
+        self.totalMs = totalMs
+        self.nodeCount = nodeCount
+        self.root = root
+    }
+
+    /// Format timing as a human-readable report.
+    /// Adaptively expands subtrees that hold >10% of total nodes.
+    public func report() -> String {
+        var lines: [String] = []
+        let avg = nodeCount > 0 ? totalMs / Double(nodeCount) : 0
+        lines.append(
+            String(
+                format: "snapshot: %.0fms, %d nodes, %.1fms/node avg",
+                totalMs, nodeCount, avg))
+        let threshold = max(nodeCount / 10, 2)  // 10% or at least 2
+        appendSubtreeReport(root, indent: 0, total: nodeCount, threshold: threshold, into: &lines)
+        return lines.joined(separator: "\n")
+    }
+
+    private func appendSubtreeReport(
+        _ node: ElementNode, indent: Int, total: Int,
+        threshold: Int, into lines: inout [String]
+    ) {
+        for child in node.children {
+            let count = Self.countNodes(child)
+            if count < threshold { continue }  // skip small subtrees
+
+            // Skip single-child chains: if this node has exactly one large child,
+            // don't print this node -- just recurse into the child. This collapses
+            // Electron's deep wrapper nesting (group > group > group > ...) into
+            // the first node that actually branches.
+            let largeChildren = child.children.filter { Self.countNodes($0) >= threshold }
+            if largeChildren.count == 1 && child.name == nil {
+                appendSubtreeReport(
+                    child, indent: indent, total: total,
+                    threshold: threshold, into: &lines)
+                continue
+            }
+
+            let pct = total > 0 ? Double(count) / Double(total) * 100 : 0
+            let label = Self.nodeLabel(child)
+            let prefix = String(repeating: "  ", count: indent + 1)
+            lines.append(
+                "\(prefix)\(label) \(String(format: "%5d nodes  %5.1f%%", count, pct))")
+            // Keep expanding if this subtree is still large
+            if count >= threshold && !child.children.isEmpty {
+                appendSubtreeReport(
+                    child, indent: indent + 1, total: total,
+                    threshold: threshold, into: &lines)
+            }
+        }
+    }
+
+    private static func nodeLabel(_ node: ElementNode) -> String {
+        let name = node.name.flatMap { $0.isEmpty ? nil : $0 }
+        let label = name.map { "\(node.role) \"\($0)\"" } ?? node.role
+        return String(label.prefix(40))
+    }
+
+    /// Count total nodes in a subtree.
+    public static func countNodes(_ node: ElementNode) -> Int {
+        1 + node.children.reduce(0) { $0 + countNodes($1) }
     }
 }
 

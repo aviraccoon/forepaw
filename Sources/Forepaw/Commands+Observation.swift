@@ -30,6 +30,12 @@ struct Snapshot: AsyncParsableCommand {
     @Flag(name: .long, help: "Include zero-size elements (excluded by default with -i)")
     var zeroSize: Bool = false
 
+    @Flag(name: .long, help: "Include offscreen elements (excluded by default)")
+    var offscreen: Bool = false
+
+    @Flag(name: .long, help: "Show per-subtree timing breakdown on stderr")
+    var timing: Bool = false
+
     mutating func run() async throws {
         guard let app = global.app else {
             throw ValidationError("--app is required")
@@ -44,7 +50,9 @@ struct Snapshot: AsyncParsableCommand {
             maxDepth: depth,
             compact: compact,
             skipMenuBar: interactive && !menu,
-            skipZeroSize: interactive && !includeHidden
+            skipZeroSize: interactive && !includeHidden,
+            skipOffscreen: !offscreen,
+            timing: timing
         )
         let tree = try await provider.snapshot(app: app, options: options)
         let renderer = TreeRenderer()
@@ -64,6 +72,11 @@ struct Snapshot: AsyncParsableCommand {
             }
         } else {
             print(rendered)
+        }
+
+        if let timingData = tree.timing {
+            FileHandle.standardError.write(
+                Data((timingData.report() + "\n").utf8))
         }
 
         // Always cache the current snapshot for future diffs

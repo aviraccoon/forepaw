@@ -39,17 +39,31 @@ extension DarwinProvider {
 
         let appElement = AXUIElementCreateApplication(runningApp.processIdentifier)
 
+        // Look up window bounds early -- needed for both offscreen pruning and
+        // window-relative coordinate display. Errors are non-fatal.
+        let windowBounds: Rect?
+        if let resolved = try? findWindow(pid: runningApp.processIdentifier, window: nil) {
+            windowBounds = Rect(
+                x: resolved.origin.x, y: resolved.origin.y,
+                width: resolved.size.width, height: resolved.size.height)
+        } else {
+            windowBounds = nil
+        }
+
         let pruning = TreePruning(
-            skipMenuBar: options.skipMenuBar, skipZeroSize: options.skipZeroSize)
+            skipMenuBar: options.skipMenuBar, skipZeroSize: options.skipZeroSize,
+            windowBounds: options.skipOffscreen ? windowBounds : nil)
 
         // Single-pass tree walk: builds the ElementNode tree and collects
         // AXUIElement handles for interactive elements simultaneously.
         // Previously this was two separate walks, doubling IPC calls.
         var axElements: [Int: AXUIElement] = [:]
         var axCounter = 1
+        let walkStart = CFAbsoluteTimeGetCurrent()
         let root = buildTree(
             element: appElement, depth: 0, maxDepth: effectiveDepth,
             pruning: pruning, axElements: &axElements, axCounter: &axCounter)
+        let walkMs = (CFAbsoluteTimeGetCurrent() - walkStart) * 1000
 
         let assigner = RefAssigner()
         let result = assigner.assign(root: root, interactiveOnly: options.interactiveOnly)
@@ -62,20 +76,17 @@ extension DarwinProvider {
             }
         }
 
-        // Look up window bounds for window-relative coordinate display.
-        // Errors are non-fatal -- we still return the tree without bounds.
-        let windowBounds: Rect?
-        if let resolved = try? findWindow(pid: runningApp.processIdentifier, window: nil) {
-            windowBounds = Rect(
-                x: resolved.origin.x, y: resolved.origin.y,
-                width: resolved.size.width, height: resolved.size.height)
-        } else {
-            windowBounds = nil
-        }
+        let timing: SnapshotTiming? =
+            options.timing
+            ? SnapshotTiming(
+                totalMs: walkMs,
+                nodeCount: SnapshotTiming.countNodes(root),
+                root: root)
+            : nil
 
         return ElementTree(
             app: appName, root: result.root, refs: result.refs,
-            windowBounds: windowBounds)
+            windowBounds: windowBounds, timing: timing)
     }
 
     /// Re-walk the tree to find the AXUIElement for a given ref.
@@ -108,14 +119,20 @@ extension DarwinProvider {
     internal struct TreePruning {
         let skipMenuBar: Bool
         let skipZeroSize: Bool
+        /// Window-relative bounds for offscreen pruning. Elements entirely
+        /// outside this rect are skipped. nil = no offscreen pruning.
+        let windowBounds: Rect?
 
-        static let none = TreePruning(skipMenuBar: false, skipZeroSize: false)
+        static let none = TreePruning(skipMenuBar: false, skipZeroSize: false, windowBounds: nil)
     }
 
     // MARK: - Batched attribute fetching
 
     /// Attributes fetched in a single IPC call per element.
-    /// Using AXUIElementCopyMultipleAttributeValues collapses 7+ round-trips into 1.
+    /// Indices 0-7 are the core attributes needed for every element.
+    /// Indices 8-12 are the computedName fallback attributes, fetched in the same
+    /// call to avoid additional IPC round-trips. This is the key optimization for
+    /// slow AX responders like Music (~4x speedup: 50s -> 12s).
     private static let batchAttributes: [String] = [
         kAXRoleAttribute,  // 0
         kAXTitleAttribute,  // 1
@@ -125,6 +142,12 @@ extension DarwinProvider {
         kAXSizeAttribute,  // 5
         kAXChildrenAttribute,  // 6
         kAXSubroleAttribute,  // 7
+        // computedName attributes (avoid individual IPC calls):
+        kAXTitleUIElementAttribute,  // 8
+        "AXHelp",  // 9
+        "AXPlaceholderValue",  // 10
+        "AXDOMClassList",  // 11
+        kAXRoleDescriptionAttribute,  // 12
     ]
 
     // nonisolated(unsafe): this CFArray is created once from static strings and never mutated.
@@ -162,7 +185,8 @@ extension DarwinProvider {
     ) -> ElementNode {
         guard depth < maxDepth else { return ElementNode(role: "AXGroup") }
 
-        // Batch fetch: one IPC call for role + title + desc + value + pos + size + children + subrole.
+        // Batch fetch: one IPC call for role + title + desc + value + pos + size + children + subrole
+        // + titleUIElement + help + placeholder + domClassList + roleDescription (13 attrs total).
         let attrs = getMultipleAttributes(element)
         let role = attrs[0] as? String ?? "AXUnknown"
 
@@ -177,11 +201,6 @@ extension DarwinProvider {
             axElements[axCounter] = element
             axCounter += 1
         }
-
-        let name =
-            nonEmpty(attrs[1] as? String)
-            ?? nonEmpty(attrs[2] as? String)
-            ?? computedName(of: element, role: role)
 
         let value = (attrs[3]).flatMap { val -> String? in
             if let s = val as? String { return s }
@@ -211,11 +230,34 @@ extension DarwinProvider {
         if pruning.skipZeroSize, let b = bounds,
             b.width == 0, b.height == 0, depth > 1
         {
+            let name =
+                nonEmpty(attrs[1] as? String)
+                ?? nonEmpty(attrs[2] as? String)
+                ?? computedName(from: attrs, children: [], element: element)
             return ElementNode(
                 role: role, name: name, value: value, bounds: bounds,
                 attributes: attributes)
         }
 
+        // Skip offscreen subtrees if requested. Elements entirely outside the
+        // window bounds can't be interacted with until scrolled into view.
+        // Agents re-snapshot after scrolling, so these are pure waste.
+        // Skip at depth > 2 to preserve the window/container structure.
+        if let wb = pruning.windowBounds, let b = bounds, depth > 2,
+            b.width > 0, b.height > 0
+        {
+            let noHorizontalOverlap = b.x + b.width <= wb.x || b.x >= wb.x + wb.width
+            let noVerticalOverlap = b.y + b.height <= wb.y || b.y >= wb.y + wb.height
+            if noHorizontalOverlap || noVerticalOverlap {
+                return ElementNode(
+                    role: role, name: nonEmpty(attrs[1] as? String),
+                    bounds: bounds, attributes: attributes)
+            }
+        }
+
+        // Build children BEFORE computing name. This lets computedName read
+        // names/values from already-built child ElementNodes instead of making
+        // individual IPC calls to query each child's attributes.
         var children: [ElementNode] = []
         if let childrenRef = attrs[6] as? [AXUIElement] {
             children = childrenRef.map {
@@ -224,6 +266,11 @@ extension DarwinProvider {
                     pruning: pruning, axElements: &axElements, axCounter: &axCounter)
             }
         }
+
+        let name =
+            nonEmpty(attrs[1] as? String)
+            ?? nonEmpty(attrs[2] as? String)
+            ?? computedName(from: attrs, children: children, element: element)
 
         return ElementNode(
             role: role,
@@ -272,71 +319,74 @@ extension DarwinProvider {
 
     // MARK: - Name computation
 
-    /// Derive a name from multiple fallback sources.
+    /// Derive a name from pre-fetched batch attributes and already-built child nodes.
+    ///
+    /// Uses attrs[8..12] (titleUIElement, help, placeholder, domClassList, roleDescription)
+    /// which were fetched in the same IPC call as the core attributes. Step 2 reads from
+    /// pre-built ElementNode children instead of making individual IPC calls per child.
+    /// The only remaining individual IPC calls are for the titleUIElement's own value/title
+    /// (step 1), which references a different AXUIElement.
     ///
     /// The chain (in priority order):
     /// 1. AXTitleUIElement -> its value or title
-    /// 2. First AXStaticText child's value, or AXImage child with icon classes
+    /// 2. First AXStaticText child's value, or AXImage child with a name
     /// 3. AXHelp (descriptive help text)
     /// 4. AXPlaceholderValue (text field placeholder)
     /// 5. AXDOMClassList -> icon class parsing (Electron apps with Lucide, Tabler, etc.)
     /// 6. AXRoleDescription (when more specific than the generic role name)
-    internal func computedName(of element: AXUIElement, role: String = "") -> String? {
-        // 1. AXTitleUIElement -> read its value or title
-        if let titleElement = getAttribute(element, kAXTitleUIElementAttribute) as! AXUIElement? {
-            if let val = getAttribute(titleElement, kAXValueAttribute) as? String, !val.isEmpty {
+    internal func computedName(
+        from attrs: [Any?], children: [ElementNode], element: AXUIElement
+    ) -> String? {
+        // 1. AXTitleUIElement (index 8) -> read its value or title.
+        //    The element ref is in the batch, but we need individual calls to
+        //    read the *referenced* element's value/title (different AXUIElement).
+        if let titleElement = attrs[8], !(titleElement is NSNull) {
+            // swiftlint:disable:next force_cast
+            let titleAX = titleElement as! AXUIElement
+            if let val = getAttribute(titleAX, kAXValueAttribute) as? String, !val.isEmpty {
                 return val
             }
-            if let title = getAttribute(titleElement, kAXTitleAttribute) as? String, !title.isEmpty {
+            if let title = getAttribute(titleAX, kAXTitleAttribute) as? String, !title.isEmpty {
                 return title
             }
         }
 
-        // 2. First AXStaticText child's value, or AXImage child with icon classes.
-        //    Many Electron buttons contain an AXImage child whose AXDOMClassList
-        //    has the icon identity (e.g. ["icon", "icon-tabler", "icon-tabler-home"]).
-        if let children = getAttribute(element, kAXChildrenAttribute) as? [AXUIElement] {
-            for child in children {
-                let childRole = getAttribute(child, kAXRoleAttribute) as? String
-                if childRole == "AXStaticText" {
-                    if let val = getAttribute(child, kAXValueAttribute) as? String, !val.isEmpty {
-                        return val
-                    }
+        // 2. First AXStaticText child's value, or AXImage child with a name.
+        //    Uses pre-built ElementNode children -- no IPC calls needed.
+        //    Children were built by buildTree which already batch-fetched their
+        //    attributes and computed their names (including icon class parsing).
+        for child in children {
+            if child.role == "AXStaticText" {
+                if let val = child.value, !val.isEmpty {
+                    return val
                 }
-                if childRole == "AXImage" {
-                    if let classList = getAttribute(child, "AXDOMClassList") as? [String],
-                        !classList.isEmpty,
-                        let iconName = Self.iconClassParser.parse(classList)
-                    {
-                        return iconName
-                    }
+            }
+            if child.role == "AXImage" {
+                if let iconName = child.name, !iconName.isEmpty {
+                    return iconName
                 }
             }
         }
 
-        // 3. AXHelp -- descriptive help text, sometimes the only label
-        if let help = getAttribute(element, "AXHelp") as? String, !help.isEmpty {
+        // 3. AXHelp (index 9)
+        if let help = attrs[9] as? String, !help.isEmpty {
             return help
         }
 
-        // 4. AXPlaceholderValue -- text field placeholder (e.g. "Search...")
-        if let placeholder = getAttribute(element, "AXPlaceholderValue") as? String,
-            !placeholder.isEmpty
-        {
+        // 4. AXPlaceholderValue (index 10)
+        if let placeholder = attrs[10] as? String, !placeholder.isEmpty {
             return placeholder
         }
 
-        // 5. AXDOMClassList -- extract icon names from CSS classes (Electron apps).
-        //    Lucide, Tabler, FontAwesome, etc. encode icon identity in class names.
-        if let classList = getAttribute(element, "AXDOMClassList") as? [String], !classList.isEmpty {
+        // 5. AXDOMClassList (index 11)
+        if let classList = attrs[11] as? [String], !classList.isEmpty {
             if let iconName = Self.iconClassParser.parse(classList) {
                 return iconName
             }
         }
 
-        // 6. AXRoleDescription -- use when more specific than the generic role.
-        //    e.g. "close button" is better than just "button" for AXButton.
-        if let roleDesc = getAttribute(element, kAXRoleDescriptionAttribute) as? String,
+        // 6. AXRoleDescription (index 12)
+        if let roleDesc = attrs[12] as? String,
             !roleDesc.isEmpty, !Self.genericRoleDescriptions.contains(roleDesc)
         {
             return roleDesc
