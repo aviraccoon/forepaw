@@ -154,13 +154,16 @@ forepaw hover 500,300 --app "App Name"    # hover at window-relative position
 
 Coordinates are **window-relative** (0,0 = top-left of window). Use when you have coordinates from snapshot bounds but no ref (e.g. static text, or when refs shift). Read the `(x,y WxH)` from snapshot output and compute the center: `x + W/2, y + H/2`.
 
-### Click by region (for icon buttons without AX or text)
+### Click/hover by region (for icon buttons without AX or text)
 
 ```bash
 forepaw click 310,420,80,70 --app Spotify  # find & click prominent element in region
+forepaw hover 325,410,60,60 --app Spotify  # find & hover prominent element (triggers tooltips)
 ```
 
-Pass 4 values `x,y,w,h` to target a rough area. forepaw captures a screenshot, analyzes pixel saturation in that region, finds the centroid of the most colorful element, and clicks it. Ideal for icon-only buttons in CEF apps (play, shuffle, close) where there's no AX ref and no text for OCR. The region doesn't need to be precise -- a box that contains the target works.
+Pass 4 values `x,y,w,h` to target a rough area. forepaw captures a screenshot, analyzes pixel saturation in that region, finds the centroid of the most colorful element, and clicks/hovers it. Ideal for icon-only buttons in CEF apps (play, shuffle, close) where there's no AX ref and no text for OCR. The region doesn't need to be precise -- a box that contains the target works.
+
+Hover region is useful for triggering hover states and visual feedback. In apps with AX trees, hover + snapshot can discover tooltips (`AXUserInterfaceTooltip`). In CEF apps (no AX tree), hover + screenshot lets the agent visually confirm what's under the cursor.
 
 **Without --app**, `hover` treats coordinates as screen-absolute (for global positioning). All other coordinate commands require `--app`.
 
@@ -260,10 +263,13 @@ forepaw hover @e5 --app "App Name"              # by ref (from snapshot)
 forepaw hover "Submit" --app "App Name"          # by text (OCR lookup)
 forepaw hover "8 comments" --app Orion           # hover over a link
 forepaw hover 200,470 --app Discord              # hover at window-relative coordinates (triggers tooltips)
+forepaw hover 325,410,60,60 --app Spotify       # hover prominent element in region (saliency-based)
 forepaw hover 700,400 --app Orion --smooth      # smooth mouse movement (dismisses hover-triggered panels)
 ```
 
-Moves the mouse without clicking. Accepts either an `@e` ref, text (OCR lookup), or coordinates. Useful for triggering tooltips, hover menus, or preview popups.
+Moves the mouse without clicking. Accepts an `@e` ref, text (OCR lookup), coordinates, or a region (`x,y,w,h`). Useful for triggering tooltips, hover menus, or preview popups.
+
+Region hover uses the same saliency detection as region click -- see "Click/hover by region" above. In CEF apps, use hover + screenshot (not snapshot) to visually confirm what's under the cursor.
 
 **`--smooth` flag:** Moves the mouse along a path from current position to target with intermediate events, instead of teleporting. Use when you need to dismiss hover-triggered overlays (e.g. Orion's auto-hiding tab sidebar) or trigger mouseEnter/mouseLeave handlers. Without `--smooth`, some apps don't register that the mouse left their hover zone. Works in batch too: `hover 1100,400 --smooth`.
 
@@ -361,15 +367,18 @@ The title shown in quotes in `list-windows` output is what you pass to `--window
 
 CEF apps (Spotify, Steam) have no AX tree. OCR finds text but not icon buttons (play, skip, heart, gear). Use these techniques:
 
-### Region click (preferred for icon buttons)
-Pass a 4-component target `x,y,w,h` to `click` to target a rough region. forepaw finds the most visually prominent element by pixel saturation and clicks its center:
+### Region click/hover (preferred for icon buttons)
+Pass a 4-component target `x,y,w,h` to `click` or `hover` to target a rough region. forepaw finds the most visually prominent element by pixel saturation and clicks/hovers its center:
 ```bash
 forepaw click 310,420,80,70 --app Spotify   # clicks green play button in that region
+forepaw hover 325,410,60,60 --app Spotify   # hovers play button, triggers tooltip
 forepaw click 440,420,60,60 --app Spotify   # clicks shuffle icon in that region
 ```
 The agent provides a rough bounding box (doesn't need to be precise); forepaw handles pixel-level targeting. Works because colored UI elements (green play, blue links, red close) have high saturation against desaturated backgrounds (gray, black, white).
 
 Output includes the detected coordinates: `clicked prominent element at 349,453 (in region 310,420 80x70)`
+
+Hover region triggers hover states and visual feedback. In CEF apps, follow up with a screenshot (not snapshot -- CEF has no AX tree) to visually confirm what's under the cursor or see tooltip text rendered on screen.
 
 ### Double-click for list items
 In Spotify and similar apps, double-click a song title to play it:

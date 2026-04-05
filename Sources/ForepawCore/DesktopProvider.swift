@@ -50,6 +50,11 @@ public protocol DesktopProvider: Sendable {
     ) async throws
         -> ActionResult
 
+    /// Hover over the most prominent visual element in a region (saliency-based).
+    func hoverRegion(
+        _ region: Rect, app: String, window: String?, smooth: Bool
+    ) async throws -> ActionResult
+
     /// Type text into an element (focuses via AX, then types).
     func type(ref: ElementRef, text: String, app: String) async throws -> ActionResult
 

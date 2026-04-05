@@ -77,7 +77,7 @@ That's it. Snapshot gives you refs (`@e1`, `@e2`, ...), you use those refs to ac
 | | `press opt+space` | Global hotkey (no `--app`) |
 | **Navigate** | `scroll down --app Orion` | Scroll (up/down/left/right) |
 | | `scroll down --app Discord --at 36,400` | Scroll a specific panel by coordinates |
-| | `hover @e5 --app Finder` | Move mouse to element (tooltips) |
+| | `hover @e5 --app Finder` | Move mouse to element (tooltips, hover states) |
 | | `drag 100,100 500,500 --app Figma` | Drag between points |
 | **Compose** | `batch --app Notes "click @e3 ;; keyboard-type hello ;; press return"` | Multiple actions in one invocation |
 | | `wait "Upload complete" --app App` | Poll until text appears on screen |
@@ -100,9 +100,10 @@ Some apps use Chromium Embedded Framework instead of Electron. CEF doesn't respo
 forepaw ocr-click "LIBRARY" --app Steam             # text navigation works via OCR
 forepaw ocr-click "Shelter" --app Spotify --double  # double-click to play a song
 forepaw click 310,420,80,70 --app Spotify           # region click for icon buttons
+forepaw hover 325,410,60,60 --app Spotify           # region hover for tooltip discovery
 ```
 
-The **region click** (`click x,y,w,h`) solves the icon button problem. LLMs can't predict precise pixel coordinates from screenshots, but they can draw rough bounding boxes. forepaw analyzes pixel saturation in the region, finds the centroid of the most colorful element (buttons are colored, backgrounds aren't), and clicks it. No vision model required.
+**Region targeting** (`click x,y,w,h` / `hover x,y,w,h`) solves the icon button problem. LLMs can't predict precise pixel coordinates from screenshots, but they can draw rough bounding boxes. forepaw analyzes pixel saturation in the region, finds the centroid of the most colorful element (buttons are colored, backgrounds aren't), and clicks or hovers it. No vision model required. Hover region triggers hover states -- follow with a screenshot to see tooltip text rendered on screen.
 
 Multi-process apps like Steam render their UI in a helper process. forepaw discovers these windows automatically -- `--app Steam` just works.
 

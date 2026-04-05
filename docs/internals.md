@@ -133,11 +133,11 @@ Some apps (Steam) render their UI in a helper process with `accessory` activatio
 
 CEF (Chromium Embedded Framework) apps like Spotify and Steam use the same Chromium engine as Electron but don't respond to `AXManualAccessibility`. The CEF accessibility bridge requires each embedding application to implement it -- unlike Electron, which provides a universal activation mechanism. CEF apps are detected by `Chromium Embedded Framework.framework` in the bundle but are NOT treated as Electron apps. They are OCR-only.
 
-## Region click (saliency detection)
+## Region targeting (saliency detection)
 
 > **The raccoon version:** A raccoon can't describe *exactly* where the shiny thing is in the garbage bag, but it knows which *part* of the bag it's in. It reaches into that area and grabs the most interesting thing it touches. Region click works the same way -- point at an area, and forepaw finds the shiniest thing in it.
 
-`click x,y,w,h` targets a rough area instead of precise coordinates. `SaliencyDetector` captures a screenshot, crops the specified region, and finds the centroid of high-saturation pixels.
+`click x,y,w,h` and `hover x,y,w,h` target a rough area instead of precise coordinates. `SaliencyDetector` captures a screenshot, crops the specified region, and finds the centroid of high-saturation pixels. Both share a `detectRegionTarget` helper that handles screenshot capture, saliency analysis, and coordinate validation.
 
 Why saturation? UI buttons are colored (green play, blue links, red close, orange warnings). Backgrounds are desaturated (gray, black, white). The most saturated pixels in a small region are almost always the target button.
 
@@ -149,7 +149,7 @@ Why saturation? UI buttons are colored (green play, blue links, red close, orang
 4. Compute HSL saturation per pixel; also track brightness deviation from median as fallback for desaturated icons (white on dark)
 5. Weighted centroid of pixels above saturation threshold (0.25) or brightness deviation threshold (0.3)
 6. Convert centroid from crop-pixel coordinates to window-relative logical coordinates
-7. Click at the centroid via the standard mouse click path
+7. Click or hover at the centroid via the standard mouse/move path
 
 The agent's job becomes "draw a rough box around the target" (which LLMs can do from screenshots) instead of "predict exact pixel coordinates" (which LLMs cannot reliably do -- see Anthropic's computer use research on pixel counting difficulty).
 

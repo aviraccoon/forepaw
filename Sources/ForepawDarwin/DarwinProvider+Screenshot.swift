@@ -64,10 +64,13 @@ extension DarwinProvider {
     /// blue links, red close) stand out against desaturated backgrounds.
     ///
     /// The agent provides a rough bounding box; forepaw handles pixel precision.
-    public func clickRegion(
-        _ region: Rect, app: String, window: String? = nil,
-        options: ClickOptions = .normal
-    ) async throws -> ActionResult {
+    // MARK: - Region targeting (saliency-based)
+
+    /// Detect the most prominent visual element in a region via pixel saliency.
+    /// Returns the window-relative centroid and the validated screen-space point.
+    private func detectRegionTarget(
+        _ region: Rect, app: String, window: String?
+    ) async throws -> (windowPoint: Point, screenPoint: CGPoint, pid: pid_t) {
         guard CGPreflightScreenCaptureAccess() else {
             throw ForepawError.screenRecordingDenied
         }
@@ -80,7 +83,7 @@ extension DarwinProvider {
         let rawPath = "/tmp/forepaw-\(tag)-probe.png"
 
         // Capture the window
-        var args = ["-x", "-o", "-l", String(resolved.windowID), rawPath]
+        let args = ["-x", "-o", "-l", String(resolved.windowID), rawPath]
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         process.arguments = args
@@ -100,19 +103,51 @@ extension DarwinProvider {
                     + "\(Int(region.x)),\(Int(region.y)) \(Int(region.width))x\(Int(region.height))")
         }
 
-        // Click at the detected centroid
-        try validatePointInWindow(target, pid: runningApp.processIdentifier)
-        let screenPoint = try toScreenPoint(target, pid: runningApp.processIdentifier)
+        let pid = runningApp.processIdentifier
+        try validatePointInWindow(target, pid: pid)
+        let screenPoint = try toScreenPoint(target, pid: pid)
+        return (target, screenPoint, pid)
+    }
+
+    /// Format a region description for action result messages.
+    private func regionDescription(_ region: Rect) -> String {
+        "(in region \(Int(region.x)),\(Int(region.y)) \(Int(region.width))x\(Int(region.height)))"
+    }
+
+    public func clickRegion(
+        _ region: Rect, app: String, window: String? = nil,
+        options: ClickOptions = .normal
+    ) async throws -> ActionResult {
+        let detected = try await detectRegionTarget(region, app: app, window: window)
+
         let button: CGMouseButton = options.button == .right ? .right : .left
-        try performMouseClick(at: screenPoint, button: button, clickCount: Int64(options.clickCount))
+        try performMouseClick(at: detected.screenPoint, button: button, clickCount: Int64(options.clickCount))
 
         let isRight = options.button == .right
         let isDouble = options.clickCount > 1
         let label = isRight ? "right-clicked" : isDouble ? "double-clicked" : "clicked"
         return ActionResult(
             success: true,
-            message: "\(label) prominent element at \(Int(target.x)),\(Int(target.y))"
-                + " (in region \(Int(region.x)),\(Int(region.y)) \(Int(region.width))x\(Int(region.height)))")
+            message: "\(label) prominent element at \(Int(detected.windowPoint.x)),\(Int(detected.windowPoint.y)) "
+                + regionDescription(region))
+    }
+
+    public func hoverRegion(
+        _ region: Rect, app: String, window: String? = nil,
+        smooth: Bool = false
+    ) async throws -> ActionResult {
+        let detected = try await detectRegionTarget(region, app: app, window: window)
+
+        if smooth {
+            try smoothMoveMouse(to: detected.screenPoint)
+        } else {
+            try moveMouse(to: detected.screenPoint)
+        }
+
+        return ActionResult(
+            success: true,
+            message: "hovered prominent element at \(Int(detected.windowPoint.x)),\(Int(detected.windowPoint.y)) "
+                + regionDescription(region))
     }
 
     /// Click at a window-relative coordinate with app activation.

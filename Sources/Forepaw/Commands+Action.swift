@@ -203,7 +203,7 @@ struct Hover: AsyncParsableCommand {
         abstract: "Move mouse to an element without clicking (triggers tooltips/hover states)"
     )
 
-    @Argument(help: "Element ref (e.g. @e3), text for OCR, or window-relative coords (e.g. 500,300)")
+    @Argument(help: "Element ref (e.g. @e3), text for OCR, coordinates (500,300), or region (400,280,80,80)")
     var target: String
 
     @Option(name: .long, help: "Target application name (coordinates are window-relative when set)")
@@ -226,6 +226,11 @@ struct Hover: AsyncParsableCommand {
                 throw ValidationError("--app is required for ref-based hover")
             }
             result = try await provider.hover(ref: elementRef, app: app)
+        } else if let region = parseRegion(target) {
+            guard let app else {
+                throw ValidationError("--app is required for region-based hover")
+            }
+            result = try await provider.hoverRegion(region, app: app, window: window, smooth: smooth)
         } else if let point = parseCoordinate(target) {
             result = try await provider.hoverAtPoint(point, app: app, smooth: smooth)
         } else {
@@ -337,7 +342,8 @@ struct Batch: AsyncParsableCommand {
         switch command {
         case "click":
             guard let target = actionArgs.first else {
-                throw ForepawError.actionFailed("click requires a ref or coordinates (e.g. click @e3 or click 500,300)")
+                throw ForepawError.actionFailed(
+                    "click requires a ref, coordinates (500,300), or region (400,280,80,80)")
             }
             let appName = parseOption("--app", from: actionArgs) ?? app
             let options = ClickOptions(
@@ -349,6 +355,12 @@ struct Batch: AsyncParsableCommand {
                     throw ForepawError.actionFailed("click requires --app (on action or batch)")
                 }
                 return try await provider.click(ref: ref, app: appName, options: options)
+            } else if let region = parseRegion(target) {
+                guard let appName else {
+                    throw ForepawError.actionFailed("click requires --app (on action or batch)")
+                }
+                let win = parseOption("--window", from: actionArgs) ?? window
+                return try await provider.clickRegion(region, app: appName, window: win, options: options)
             } else if let point = parseCoordinate(target) {
                 guard let appName else {
                     throw ForepawError.actionFailed("click requires --app (on action or batch)")
@@ -356,22 +368,29 @@ struct Batch: AsyncParsableCommand {
                 return try await provider.clickAtPoint(point, app: appName, options: options)
             } else {
                 throw ForepawError.actionFailed(
-                    "Invalid click target: \(target). Use a ref (@e3) or coordinates (500,300)")
+                    "Invalid click target: \(target). "
+                        + "Use a ref (@e3), coordinates (500,300), or region (400,280,80,80)")
             }
 
         case "hover":
             guard let target = actionArgs.first else {
                 throw ForepawError.actionFailed(
-                    "hover requires a ref, text, or coordinates (e.g. hover @e3 or hover 500,300)")
+                    "hover requires a ref, text, coordinates (500,300), or region (400,280,80,80)")
             }
             let appName = parseOption("--app", from: actionArgs) ?? app
+            let smoothMove = actionArgs.contains("--smooth")
             if let ref = ElementRef.parse(target) {
                 guard let appName else {
                     throw ForepawError.actionFailed("hover requires --app (on action or batch)")
                 }
                 return try await provider.hover(ref: ref, app: appName)
+            } else if let region = parseRegion(target) {
+                guard let appName else {
+                    throw ForepawError.actionFailed("hover requires --app (on action or batch)")
+                }
+                let win = parseOption("--window", from: actionArgs) ?? window
+                return try await provider.hoverRegion(region, app: appName, window: win, smooth: smoothMove)
             } else if let point = parseCoordinate(target) {
-                let smoothMove = actionArgs.contains("--smooth")
                 return try await provider.hoverAtPoint(point, app: appName, smooth: smoothMove)
             } else {
                 guard let appName else {
