@@ -224,6 +224,145 @@ public struct AnnotationRenderer: Sendable {
         renderBadges(context: context, annotations: annotations, scaleFactor: scaleFactor)
     }
 
+    // MARK: - Grid overlay
+
+    /// Render a coordinate grid on a screenshot.
+    /// Grid lines and axis labels use window-relative coordinates (logical pixels).
+    /// Tick marks appear every `spacing` points along each edge.
+    /// - Parameters:
+    ///   - originOffset: Window-relative offset of the image origin (for cropped screenshots).
+    ///     Labels show `originOffset + pixel position` so coordinates match `click` commands.
+    public func renderGrid(
+        imagePath: String,
+        spacing: Int,
+        scaleFactor: CGFloat,
+        outputPath: String,
+        originOffset: (x: Double, y: Double) = (0, 0)
+    ) throws {
+        guard let dataProvider = CGDataProvider(filename: imagePath),
+            let image = CGImage(
+                pngDataProviderSource: dataProvider,
+                decode: nil, shouldInterpolate: true,
+                intent: .defaultIntent)
+        else {
+            throw AnnotationError.imageLoadFailed(imagePath)
+        }
+
+        let width = image.width
+        let height = image.height
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+
+        guard
+            let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else {
+            throw AnnotationError.contextCreationFailed
+        }
+
+        // Draw original image
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        let imageHeight = CGFloat(height)
+        let imageWidth = CGFloat(width)
+        let fontSize: CGFloat = 9 * scaleFactor
+        let font = CTFontCreateWithName("Helvetica" as CFString, fontSize, nil)
+
+        // Grid line style: semi-transparent white with thin stroke
+        let gridColor = CGColor(red: 1, green: 1, blue: 1, alpha: 0.3)
+        let labelBgColor = CGColor(red: 0, green: 0, blue: 0, alpha: 0.6)
+        let labelTextColor = CGColor(red: 1, green: 1, blue: 1, alpha: 0.9)
+        let lineWidth: CGFloat = 1 * scaleFactor
+
+        context.setStrokeColor(gridColor)
+        context.setLineWidth(lineWidth)
+
+        // Grid lines are placed at window-coordinate multiples of spacing.
+        // For cropped images, originOffset shifts labels so they show window-relative coords.
+        let offsetX = CGFloat(originOffset.x)
+        let offsetY = CGFloat(originOffset.y)
+
+        // First grid X: next multiple of spacing after offsetX
+        let firstGridX = (floor(offsetX / CGFloat(spacing)) + 1) * CGFloat(spacing)
+
+        // Vertical lines + X labels along top edge
+        var windowX = firstGridX
+        while (windowX - offsetX) * scaleFactor < imageWidth {
+            let pixelX = (windowX - offsetX) * scaleFactor
+
+            context.move(to: CGPoint(x: pixelX, y: 0))
+            context.addLine(to: CGPoint(x: pixelX, y: imageHeight))
+            context.strokePath()
+
+            let label = "\(Int(windowX))"
+            let textSize = measureText(label, font: font)
+            let labelRect = CGRect(
+                x: pixelX - textSize.width / 2 - 2 * scaleFactor,
+                y: imageHeight - textSize.height - 4 * scaleFactor,
+                width: textSize.width + 4 * scaleFactor,
+                height: textSize.height + 2 * scaleFactor)
+            context.setFillColor(labelBgColor)
+            context.fill(labelRect)
+            drawText(
+                label, in: context,
+                at: CGPoint(x: labelRect.minX + 2 * scaleFactor, y: labelRect.minY + 1 * scaleFactor),
+                font: font, color: labelTextColor)
+
+            windowX += CGFloat(spacing)
+        }
+
+        // Horizontal lines + Y labels along left edge
+        let firstGridY = (floor(offsetY / CGFloat(spacing)) + 1) * CGFloat(spacing)
+        var windowY = firstGridY
+        while (windowY - offsetY) * scaleFactor < imageHeight {
+            let pixelY = (windowY - offsetY) * scaleFactor
+            // CG origin is bottom-left
+            let cgY = imageHeight - pixelY
+
+            context.setStrokeColor(gridColor)
+            context.setLineWidth(lineWidth)
+            context.move(to: CGPoint(x: 0, y: cgY))
+            context.addLine(to: CGPoint(x: imageWidth, y: cgY))
+            context.strokePath()
+
+            let label = "\(Int(windowY))"
+            let textSize = measureText(label, font: font)
+            let labelRect = CGRect(
+                x: 2 * scaleFactor,
+                y: cgY - textSize.height / 2 - 1 * scaleFactor,
+                width: textSize.width + 4 * scaleFactor,
+                height: textSize.height + 2 * scaleFactor)
+            context.setFillColor(labelBgColor)
+            context.fill(labelRect)
+            drawText(
+                label, in: context,
+                at: CGPoint(x: labelRect.minX + 2 * scaleFactor, y: labelRect.minY + 1 * scaleFactor),
+                font: font, color: labelTextColor)
+
+            windowY += CGFloat(spacing)
+        }
+
+        guard let outputImage = context.makeImage() else {
+            throw AnnotationError.renderFailed
+        }
+
+        let url = URL(fileURLWithPath: outputPath) as CFURL
+        guard let destination = CGImageDestinationCreateWithURL(url, "public.png" as CFString, 1, nil)
+        else {
+            throw AnnotationError.saveFailed(outputPath)
+        }
+        CGImageDestinationAddImage(destination, outputImage, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw AnnotationError.saveFailed(outputPath)
+        }
+    }
+
     // MARK: - Color scheme
 
     private struct AnnotationColor {

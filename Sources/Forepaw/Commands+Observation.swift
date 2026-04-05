@@ -125,6 +125,9 @@ struct Screenshot: AsyncParsableCommand {
     @Option(name: .long, help: "Padding around cropped area in logical pixels (default 20)")
     var padding: Int?
 
+    @Option(name: .long, help: "Overlay coordinate grid with spacing in logical pixels (e.g. --grid 50)")
+    var grid: Int?
+
     mutating func run() async throws {
         let annotationStyle = resolveAnnotationStyle()
         let refFilter = only.isEmpty ? nil : only.compactMap { ElementRef.parse($0) }
@@ -133,7 +136,8 @@ struct Screenshot: AsyncParsableCommand {
         let result = try await provider.screenshot(
             app: global.app, window: global.window,
             style: annotationStyle, only: refFilter,
-            options: ssOptions, crop: cropRegion)
+            options: ssOptions, crop: cropRegion,
+            gridSpacing: grid)
         print(result.path)
         if let legend = result.legend {
             print(legend)
