@@ -88,6 +88,38 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
             appWindows.append((id: windowID, title: title, bounds: bounds))
         }
 
+        // Multi-process fallback: some apps (Steam, etc.) render their UI in a helper
+        // process with `accessory` activation policy. The main process (which appears in
+        // list-apps) has no usable windows. When that happens, look for onscreen windows
+        // from processes sharing the same bundle ID prefix.
+        if appWindows.isEmpty {
+            if let mainApp = NSWorkspace.shared.runningApplications.first(where: {
+                $0.processIdentifier == pid
+            }), let mainBundle = mainApp.bundleIdentifier {
+                let helperPIDs = NSWorkspace.shared.runningApplications
+                    .filter { helper in
+                        helper.processIdentifier != pid
+                            && (helper.bundleIdentifier ?? "").hasPrefix(mainBundle)
+                    }
+                    .map { $0.processIdentifier }
+                let helperPIDSet = Set(helperPIDs)
+
+                for info in windowList {
+                    guard let ownerPID = info[kCGWindowOwnerPID as String] as? Int32,
+                        helperPIDSet.contains(ownerPID),
+                        let bounds = info[kCGWindowBounds as String] as? [String: Double]
+                    else { continue }
+                    let w = bounds["Width"] ?? 0
+                    let h = bounds["Height"] ?? 0
+                    guard w >= 10 && h >= 10 else { continue }
+                    let windowID =
+                        (info[kCGWindowNumber as String] as? Int).map { CGWindowID($0) } ?? 0
+                    let title = info[kCGWindowName as String] as? String ?? ""
+                    appWindows.append((id: windowID, title: title, bounds: bounds))
+                }
+            }
+        }
+
         guard !appWindows.isEmpty else {
             throw ForepawError.windowNotFound(window ?? "any")
         }
@@ -132,13 +164,37 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
     public func listWindows(app appName: String?) async throws -> [WindowInfo] {
         let windowList = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
 
+        // Build set of PIDs that belong to this app (including helper processes)
+        var allowedPIDs: Set<Int32>?
+        if let filter = appName {
+            let mainApp = try? findApp(named: filter)
+            if let app = mainApp, let bundle = app.bundleIdentifier {
+                var pids: Set<Int32> = [app.processIdentifier]
+                for helper in NSWorkspace.shared.runningApplications
+                where (helper.bundleIdentifier ?? "").hasPrefix(bundle)
+                    && helper.processIdentifier != app.processIdentifier
+                {
+                    pids.insert(helper.processIdentifier)
+                }
+                allowedPIDs = pids
+            } else if let app = mainApp {
+                allowedPIDs = [app.processIdentifier]
+            }
+        }
+
         return windowList.compactMap { info -> WindowInfo? in
             guard let name = info[kCGWindowOwnerName as String] as? String,
                 let windowID = info[kCGWindowNumber as String] as? Int,
                 let title = info[kCGWindowName as String] as? String
             else { return nil }
 
-            if let filter = appName, name != filter { return nil }
+            if let pids = allowedPIDs {
+                guard let ownerPID = info[kCGWindowOwnerPID as String] as? Int32,
+                    pids.contains(ownerPID)
+                else { return nil }
+            } else if let filter = appName, name != filter {
+                return nil
+            }
 
             // Skip phantom/tiny windows
             if let boundsDict = info[kCGWindowBounds as String] as? [String: Double] {
@@ -181,6 +237,9 @@ public final class DarwinProvider: DesktopProvider, @unchecked Sendable {
     // MARK: - Electron detection & accessibility
 
     /// Check if an app bundle contains the Electron Framework.
+    /// CEF (Chromium Embedded Framework) apps like Spotify are NOT included --
+    /// CEF doesn't respond to `AXManualAccessibility` and exposes only empty
+    /// group nodes without a web content tree. CEF apps need OCR.
     internal func isElectronApp(_ app: NSRunningApplication) -> Bool {
         guard let bundleURL = app.bundleURL else { return false }
         let frameworkPath = bundleURL.appendingPathComponent(
