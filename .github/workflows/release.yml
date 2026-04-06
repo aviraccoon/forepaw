@@ -45,6 +45,13 @@ jobs:
         run: |
           # Extract the section for the current tag from CHANGELOG.md
           version="${GITHUB_REF_NAME#v}"
+          # Extract codename from the version header (e.g. '"Kinkajou"' from '## v0.3.0 "Kinkajou" (2026-04-06)')
+          codename=$(grep "^## v${version//./\\.}" CHANGELOG.md | sed -n 's/.*"\(.*\)".*/\1/p')
+          if [ -n "${codename}" ]; then
+            echo "title=${GITHUB_REF_NAME} \"${codename}\"" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
           # Get everything between this version's header and the next ## header (or EOF)
           awk "/^## v${version//./\\.}/{found=1; next} /^## v/{if(found) exit} found" CHANGELOG.md > dist/release-notes.md
           # Append install instructions
@@ -66,6 +73,7 @@ jobs:
         # TODO: upgrade to v3 when released (Node 24 support, see softprops/action-gh-release#654)
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.changelog.outputs.title }}
           files: |
             dist/forepaw-darwin-arm64.tar.gz
             dist/forepaw-darwin-arm64.tar.gz.sha256
