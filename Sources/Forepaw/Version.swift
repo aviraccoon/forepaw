@@ -1,7 +1,7 @@
 import Foundation
 
 /// Base version. Updated at release time.
-let baseVersion = "0.2.0"
+let baseVersion = "0.3.0"
 
 /// Full version string. In dev builds, appends the git short hash.
 /// Set by build tooling via FOREPAW_VERSION env var, or auto-detected.
