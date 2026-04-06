@@ -29,8 +29,6 @@ jobs:
 
       - name: Build release
         run: mise run release-build
-        env:
-          FOREPAW_VERSION: ${{ github.ref_name }}
 
       - name: Package
         run: |

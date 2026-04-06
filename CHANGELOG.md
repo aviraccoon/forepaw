@@ -60,9 +60,14 @@ The "reach into everything" release. Electron apps, CEF apps, region targeting, 
 - `docs/cross-platform.md` -- Linux (AT-SPI2/KDE/GNOME) and Windows (UIA) feasibility research
 - Skill file expanded with CEF workflow, region targeting, batch patterns
 
+### Bug fixes
+
+- **Fixed version string in installed binaries** -- `--version` was running `git describe` at runtime, producing garbage outside the source repo. Now uses a compile-time `RELEASE_BUILD` flag; release binaries report clean version numbers.
+
 ### Other
 
 - CI: mise tasks, SPM build cache, Node 24 action bumps, Package.resolved tracked
+- Release workflow includes codename in GitHub Release title
 - 146 unit tests (up from 32)
 
 ## v0.2.0 "Coati" (2026-03-31)

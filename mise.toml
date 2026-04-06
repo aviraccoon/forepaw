@@ -29,4 +29,4 @@ run = "xcrun swift-format format -i -r {{vars.swift_dirs}}"
 
 [tasks.release-build]
 description = "Build release binary"
-run = "swift build -c release"
+run = "swift build -c release -Xswiftc -DRELEASE_BUILD"
