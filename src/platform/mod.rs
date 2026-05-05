@@ -2,6 +2,9 @@
 ///
 /// Each backend implements the `DesktopProvider` trait.
 /// The correct backend is selected via cfg attributes.
+
+#[cfg(target_os = "macos")]
+pub mod darwin;
 use crate::core::annotation::{AnnotationStyle, Annotation};
 use crate::core::crop_region::CropRegion;
 use crate::core::element_tree::ElementRef;

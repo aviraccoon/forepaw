@@ -7,3 +7,26 @@ edition = "2021"
 anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
 regex = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = { version = "0.3", features = [
+    "NSWorkspace",
+    "NSRunningApplication",
+    "NSScreen",
+    "NSImage",
+    "NSGraphicsContext",
+    "NSBitmapImageRep",
+] }
+objc2-core-graphics = "0.3"
+objc2-core-foundation = "0.3"
+objc2-vision = { version = "0.3", features = [
+    "VNRecognizeTextRequest",
+    "VNRequestHandler",
+    "VNObservation",
+    "VNTypes",
+    "block2",
+] }
+block2 = "0.6"
