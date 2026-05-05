@@ -70,7 +70,7 @@ impl RefAssigner {
         let mut new_node = ElementNode::new(&node.role);
         new_node.name = node.name.clone();
         new_node.value = node.value.clone();
-        new_node.r#ref = new_ref.or_else(|| node.r#ref);
+        new_node.r#ref = new_ref.or(node.r#ref);
         new_node.bounds = node.bounds;
         new_node.attributes = node.attributes.clone();
         new_node.children = children;

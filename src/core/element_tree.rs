@@ -225,8 +225,7 @@ impl SnapshotTiming {
         let name = node
             .name
             .as_ref()
-            .map(|n| if n.is_empty() { None } else { Some(n.as_str()) })
-            .flatten();
+            .and_then(|n| if n.is_empty() { None } else { Some(n.as_str()) });
         let label = name
             .map(|n| format!("{} \"{}\"", node.role, n))
             .unwrap_or_else(|| node.role.clone());
