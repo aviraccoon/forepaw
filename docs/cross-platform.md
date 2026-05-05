@@ -89,6 +89,55 @@ Windows is the most viable second platform. UIA is comprehensive, input
 injection and screen capture Just Work, and there's no permissions theater or
 compositor fragmentation. The main friction is language choice (see below).
 
+### Windows VM testing
+
+Tested on Windows 11 25H2 ARM64 (build 10.0.26200) in UTM on Apple Silicon.
+All four capabilities validated.
+
+**UIA tree walking:** The managed API (`System.Windows.Automation` via
+`UIAutomationClient` assembly) works from Windows PowerShell 5.1. Rich tree --
+File Explorer exposed 142 elements including toolbar buttons (New, Cut, Copy,
+Paste, Rename, Share, Delete, Sort, View), address bar, navigation pane, drive
+items with sub-properties (Name, Space used, Available space), status bar.
+Taskbar exposed Start, Search, pinned apps, system tray, Clock. Comparable
+quality to macOS AX.
+
+**UIA actions:** `InvokePattern` (click), `ValuePattern` (set text), `TogglePattern`,
+`ExpandCollapsePattern` all queryable per-element via `GetCurrentPattern()`.
+Not yet tested interactively -- scripts ready for next session.
+
+**Screen capture:** `System.Drawing.Graphics.CopyFromScreen` captures the screen
+without permissions dialogs. Caveat: DPI scaling needs handling. At 175% scaling,
+the captured image (1482x883) covers only a portion of the logical desktop
+(~2498x1546). The Windows Graphics Capture API (Win10 1803+) handles DPI
+correctly and can target specific windows.
+
+**OCR:** `Windows.Media.Ocr` works from Windows PowerShell 5.1 in the interactive
+session. No MSIX packaging, no package identity, no special setup needed. The
+WinRT types load via `Add-Type` + an await helper. Produces per-line and per-word
+results with bounding boxes. 25 lines extracted from a File Explorer screenshot
+including navigation pane items, drive info ("28.4 GB free of 63.0 GB"), toolbar
+labels, address bar text. Quality comparable to macOS Vision framework for UI text.
+
+OneOCR (Snipping Tool engine) was **not available** on the test VM (v11.2307
+doesn't ship the DLLs). Confirms the expiration risk from the research phase.
+`Windows.Media.Ocr` is the working baseline.
+
+**Session isolation:** SSH runs in session 0 (no desktop). UIA, screen capture,
+and OCR all require the interactive desktop session (session 1). For dev testing,
+a scheduled task bridge works (runs command in session 1 via `/RU <user> /IT`).
+For production, forepaw itself runs in the interactive session -- either launched
+by the user from a terminal, or as a persistent background process.
+
+**SSH gotcha:** The OpenSSH DefaultShell registry entry must point to PS5.1
+(`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`). PS7 installed via
+winget/AppX is on the user PATH but not the SYSTEM PATH -- sshd runs as SYSTEM
+and can't find `pwsh.exe`. A bare `pwsh.exe` or version-specific AppX path will
+break after PS7 updates or service restarts.
+
+**Still untested:** Chromium/Electron UIA quality, UIA actions (click/type on
+real elements), per-window screenshots with DPI handling, Java/Swing testing.
+
 
 ## Linux
 
