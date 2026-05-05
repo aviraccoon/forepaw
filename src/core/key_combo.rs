@@ -1,5 +1,5 @@
 /// Key combo parsing: "cmd+shift+s" -> KeyCombo { key, modifiers }.
-
+///
 /// Keyboard modifier keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Modifier {
@@ -11,7 +11,7 @@ pub enum Modifier {
 
 impl Modifier {
     /// Parse a single modifier string (case-insensitive).
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_name(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "cmd" | "command" | "meta" | "super" => Some(Self::Command),
             "shift" => Some(Self::Shift),
@@ -30,7 +30,7 @@ impl Modifier {
         };
         s.to_lowercase()
             .split('+')
-            .filter_map(|part| Self::from_str(part.trim()))
+            .filter_map(|part| Self::parse_name(part.trim()))
             .collect()
     }
 }
@@ -58,7 +58,7 @@ impl KeyCombo {
         let mut key = String::new();
 
         for part in parts {
-            if let Some(modifier) = Modifier::from_str(part) {
+            if let Some(modifier) = Modifier::parse_name(part) {
                 modifiers.push(modifier);
             } else {
                 key = part.to_string();

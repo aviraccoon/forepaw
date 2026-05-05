@@ -2,7 +2,7 @@
 ///
 /// Refs (@eN) are stripped for comparison so positional ref shifts
 /// don't produce false "changed" lines.
-
+///
 /// A single line in a diff result.
 #[derive(Debug, Clone)]
 pub struct DiffLine {

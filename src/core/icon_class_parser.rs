@@ -3,7 +3,8 @@
 /// Electron apps use icon libraries (Lucide, Tabler, FontAwesome, etc.)
 /// whose class names encode the icon identity. This parser strips known
 /// prefixes to extract the semantic name.
-
+///
+/// [`IconClassParser`]
 pub struct IconClassParser;
 
 impl IconClassParser {

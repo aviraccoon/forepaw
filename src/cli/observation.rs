@@ -175,15 +175,16 @@ impl Screenshot {
         let ss_options = self.build_screenshot_options();
         let crop_region = self.resolve_crop_region(provider)?;
 
-        let result = provider.screenshot(
-            self.global.app.as_deref(),
-            self.global.window.as_deref(),
-            annotation_style,
-            ref_filter.as_deref(),
-            &ss_options,
-            crop_region.as_ref(),
-            self.grid,
-        )?;
+        let params = crate::platform::ScreenshotParams {
+            app: self.global.app.as_deref(),
+            window: self.global.window.as_deref(),
+            style: annotation_style,
+            only: ref_filter.as_deref(),
+            options: &ss_options,
+            crop: crop_region.as_ref(),
+            grid_spacing: self.grid,
+        };
+        let result = provider.screenshot(&params)?;
 
         println!("{}", result.path);
         if let Some(legend) = &result.legend {
@@ -195,7 +196,7 @@ impl Screenshot {
 
     fn resolve_annotation_style(&self) -> Option<AnnotationStyle> {
         if let Some(ref style) = self.style {
-            AnnotationStyle::from_str(style)
+            style.parse().ok()
         } else if self.annotate {
             Some(AnnotationStyle::Badges)
         } else {
@@ -207,7 +208,7 @@ impl Screenshot {
         let fmt = self
             .format
             .as_deref()
-            .and_then(ImageFormat::from_str)
+            .and_then(|s| s.parse().ok())
             .unwrap_or(ImageFormat::BestAvailable);
 
         ScreenshotOptions {
@@ -388,7 +389,7 @@ impl Ocr {
         let fmt = self
             .format
             .as_deref()
-            .and_then(ImageFormat::from_str)
+            .and_then(|s| s.parse().ok())
             .unwrap_or(ImageFormat::BestAvailable);
 
         ScreenshotOptions {

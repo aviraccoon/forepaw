@@ -1,5 +1,5 @@
 /// Image format and encoder detection.
-
+///
 /// Image format for screenshots.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
@@ -17,15 +17,6 @@ impl ImageFormat {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "png" => Some(Self::Png),
-            "jpeg" | "jpg" => Some(Self::Jpeg),
-            "webp" => Some(Self::Webp),
-            _ => None,
-        }
-    }
-
     pub fn all() -> &'static [ImageFormat] {
         &[Self::Png, Self::Jpeg, Self::Webp]
     }
@@ -36,6 +27,19 @@ impl ImageFormat {
             Self::Webp
         } else {
             Self::Jpeg
+        }
+    }
+}
+
+impl std::str::FromStr for ImageFormat {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "png" => Ok(Self::Png),
+            "jpeg" | "jpg" => Ok(Self::Jpeg),
+            "webp" => Ok(Self::Webp),
+            _ => Err(()),
         }
     }
 }
@@ -89,10 +93,10 @@ mod tests {
 
     #[test]
     fn format_from_str() {
-        assert_eq!(ImageFormat::from_str("png"), Some(ImageFormat::Png));
-        assert_eq!(ImageFormat::from_str("jpeg"), Some(ImageFormat::Jpeg));
-        assert_eq!(ImageFormat::from_str("webp"), Some(ImageFormat::Webp));
-        assert_eq!(ImageFormat::from_str("gif"), None);
+        assert_eq!("png".parse(), Ok(ImageFormat::Png));
+        assert_eq!("jpeg".parse(), Ok(ImageFormat::Jpeg));
+        assert_eq!("webp".parse(), Ok(ImageFormat::Webp));
+        assert_eq!("gif".parse::<ImageFormat>(), Err(()));
     }
 
     #[test]

@@ -1,5 +1,5 @@
 /// Output formatting: plain text or JSON.
-
+///
 /// Error with code, message, and optional suggestion.
 #[derive(Debug, Clone)]
 pub struct OutputError {

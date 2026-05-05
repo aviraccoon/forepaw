@@ -86,16 +86,20 @@ pub enum ImageFormat {
     BestAvailable,
 }
 
-impl ImageFormat {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for ImageFormat {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "png" => Some(Self::Png),
-            "jpeg" | "jpg" => Some(Self::Jpeg),
-            "webp" => Some(Self::Webp),
-            _ => None,
+            "png" => Ok(Self::Png),
+            "jpeg" | "jpg" => Ok(Self::Jpeg),
+            "webp" => Ok(Self::Webp),
+            _ => Err(()),
         }
     }
+}
 
+impl ImageFormat {
     pub fn file_extension(&self) -> &str {
         match self {
             Self::Png => "png",
@@ -104,6 +108,17 @@ impl ImageFormat {
             Self::BestAvailable => "jpg", // fallback
         }
     }
+}
+
+/// Parameters for screenshot operations.
+pub struct ScreenshotParams<'a> {
+    pub app: Option<&'a str>,
+    pub window: Option<&'a str>,
+    pub style: Option<AnnotationStyle>,
+    pub only: Option<&'a [ElementRef]>,
+    pub options: &'a ScreenshotOptions,
+    pub crop: Option<&'a CropRegion>,
+    pub grid_spacing: Option<u32>,
 }
 
 /// Result of a screenshot operation.
@@ -162,13 +177,7 @@ pub trait DesktopProvider: Send + Sync {
 
     fn screenshot(
         &self,
-        app: Option<&str>,
-        window: Option<&str>,
-        style: Option<AnnotationStyle>,
-        only: Option<&[ElementRef]>,
-        options: &ScreenshotOptions,
-        crop: Option<&CropRegion>,
-        grid_spacing: Option<u32>,
+        params: &ScreenshotParams,
     ) -> Result<ScreenshotResult, ForepawError>;
 
     fn ocr(

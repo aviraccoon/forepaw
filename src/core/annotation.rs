@@ -50,16 +50,20 @@ pub enum AnnotationStyle {
     Spotlight,
 }
 
-impl AnnotationStyle {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for AnnotationStyle {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "badges" => Some(Self::Badges),
-            "labeled" => Some(Self::Labeled),
-            "spotlight" => Some(Self::Spotlight),
-            _ => None,
+            "badges" => Ok(Self::Badges),
+            "labeled" => Ok(Self::Labeled),
+            "spotlight" => Ok(Self::Spotlight),
+            _ => Err(()),
         }
     }
+}
 
+impl AnnotationStyle {
     pub fn all() -> &'static [AnnotationStyle] {
         &[Self::Badges, Self::Labeled, Self::Spotlight]
     }
@@ -328,18 +332,18 @@ mod tests {
     #[test]
     fn style_from_str() {
         assert_eq!(
-            AnnotationStyle::from_str("badges"),
-            Some(AnnotationStyle::Badges)
+            "badges".parse(),
+            Ok(AnnotationStyle::Badges)
         );
         assert_eq!(
-            AnnotationStyle::from_str("labeled"),
-            Some(AnnotationStyle::Labeled)
+            "labeled".parse(),
+            Ok(AnnotationStyle::Labeled)
         );
         assert_eq!(
-            AnnotationStyle::from_str("spotlight"),
-            Some(AnnotationStyle::Spotlight)
+            "spotlight".parse(),
+            Ok(AnnotationStyle::Spotlight)
         );
-        assert_eq!(AnnotationStyle::from_str("invalid"), None);
+        assert_eq!("invalid".parse::<AnnotationStyle>(), Err(()));
     }
 
     #[test]
