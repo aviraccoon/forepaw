@@ -392,7 +392,7 @@ extern "C" {
     pub fn CGImageGetWidth(image: CGImageRef) -> usize;
     pub fn CGImageGetHeight(image: CGImageRef) -> usize;
     pub fn CGImageCreateWithImageInRect(image: CGImageRef, rect: CGRectFFI) -> CGImageRef;
-    pub fn CGContextCreateBitmap(
+    pub fn CGBitmapContextCreate(
         data: *mut c_void,
         width: usize,
         height: usize,

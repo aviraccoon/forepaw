@@ -606,7 +606,7 @@ fn computed_name(
 // ---------------------------------------------------------------------------
 
 /// Re-walk the AX tree to find the AXUIElement at the given ref position.
-fn resolve_ref_element(ref_id: i32, app_name: &str) -> Result<AXUIElementRef, ForepawError> {
+pub fn resolve_ref_element(ref_id: i32, app_name: &str) -> Result<AXUIElementRef, ForepawError> {
     let running_app = find_app(app_name)?;
     let is_electron = is_electron_app(&running_app);
     if is_electron {
@@ -660,7 +660,7 @@ fn collect_ax_elements(
 // ---------------------------------------------------------------------------
 
 /// Get a single string attribute from an AXUIElement.
-fn get_ax_string_attr(element: AXUIElementRef, attribute: &str) -> Option<String> {
+pub fn get_ax_string_attr(element: AXUIElementRef, attribute: &str) -> Option<String> {
     let attr_cf = cf_string_from_str(attribute);
     let mut value: CFTypeRef = std::ptr::null();
     let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &mut value) };
@@ -705,7 +705,7 @@ fn get_ax_element_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
 }
 
 /// Get the position (AXPosition) of an AXUIElement as a Point.
-fn get_element_position(element: AXUIElementRef) -> Option<Point> {
+pub fn get_element_position(element: AXUIElementRef) -> Option<Point> {
     let attr_cf = cf_string_from_str("AXPosition");
     let mut value: CFTypeRef = std::ptr::null();
     let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &mut value) };
@@ -730,7 +730,7 @@ fn get_element_position(element: AXUIElementRef) -> Option<Point> {
 }
 
 /// Get the size (AXSize) of an AXUIElement as (width, height).
-fn get_element_size(element: AXUIElementRef) -> Option<(f64, f64)> {
+pub fn get_element_size(element: AXUIElementRef) -> Option<(f64, f64)> {
     let attr_cf = cf_string_from_str("AXSize");
     let mut value: CFTypeRef = std::ptr::null();
     let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &mut value) };

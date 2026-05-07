@@ -12,11 +12,11 @@
 mod ffi;
 
 pub mod app;
+pub mod input;
 pub mod key_code;
 pub mod snapshot;
 
 // TODO: implement remaining modules
-// mod input;
 // mod screenshot;
 // mod ocr;
 // mod annotation;
@@ -78,57 +78,57 @@ impl DesktopProvider for DarwinProvider {
 
     fn click_ref(
         &self,
-        _ref: crate::core::element_tree::ElementRef,
-        _app: &str,
-        _options: &crate::core::key_combo::ClickOptions,
+        r#ref: crate::core::element_tree::ElementRef,
+        app: &str,
+        options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("click not yet implemented".into()))
+        input::click_ref(r#ref, app, options)
     }
 
     fn click_at_point(
         &self,
-        _point: crate::core::types::Point,
-        _app: &str,
-        _options: &crate::core::key_combo::ClickOptions,
+        point: crate::core::types::Point,
+        app: &str,
+        options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("click not yet implemented".into()))
+        input::click_at_point(point, app, options)
     }
 
     fn click_region(
         &self,
-        _region: crate::core::types::Rect,
-        _app: &str,
-        _window: Option<&str>,
-        _options: &crate::core::key_combo::ClickOptions,
+        region: crate::core::types::Rect,
+        app: &str,
+        window: Option<&str>,
+        options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("click not yet implemented".into()))
+        input::click_region(region, app, window, options)
     }
 
     fn hover_ref(
         &self,
-        _ref: crate::core::element_tree::ElementRef,
-        _app: &str,
+        r#ref: crate::core::element_tree::ElementRef,
+        app: &str,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("hover not yet implemented".into()))
+        input::hover_ref(r#ref, app)
     }
 
     fn hover_at_point(
         &self,
-        _point: crate::core::types::Point,
-        _app: Option<&str>,
-        _smooth: bool,
+        point: crate::core::types::Point,
+        app: Option<&str>,
+        smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("hover not yet implemented".into()))
+        input::hover_at_point(point, app, smooth)
     }
 
     fn hover_region(
         &self,
-        _region: crate::core::types::Rect,
-        _app: &str,
-        _window: Option<&str>,
-        _smooth: bool,
+        region: crate::core::types::Rect,
+        app: &str,
+        window: Option<&str>,
+        smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("hover not yet implemented".into()))
+        input::hover_region(region, app, window, smooth)
     }
 
     fn ocr_hover(
@@ -143,58 +143,58 @@ impl DesktopProvider for DarwinProvider {
 
     fn type_ref(
         &self,
-        _ref: crate::core::element_tree::ElementRef,
-        _text: &str,
-        _app: &str,
+        r#ref: crate::core::element_tree::ElementRef,
+        text: &str,
+        app: &str,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("type not yet implemented".into()))
+        input::type_ref(r#ref, text, app)
     }
 
     fn keyboard_type(
         &self,
-        _text: &str,
-        _app: Option<&str>,
+        text: &str,
+        app: Option<&str>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("keyboard-type not yet implemented".into()))
+        input::keyboard_type(text, app)
     }
 
     fn press(
         &self,
-        _keys: &crate::core::key_combo::KeyCombo,
-        _app: Option<&str>,
+        keys: &crate::core::key_combo::KeyCombo,
+        app: Option<&str>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("press not yet implemented".into()))
+        input::press_key(keys, app)
     }
 
     fn scroll(
         &self,
-        _direction: &str,
-        _amount: u32,
-        _app: &str,
-        _window: Option<&str>,
-        _ref: Option<crate::core::element_tree::ElementRef>,
-        _at: Option<crate::core::types::Point>,
+        direction: &str,
+        amount: u32,
+        app: &str,
+        window: Option<&str>,
+        r#ref: Option<crate::core::element_tree::ElementRef>,
+        at: Option<crate::core::types::Point>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("scroll not yet implemented".into()))
+        input::scroll(direction, amount, app, window, r#ref, at)
     }
 
     fn drag_path(
         &self,
-        _path: &[crate::core::types::Point],
-        _options: &crate::core::key_combo::DragOptions,
-        _app: Option<&str>,
+        path: &[crate::core::types::Point],
+        options: &crate::core::key_combo::DragOptions,
+        app: Option<&str>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("drag not yet implemented".into()))
+        input::drag_path(path, options, app)
     }
 
     fn drag_refs(
         &self,
-        _from: crate::core::element_tree::ElementRef,
-        _to: crate::core::element_tree::ElementRef,
-        _app: &str,
-        _options: &crate::core::key_combo::DragOptions,
+        from: crate::core::element_tree::ElementRef,
+        to: crate::core::element_tree::ElementRef,
+        app: &str,
+        options: &crate::core::key_combo::DragOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("drag not yet implemented".into()))
+        input::drag_refs(from, to, app, options)
     }
 
     fn ocr_click(
