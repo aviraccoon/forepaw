@@ -134,7 +134,6 @@ impl ResolvedWindow {
 /// Find the best-matching window for a given PID, optionally filtered by
 /// window name or ID.
 ///
-/// Logic matches the Swift implementation:
 /// 1. Collect all on-screen windows for the PID (skip tiny/phantom windows)
 /// 2. Multi-process fallback: if no windows found, try helper processes
 ///    sharing the same bundle ID prefix
@@ -540,8 +539,7 @@ pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option
         }
         // CFStringGetCStringPtr only works for "null-fast" strings (pure ASCII/UTF-8).
         // For non-ASCII characters (emojis, CJK, etc.) it returns NULL. Use the
-        // slower CFStringGetCString as a fallback, matching Swift's NSDictionary
-        // subscript behavior which handles all encodings correctly.
+        // slower CFStringGetCString as a fallback, which handles all encodings.
         let ptr = CFStringGetCStringPtr(val as CFStringRef, K_CF_STRING_ENCODING_UTF8);
         if !ptr.is_null() {
             return std::ffi::CStr::from_ptr(ptr).to_str().ok().map(String::from);

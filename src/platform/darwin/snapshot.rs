@@ -42,7 +42,7 @@ const ATTR_DOM_CLASS_LIST: usize = 11;
 const ATTR_ROLE_DESCRIPTION: usize = 12;
 const ATTR_COUNT: usize = 13;
 
-/// Attribute names for batch fetching. Matches Swift's `batchAttributes`.
+/// Attribute names for batch fetching.
 const BATCH_ATTR_NAMES: [&str; ATTR_COUNT] = [
     "AXRole",              // 0
     "AXTitle",             // 1
@@ -957,7 +957,7 @@ mod tests {
     // --- Snapshot options defaults ---
 
     #[test]
-    fn default_depths_match_swift() {
+    fn default_depths() {
         assert_eq!(DEFAULT_DEPTH, 15);
         assert_eq!(ELECTRON_DEPTH, 25);
     }

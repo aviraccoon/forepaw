@@ -107,8 +107,7 @@ pub struct CFDictionaryValueCallBacks {
 pub struct AXUIElementRef(pub *const c_void);
 
 // SAFETY: AXUIElementRef is a CF object pointer. It's safe to send between
-// threads as long as we don't share mutable references. The Swift version
-// uses @unchecked Sendable for the same reason.
+// threads as long as we don't share mutable references.
 unsafe impl Send for AXUIElementRef {}
 unsafe impl Sync for AXUIElementRef {}
 

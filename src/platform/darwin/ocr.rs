@@ -36,10 +36,17 @@ pub fn ocr(
         cursor: false,
     };
 
+    let screenshot_params = crate::platform::ScreenshotParams {
+        app: app_name,
+        window,
+        style: None,
+        only: None,
+        options: &ocr_options,
+        crop: None,
+        grid_spacing: None,
+    };
     let screenshot_result =
-        crate::platform::darwin::screenshot::screenshot(
-            app_name, window, None, None, &ocr_options, None, None,
-        )?;
+        crate::platform::darwin::screenshot::screenshot(&screenshot_params)?;
 
     // Load the image using NSImage to get pixel dimensions
     let ns_image = objc2_app_kit::NSImage::initWithContentsOfFile(
@@ -246,7 +253,7 @@ pub fn ocr_click(
 ) -> Result<crate::platform::ActionResult, ForepawError> {
     let (matched_text, window_point) = resolve_ocr_text(text, app_name, window, index)?;
 
-    let (_, pid) = super::input::activate_app_internal(app_name)?;
+    let (_, pid) = super::input::activate_app(app_name)?;
     let screen_point = app::to_screen_point(&window_point, pid)?;
     let cg_point = CGPointFFI {
         x: screen_point.x,
@@ -276,13 +283,13 @@ pub fn ocr_hover(
 ) -> Result<crate::platform::ActionResult, ForepawError> {
     let (matched_text, window_point) = resolve_ocr_text(text, app_name, window, index)?;
 
-    let (_, pid) = super::input::activate_app_internal(app_name)?;
+    let (_, pid) = super::input::activate_app(app_name)?;
     let screen_point = app::to_screen_point(&window_point, pid)?;
     let cg_point = CGPointFFI {
         x: screen_point.x,
         y: screen_point.y,
     };
-    super::input::move_mouse_to_pub(cg_point)?;
+    super::input::move_mouse_to(cg_point)?;
 
     let rel_x = window_point.x as i32;
     let rel_y = window_point.y as i32;

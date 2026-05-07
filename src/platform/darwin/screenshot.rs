@@ -18,7 +18,7 @@ use crate::platform::darwin::ffi::{
     self, CGRectFFI, CGPointFFI, CGSizeFFI,
 };
 use crate::platform::darwin::snapshot;
-use crate::platform::{AnnotationStyle, ScreenshotOptions, SnapshotOptions};
+use crate::platform::{ScreenshotOptions, ScreenshotParams, SnapshotOptions};
 use crate::platform::ScreenshotResult;
 
 /// Generate a unique temp file tag based on timestamp + random suffix.
@@ -329,15 +329,7 @@ pub fn backing_scale_factor() -> f64 {
 /// Take a screenshot of an app window (or full screen), with optional annotations.
 ///
 /// This is the main entry point called from the DesktopProvider trait impl.
-pub fn screenshot(
-    app_name: Option<&str>,
-    window: Option<&str>,
-    style: Option<AnnotationStyle>,
-    only: Option<&[ElementRef]>,
-    options: &ScreenshotOptions,
-    crop: Option<&CropRegion>,
-    grid_spacing: Option<u32>,
-) -> Result<ScreenshotResult, ForepawError> {
+pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, ForepawError> {
     // Check screen recording permission
     if unsafe { ffi::CGPreflightScreenCaptureAccess() == 0 } {
         return Err(ForepawError::ScreenRecordingDenied);
@@ -348,7 +340,7 @@ pub fn screenshot(
 
     let mut resolved_window: Option<app::ResolvedWindow> = None;
 
-    if let Some(app_name) = app_name {
+    if let Some(app_name) = params.app {
         let (_running_app, pid) = {
             let running_app = app::find_app(app_name)?;
             let pid = running_app.processIdentifier();
@@ -360,26 +352,32 @@ pub fn screenshot(
             (running_app, pid)
         };
 
-        let resolved = app::find_window(pid, window)?;
-        raw_path = capture_screenshot(Some(resolved.window_id), options.cursor)?;
+        let resolved = app::find_window(pid, params.window)?;
+        raw_path = capture_screenshot(Some(resolved.window_id), params.options.cursor)?;
         resolved_window = Some(resolved);
     } else {
-        raw_path = capture_screenshot(None, options.cursor)?;
+        raw_path = capture_screenshot(None, params.options.cursor)?;
     }
 
     // Non-annotated path: crop (if requested), grid, then post-process
-    let style = match style {
+    let style = match params.style {
         Some(s) => s,
         None => {
-            return render_plain(&raw_path, &tag, crop, resolved_window.as_ref(), grid_spacing, options);
+            return render_plain(
+                &raw_path, &tag, params.crop, resolved_window.as_ref(),
+                params.grid_spacing, params.options,
+            );
         }
     };
 
     // Annotation requires an app name (for AX tree)
-    let app_name = match app_name {
+    let app_name = match params.app {
         Some(a) => a,
         None => {
-            return render_plain(&raw_path, &tag, crop, resolved_window.as_ref(), grid_spacing, options);
+            return render_plain(
+                &raw_path, &tag, params.crop, resolved_window.as_ref(),
+                params.grid_spacing, params.options,
+            );
         }
     };
 
@@ -420,7 +418,7 @@ pub fn screenshot(
     let mut annotations = collector.collect(&tree.root, window_bounds);
 
     // Filter to specific refs if requested
-    if let Some(only) = only {
+    if let Some(only) = params.only {
         if !only.is_empty() {
             let ref_set: std::collections::HashSet<ElementRef> = only.iter().copied().collect();
             annotations.retain(|a| ref_set.contains(&a.r#ref));
@@ -429,7 +427,7 @@ pub fn screenshot(
 
     if annotations.is_empty() {
         let current_path = apply_crop_if_needed(
-            &raw_path, &tag, crop, resolved_window.as_ref(),
+            &raw_path, &tag, params.crop, resolved_window.as_ref(),
         )?;
         return Ok(ScreenshotResult {
             path: current_path,
@@ -454,7 +452,7 @@ pub fn screenshot(
 
     // Crop the annotated image if requested
     let mut current_annotated = annotated_path;
-    if let Some(crop) = crop {
+    if let Some(crop) = params.crop {
         if let Some(ref resolved) = resolved_window {
             let window_size = Point::new(resolved.bounds.width, resolved.bounds.height);
             current_annotated = apply_crop(
@@ -468,7 +466,7 @@ pub fn screenshot(
 
     // Post-process the annotated image (scale + format conversion)
     let final_path = post_process_screenshot(
-        &current_annotated, &tag, options, "-annotated",
+        &current_annotated, &tag, params.options, "-annotated",
     )?;
 
     Ok(ScreenshotResult {

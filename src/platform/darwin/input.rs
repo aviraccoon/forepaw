@@ -1,7 +1,6 @@
 //! Input simulation via CGEvent (mouse, keyboard, scroll, drag, hover).
 //!
-//! Port of `DarwinProvider+Input.swift`. All input is synthesized through
-//! CoreGraphics events posted at the HID event tap.
+//! All input is synthesized through CoreGraphics events posted at the HID event tap.
 
 use std::thread;
 use std::time::Duration;
@@ -21,18 +20,13 @@ use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
 use objc2::rc::Retained;
 
 /// Activate an app and wait for it to come to the foreground.
-fn activate_app(app_name: &str) -> Result<(Retained<NSRunningApplication>, i32), ForepawError> {
+pub fn activate_app(app_name: &str) -> Result<(Retained<NSRunningApplication>, i32), ForepawError> {
     let running_app = app::find_app(app_name)?;
     let pid = running_app.processIdentifier();
     #[allow(deprecated)]
     running_app.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
     thread::sleep(Duration::from_millis(300));
     Ok((running_app, pid))
-}
-
-/// Public wrapper for activate_app (used by ocr.rs).
-pub fn activate_app_internal(app_name: &str) -> Result<(Retained<NSRunningApplication>, i32), ForepawError> {
-    activate_app(app_name)
 }
 
 /// Activate an app and resolve its main window.
@@ -74,7 +68,7 @@ unsafe fn post_mouse_event(
 }
 
 /// Move the cursor to a screen point (teleport, no intermediate events).
-fn move_mouse_to(point: CGPointFFI) -> Result<(), ForepawError> {
+pub fn move_mouse_to(point: CGPointFFI) -> Result<(), ForepawError> {
     unsafe {
         post_mouse_event(ffi::K_CG_EVENT_MOUSE_MOVED, point, ffi::K_CG_MOUSE_BUTTON_LEFT, None)?;
     }
@@ -82,10 +76,7 @@ fn move_mouse_to(point: CGPointFFI) -> Result<(), ForepawError> {
     Ok(())
 }
 
-/// Public wrapper for move_mouse_to (used by ocr.rs).
-pub fn move_mouse_to_pub(point: CGPointFFI) -> Result<(), ForepawError> {
-    move_mouse_to(point)
-}
+
 
 /// Move the cursor smoothly from its current position to the target.
 /// Posts intermediate mouseMoved events so hover handlers fire.

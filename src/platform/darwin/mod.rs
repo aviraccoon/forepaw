@@ -47,8 +47,6 @@ impl DesktopProvider for DarwinProvider {
         app::list_windows(app)
     }
 
-    // TODO: implement remaining trait methods
-
     fn snapshot(
         &self,
         app: &str,
@@ -61,15 +59,7 @@ impl DesktopProvider for DarwinProvider {
         &self,
         params: &crate::platform::ScreenshotParams,
     ) -> Result<crate::platform::ScreenshotResult, ForepawError> {
-        screenshot::screenshot(
-            params.app,
-            params.window,
-            params.style,
-            params.only,
-            params.options,
-            params.crop,
-            params.grid_spacing,
-        )
+        screenshot::screenshot(params)
     }
 
     fn ocr(

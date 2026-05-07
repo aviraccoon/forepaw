@@ -1,7 +1,7 @@
 //! Screenshot annotation rendering via CoreGraphics + CoreText.
 //!
 //! Renders numbered badges, labeled bounding boxes, spotlight overlays, and
-//! coordinate grids onto screenshot images. Port of `AnnotationRenderer.swift`.
+//! coordinate grids onto screenshot images.
 
 use std::ffi::CString;
 use std::ptr;
