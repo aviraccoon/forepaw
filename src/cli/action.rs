@@ -1004,3 +1004,95 @@ fn collect_positional_text(args: &[String], skip: usize) -> Option<String> {
         Some(remaining.join(" "))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- parse_option ---
+
+    #[test]
+    fn parse_option_found() {
+        let args: Vec<String> = ["click", "@e3", "--app", "Finder"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(parse_option("--app", &args), Some("Finder"));
+    }
+
+    #[test]
+    fn parse_option_missing() {
+        let args: Vec<String> = ["click", "@e3"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(parse_option("--app", &args), None);
+    }
+
+    #[test]
+    fn parse_option_last_arg_no_value() {
+        let args: Vec<String> = ["click", "--app"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(parse_option("--app", &args), None);
+    }
+
+    #[test]
+    fn parse_option_first_match() {
+        let args: Vec<String> = ["--amount", "5", "--amount", "10"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(parse_option("--amount", &args), Some("5"));
+    }
+
+    // --- collect_positional_text ---
+
+    #[test]
+    fn collect_positional_simple() {
+        let args: Vec<String> = ["@e3", "hello", "world"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            collect_positional_text(&args, 1),
+            Some("hello world".to_string())
+        );
+    }
+
+    #[test]
+    fn collect_positional_skips_flags() {
+        let args: Vec<String> = ["@e3", "--text", "ignored", "actual", "text"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            collect_positional_text(&args, 1),
+            Some("actual text".to_string())
+        );
+    }
+
+    #[test]
+    fn collect_positional_no_positional_after_skip() {
+        let args: Vec<String> = ["@e3"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(collect_positional_text(&args, 1), None);
+    }
+
+    #[test]
+    fn collect_positional_empty_args() {
+        assert_eq!(collect_positional_text(&[], 0), None);
+    }
+
+    #[test]
+    fn collect_positional_zero_skip() {
+        let args: Vec<String> = ["hello", "world"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(
+            collect_positional_text(&args, 0),
+            Some("hello world".to_string())
+        );
+    }
+
+    #[test]
+    fn collect_positional_only_flags() {
+        let args: Vec<String> = ["--text", "val", "--app", "Finder"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(collect_positional_text(&args, 0), None);
+    }
+}

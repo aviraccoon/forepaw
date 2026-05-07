@@ -109,6 +109,7 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
 // ---------------------------------------------------------------------------
 
 /// A resolved window with its CGWindowID, title, and bounds.
+#[derive(Debug)]
 pub struct ResolvedWindow {
     pub window_id: u32,
     pub title: String,
@@ -741,5 +742,145 @@ fn get_ax_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
         }
         CFRelease(value);
         children
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_entry(id: u32, title: &str, w: f64, h: f64) -> WindowEntry {
+        WindowEntry {
+            id,
+            title: title.to_string(),
+            bounds: Rect::new(0.0, 0.0, w, h),
+        }
+    }
+
+    // --- ResolvedWindow ---
+
+    #[test]
+    fn resolved_window_origin() {
+        let rw = ResolvedWindow {
+            window_id: 42,
+            title: "Test".to_string(),
+            bounds: Rect::new(100.0, 200.0, 800.0, 600.0),
+        };
+        assert_eq!(rw.origin(), Point::new(100.0, 200.0));
+    }
+
+    #[test]
+    fn resolved_window_center() {
+        let rw = ResolvedWindow {
+            window_id: 42,
+            title: "Test".to_string(),
+            bounds: Rect::new(100.0, 200.0, 800.0, 600.0),
+        };
+        assert_eq!(rw.center(), Point::new(500.0, 500.0));
+    }
+
+    // --- match_window ---
+
+    #[test]
+    fn match_window_by_id() {
+        let windows = vec![
+            make_entry(100, "Document", 800.0, 600.0),
+            make_entry(200, "Settings", 400.0, 300.0),
+        ];
+        let result = match_window(&windows, "w-200").unwrap();
+        assert_eq!(result.window_id, 200);
+        assert_eq!(result.title, "Settings");
+    }
+
+    #[test]
+    fn match_window_by_id_not_found() {
+        let windows = vec![make_entry(100, "Doc", 800.0, 600.0)];
+        let err = match_window(&windows, "w-999").unwrap_err();
+        match err {
+            ForepawError::WindowNotFound(q) => assert_eq!(q, "w-999"),
+            other => panic!("expected WindowNotFound, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn match_window_by_title_substring() {
+        let windows = vec![
+            make_entry(100, "My Document.txt", 800.0, 600.0),
+            make_entry(200, "Settings", 400.0, 300.0),
+        ];
+        let result = match_window(&windows, "document").unwrap();
+        assert_eq!(result.window_id, 100);
+    }
+
+    #[test]
+    fn match_window_case_insensitive() {
+        let windows = vec![make_entry(100, "Document", 800.0, 600.0)];
+        let result = match_window(&windows, "DOCUMENT").unwrap();
+        assert_eq!(result.window_id, 100);
+    }
+
+    #[test]
+    fn match_window_ambiguous() {
+        let windows = vec![
+            make_entry(100, "Document 1", 800.0, 600.0),
+            make_entry(200, "Document 2", 800.0, 600.0),
+        ];
+        let err = match_window(&windows, "Document").unwrap_err();
+        match err {
+            ForepawError::AmbiguousWindow { query, matches: _ } => {
+                assert_eq!(query, "Document");
+            }
+            other => panic!("expected AmbiguousWindow, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn match_window_no_match() {
+        let windows = vec![make_entry(100, "Doc", 800.0, 600.0)];
+        let err = match_window(&windows, "nonexistent").unwrap_err();
+        match err {
+            ForepawError::WindowNotFound(q) => assert_eq!(q, "nonexistent"),
+            other => panic!("expected WindowNotFound, got {:?}", other),
+        }
+    }
+
+    // --- select_best_window ---
+
+    #[test]
+    fn select_best_prefers_titled() {
+        let windows = vec![
+            make_entry(100, "", 1000.0, 800.0),
+            make_entry(200, "Document", 400.0, 300.0),
+        ];
+        let result = select_best_window(&windows).unwrap();
+        assert_eq!(result.window_id, 200);
+        assert_eq!(result.title, "Document");
+    }
+
+    #[test]
+    fn select_best_largest_area_as_tiebreak() {
+        let windows = vec![
+            make_entry(100, "Small", 400.0, 300.0),
+            make_entry(200, "Large", 800.0, 600.0),
+        ];
+        let result = select_best_window(&windows).unwrap();
+        assert_eq!(result.window_id, 200);
+    }
+
+    #[test]
+    fn select_best_untitled_largest_area() {
+        let windows = vec![
+            make_entry(100, "", 800.0, 600.0),
+            make_entry(200, "", 400.0, 300.0),
+        ];
+        let result = select_best_window(&windows).unwrap();
+        assert_eq!(result.window_id, 100);
+    }
+
+    #[test]
+    fn select_best_single_window() {
+        let windows = vec![make_entry(100, "Only", 800.0, 600.0)];
+        let result = select_best_window(&windows).unwrap();
+        assert_eq!(result.window_id, 100);
     }
 }
