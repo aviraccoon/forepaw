@@ -331,18 +331,9 @@ mod tests {
 
     #[test]
     fn style_from_str() {
-        assert_eq!(
-            "badges".parse(),
-            Ok(AnnotationStyle::Badges)
-        );
-        assert_eq!(
-            "labeled".parse(),
-            Ok(AnnotationStyle::Labeled)
-        );
-        assert_eq!(
-            "spotlight".parse(),
-            Ok(AnnotationStyle::Spotlight)
-        );
+        assert_eq!("badges".parse(), Ok(AnnotationStyle::Badges));
+        assert_eq!("labeled".parse(), Ok(AnnotationStyle::Labeled));
+        assert_eq!("spotlight".parse(), Ok(AnnotationStyle::Spotlight));
         assert_eq!("invalid".parse::<AnnotationStyle>(), Err(()));
     }
 

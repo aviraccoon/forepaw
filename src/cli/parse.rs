@@ -156,9 +156,6 @@ mod tests {
 
     #[test]
     fn shell_split_extra_spaces() {
-        assert_eq!(
-            shell_split("  click   @e3  "),
-            vec!["click", "@e3"]
-        );
+        assert_eq!(shell_split("  click   @e3  "), vec!["click", "@e3"]);
     }
 }

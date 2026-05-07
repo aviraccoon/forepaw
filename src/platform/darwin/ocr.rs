@@ -7,9 +7,7 @@
 use objc2::AnyThread;
 use objc2_core_foundation::CGRect;
 use objc2_foundation::{NSDictionary, NSString};
-use objc2_vision::{
-    VNImageRequestHandler, VNRecognizeTextRequest, VNRequestTextRecognitionLevel,
-};
+use objc2_vision::{VNImageRequestHandler, VNRecognizeTextRequest, VNRequestTextRecognitionLevel};
 
 use crate::core::errors::ForepawError;
 use crate::core::ocr_result::{OCROutput, OCRResult};
@@ -45,8 +43,7 @@ pub fn ocr(
         crop: None,
         grid_spacing: None,
     };
-    let screenshot_result =
-        crate::platform::darwin::screenshot::screenshot(&screenshot_params)?;
+    let screenshot_result = crate::platform::darwin::screenshot::screenshot(&screenshot_params)?;
 
     // Load the image using NSImage to get pixel dimensions
     let ns_image = objc2_app_kit::NSImage::initWithContentsOfFile(
@@ -73,7 +70,9 @@ pub fn ocr(
     let cg_image = unsafe {
         let raw = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
         if raw.is_null() {
-            return Err(ForepawError::ActionFailed("Failed to load image data".into()));
+            return Err(ForepawError::ActionFailed(
+                "Failed to load image data".into(),
+            ));
         }
         let img = ffi::CGImageCreateWithPNGDataProvider(raw, std::ptr::null(), 0, 0);
         ffi::CFRelease(raw as ffi::CFTypeRef);
@@ -107,12 +106,14 @@ pub fn ocr(
     // Optionally produce an agent-friendly display copy
     let display_path = if let Some(display_options) = screenshot_options {
         let tag = crate::platform::darwin::screenshot::temp_tag();
-        Some(crate::platform::darwin::screenshot::post_process_screenshot(
-            &screenshot_result.path,
-            &tag,
-            display_options,
-            "",
-        )?)
+        Some(
+            crate::platform::darwin::screenshot::post_process_screenshot(
+                &screenshot_result.path,
+                &tag,
+                display_options,
+                "",
+            )?,
+        )
     } else {
         let _ = std::fs::remove_file(&screenshot_result.path);
         None
@@ -240,7 +241,10 @@ pub fn resolve_ocr_text(
     }
 
     let match_result = &matches[resolved_index];
-    Ok((match_result.text.clone(), crate::core::types::Point::new(match_result.center().0, match_result.center().1)))
+    Ok((
+        match_result.text.clone(),
+        crate::core::types::Point::new(match_result.center().0, match_result.center().1),
+    ))
 }
 
 /// OCR-click: find text on screen and click it.

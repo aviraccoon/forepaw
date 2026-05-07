@@ -7,8 +7,8 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use objc2::Message;
 use objc2::rc::Retained;
+use objc2::Message;
 use objc2_app_kit::NSRunningApplication;
 use objc2_foundation::NSString;
 
@@ -196,21 +196,19 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
     require_accessibility()?;
 
     // Build set of allowed PIDs if filtering by app name
-    let allowed_pids: Option<HashSet<i32>> = app_name.map(|name| {
-        match find_app(name) {
-            Ok(app) => {
-                let mut pids = HashSet::new();
-                pids.insert(app.processIdentifier());
-                if let Some(bundle_id) = app.bundleIdentifier() {
-                    let bundle_str = bundle_id.to_string();
-                    for helper_pid in collect_helper_pids(&bundle_str, app.processIdentifier()) {
-                        pids.insert(helper_pid);
-                    }
+    let allowed_pids: Option<HashSet<i32>> = app_name.map(|name| match find_app(name) {
+        Ok(app) => {
+            let mut pids = HashSet::new();
+            pids.insert(app.processIdentifier());
+            if let Some(bundle_id) = app.bundleIdentifier() {
+                let bundle_str = bundle_id.to_string();
+                for helper_pid in collect_helper_pids(&bundle_str, app.processIdentifier()) {
+                    pids.insert(helper_pid);
                 }
-                pids
             }
-            Err(_) => HashSet::new(),
+            pids
         }
+        Err(_) => HashSet::new(),
     });
 
     let count = unsafe { CFArrayGetCount(window_list) };
@@ -233,8 +231,7 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
 
         let owner_name = unsafe { get_dict_string(info, kCGWindowOwnerName) };
         let window_id = unsafe { get_dict_i32(info, kCGWindowNumber) };
-        let title =
-            unsafe { get_dict_string(info, kCGWindowName) }.unwrap_or_default();
+        let title = unsafe { get_dict_string(info, kCGWindowName) }.unwrap_or_default();
 
         let (owner, id_num) = match (owner_name, window_id) {
             (Some(o), Some(id)) => (o, id),
@@ -289,10 +286,7 @@ pub fn validate_point_in_window(point: &Point, pid: i32) -> Result<(), ForepawEr
     if point.x < 0.0 || point.y < 0.0 || point.x > w || point.y > h {
         return Err(ForepawError::ActionFailed(format!(
             "Point ({}, {}) is outside window bounds (0,0)-({},{})",
-            point.x as i32,
-            point.y as i32,
-            w as i32,
-            h as i32
+            point.x as i32, point.y as i32, w as i32, h as i32
         )));
     }
     Ok(())
@@ -381,7 +375,10 @@ unsafe fn collect_windows_for_pid(window_list: CFArrayRef, pid: i32) -> Vec<Wind
     entries
 }
 
-unsafe fn collect_windows_for_pids(window_list: CFArrayRef, pids: &HashSet<i32>) -> Vec<WindowEntry> {
+unsafe fn collect_windows_for_pids(
+    window_list: CFArrayRef,
+    pids: &HashSet<i32>,
+) -> Vec<WindowEntry> {
     let count = unsafe { CFArrayGetCount(window_list) };
     let mut entries = Vec::new();
 
@@ -542,7 +539,10 @@ pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option
         // slower CFStringGetCString as a fallback, which handles all encodings.
         let ptr = CFStringGetCStringPtr(val as CFStringRef, K_CF_STRING_ENCODING_UTF8);
         if !ptr.is_null() {
-            return std::ffi::CStr::from_ptr(ptr).to_str().ok().map(String::from);
+            return std::ffi::CStr::from_ptr(ptr)
+                .to_str()
+                .ok()
+                .map(String::from);
         }
         // Fallback: copy into a buffer
         let mut buf = [0u8; 1024];

@@ -7,9 +7,7 @@
 use std::ffi::CString;
 
 use crate::core::types::{Point, Rect};
-use crate::platform::darwin::ffi::{
-    self, CGPointFFI, CGRectFFI, CGSizeFFI,
-};
+use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI, CGSizeFFI};
 
 /// Find the centroid of high-saturation pixels in an image region.
 ///

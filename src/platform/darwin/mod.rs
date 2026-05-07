@@ -43,7 +43,10 @@ impl DesktopProvider for DarwinProvider {
         app::list_apps()
     }
 
-    fn list_windows(&self, app: Option<&str>) -> Result<Vec<crate::platform::WindowInfo>, ForepawError> {
+    fn list_windows(
+        &self,
+        app: Option<&str>,
+    ) -> Result<Vec<crate::platform::WindowInfo>, ForepawError> {
         app::list_windows(app)
     }
 
@@ -254,7 +257,11 @@ impl DesktopProvider for DarwinProvider {
         // Filter to third-party apps (skip Apple bundles starting with com.apple)
         let third_party: Vec<&str> = apps
             .iter()
-            .filter(|a| !a.bundle_id.as_ref().is_some_and(|b| b.starts_with("com.apple.")))
+            .filter(|a| {
+                !a.bundle_id
+                    .as_ref()
+                    .is_some_and(|b| b.starts_with("com.apple."))
+            })
             .map(|a| a.name.as_str())
             .collect();
         if third_party.is_empty() {

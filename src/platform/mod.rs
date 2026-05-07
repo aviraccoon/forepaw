@@ -4,7 +4,7 @@
 /// The correct backend is selected via cfg attributes.
 #[cfg(target_os = "macos")]
 pub mod darwin;
-use crate::core::annotation::{AnnotationStyle, Annotation};
+use crate::core::annotation::{Annotation, AnnotationStyle};
 use crate::core::crop_region::CropRegion;
 use crate::core::element_tree::ElementRef;
 use crate::core::errors::ForepawError;
@@ -177,10 +177,7 @@ pub trait DesktopProvider: Send + Sync {
         options: &SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError>;
 
-    fn screenshot(
-        &self,
-        params: &ScreenshotParams,
-    ) -> Result<ScreenshotResult, ForepawError>;
+    fn screenshot(&self, params: &ScreenshotParams) -> Result<ScreenshotResult, ForepawError>;
 
     fn ocr(
         &self,
@@ -211,11 +208,7 @@ pub trait DesktopProvider: Send + Sync {
         options: &ClickOptions,
     ) -> Result<ActionResult, ForepawError>;
 
-    fn hover_ref(
-        &self,
-        r#ref: ElementRef,
-        app: &str,
-    ) -> Result<ActionResult, ForepawError>;
+    fn hover_ref(&self, r#ref: ElementRef, app: &str) -> Result<ActionResult, ForepawError>;
     fn hover_at_point(
         &self,
         point: Point,

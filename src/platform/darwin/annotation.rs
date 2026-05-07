@@ -9,8 +9,8 @@ use std::ptr;
 use crate::core::annotation::{Annotation, AnnotationCategory, AnnotationStyle};
 use crate::platform::darwin::app;
 use crate::platform::darwin::ffi::{
-    self, CGPointFFI, CGRectFFI, CGSizeFFI, CGColorRef, CGColorSpaceRef, CGContextRef,
-    CTFontRef, CFAttributedStringRef,
+    self, CFAttributedStringRef, CGColorRef, CGColorSpaceRef, CGContextRef, CGPointFFI, CGRectFFI,
+    CGSizeFFI, CTFontRef,
 };
 
 // ---------------------------------------------------------------------------
@@ -114,7 +114,8 @@ fn create_attributed_string(
     let cf_text = app::cf_string_from_str(text);
 
     unsafe {
-        let mut keys: Vec<*const std::ffi::c_void> = vec![ffi::kCTFontAttributeName as *const std::ffi::c_void];
+        let mut keys: Vec<*const std::ffi::c_void> =
+            vec![ffi::kCTFontAttributeName as *const std::ffi::c_void];
         let mut values: Vec<*const std::ffi::c_void> = vec![font as *const std::ffi::c_void];
 
         if let Some(c) = color {
@@ -131,7 +132,8 @@ fn create_attributed_string(
             &ffi::kCFTypeDictionaryValueCallBacks,
         );
 
-        let attr_str = ffi::CFAttributedStringCreate(ptr::null(), cf_text as ffi::CFStringRef, attrs);
+        let attr_str =
+            ffi::CFAttributedStringCreate(ptr::null(), cf_text as ffi::CFStringRef, attrs);
         ffi::CFRelease(attrs as ffi::CFTypeRef);
         ffi::CFRelease(cf_text as ffi::CFTypeRef);
         attr_str
@@ -151,14 +153,7 @@ fn measure_text(text: &str, font: CTFontRef) -> (f64, f64) {
 }
 
 /// Draw text at a specific position in a CGContext.
-fn draw_text(
-    text: &str,
-    ctx: CGContextRef,
-    x: f64,
-    y: f64,
-    font: CTFontRef,
-    color: CGColorRef,
-) {
+fn draw_text(text: &str, ctx: CGContextRef, x: f64, y: f64, font: CTFontRef, color: CGColorRef) {
     let attr_str = create_attributed_string(text, font, Some(color));
     let line = unsafe { ffi::CTLineCreateWithAttributedString(attr_str) };
     unsafe {
@@ -223,10 +218,16 @@ fn render_badges(
 
         let badge_rect = CGRectFFI {
             origin: CGPointFFI { x, y },
-            size: CGSizeFFI { width: badge_w, height: badge_h },
+            size: CGSizeFFI {
+                width: badge_w,
+                height: badge_h,
+            },
         };
 
-        let color = category_color(color_space, &AnnotationCategory::from_role(&annotation.role));
+        let color = category_color(
+            color_space,
+            &AnnotationCategory::from_role(&annotation.role),
+        );
 
         // Background pill
         let bg_path = unsafe {
@@ -273,14 +274,16 @@ fn render_labeled(
     let image_height = unsafe { ffi::CGBitmapContextGetHeight(ctx) } as f64;
 
     for annotation in annotations {
-        let color = category_color(color_space, &AnnotationCategory::from_role(&annotation.role));
+        let color = category_color(
+            color_space,
+            &AnnotationCategory::from_role(&annotation.role),
+        );
 
         // Draw bounding box -- border only, no fill
         let box_rect = CGRectFFI {
             origin: CGPointFFI {
                 x: annotation.bounds.x * scale_factor,
-                y: image_height
-                    - (annotation.bounds.y + annotation.bounds.height) * scale_factor,
+                y: image_height - (annotation.bounds.y + annotation.bounds.height) * scale_factor,
             },
             size: CGSizeFFI {
                 width: annotation.bounds.width * scale_factor,
@@ -314,18 +317,19 @@ fn render_labeled(
         let label_y = image_height - (annotation.bounds.y * scale_factor) - label_h;
 
         let label_rect = CGRectFFI {
-            origin: CGPointFFI { x: label_x, y: label_y },
-            size: CGSizeFFI { width: label_w, height: label_h },
+            origin: CGPointFFI {
+                x: label_x,
+                y: label_y,
+            },
+            size: CGSizeFFI {
+                width: label_w,
+                height: label_h,
+            },
         };
 
         // Opaque background
         let label_path = unsafe {
-            ffi::CGPathCreateWithRoundedRect(
-                label_rect,
-                corner_radius,
-                corner_radius,
-                ptr::null(),
-            )
+            ffi::CGPathCreateWithRoundedRect(label_rect, corner_radius, corner_radius, ptr::null())
         };
         unsafe {
             ffi::CGContextSetFillColorWithColor(ctx, color.background);
@@ -377,7 +381,10 @@ fn render_spotlight(
     let image_width = width as f64;
     let full_rect = CGRectFFI {
         origin: CGPointFFI { x: 0.0, y: 0.0 },
-        size: CGSizeFFI { width: image_width, height: image_height },
+        size: CGSizeFFI {
+            width: image_width,
+            height: image_height,
+        },
     };
 
     // Build a single path: full-screen rect + element holes.
@@ -403,7 +410,13 @@ fn render_spotlight(
             },
         };
         unsafe {
-            ffi::CGPathAddRoundedRect(overlay_path, ptr::null(), rect, corner_radius, corner_radius);
+            ffi::CGPathAddRoundedRect(
+                overlay_path,
+                ptr::null(),
+                rect,
+                corner_radius,
+                corner_radius,
+            );
         }
     }
 
@@ -454,8 +467,7 @@ pub fn render_grid(
     let font = create_font("Helvetica", 9.0 * scale_factor);
 
     // Colors
-    let grid_color =
-        unsafe { ffi::CGColorCreate(color_space, [1.0f64, 1.0, 1.0, 0.3].as_ptr()) };
+    let grid_color = unsafe { ffi::CGColorCreate(color_space, [1.0f64, 1.0, 1.0, 0.3].as_ptr()) };
     let label_bg_color =
         unsafe { ffi::CGColorCreate(color_space, [0.0f64, 0.0, 0.0, 0.6].as_ptr()) };
     let label_text_color =
@@ -671,8 +683,9 @@ fn write_context_to_file(
             return Err(AnnotationError::RenderFailed);
         }
 
-        let output_url =
-            objc2_foundation::NSURL::fileURLWithPath(&objc2_foundation::NSString::from_str(output_path));
+        let output_url = objc2_foundation::NSURL::fileURLWithPath(
+            &objc2_foundation::NSString::from_str(output_path),
+        );
         let png_type = objc2_foundation::NSString::from_str("public.png");
         let dest = ffi::CGImageDestinationCreateWithURL(
             objc2::rc::Retained::as_ptr(&output_url) as *const std::ffi::c_void,

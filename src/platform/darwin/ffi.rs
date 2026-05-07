@@ -176,7 +176,11 @@ extern "C" {
     ) -> AXError;
     pub fn AXUIElementPerformAction(element: AXUIElementRef, action: CFStringRef) -> AXError;
     pub fn AXValueGetType(value: AXValueRef) -> AXValueType;
-    pub fn AXValueGetValue(value: AXValueRef, the_type: AXValueType, value_ptr: *mut c_void) -> Boolean;
+    pub fn AXValueGetValue(
+        value: AXValueRef,
+        the_type: AXValueType,
+        value_ptr: *mut c_void,
+    ) -> Boolean;
     pub fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
 }
 
@@ -425,14 +429,21 @@ extern "C" {
         corner_width: CGFloat,
         corner_height: CGFloat,
     );
-    pub fn CGColorCreate(rgb_color_space: CGColorSpaceRef, components: *const CGFloat) -> CGColorRef;
+    pub fn CGColorCreate(
+        rgb_color_space: CGColorSpaceRef,
+        components: *const CGFloat,
+    ) -> CGColorRef;
     pub fn CGImageDestinationCreateWithURL(
         url: *const c_void,
         format: *const c_void,
         count: usize,
         options: *const c_void,
     ) -> CGImageDestinationRef;
-    pub fn CGImageDestinationAddImage(dest: CGImageDestinationRef, image: CGImageRef, properties: *const c_void);
+    pub fn CGImageDestinationAddImage(
+        dest: CGImageDestinationRef,
+        image: CGImageRef,
+        properties: *const c_void,
+    );
     pub fn CGImageDestinationFinalize(dest: CGImageDestinationRef) -> Boolean;
 
     // Context state and drawing helpers

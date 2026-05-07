@@ -1,9 +1,9 @@
+use crate::cli::parse::{parse_coordinate, parse_region, resolve_text, shell_split};
 /// CLI subcommands: actions (click, type, press, scroll, drag, hover, wait, batch, ocr-click).
 use crate::core::element_tree::ElementRef;
 use crate::core::key_combo::{ClickOptions, DragOptions, KeyCombo, MouseButton};
 use crate::core::output_formatter::OutputFormatter;
 use crate::platform::DesktopProvider;
-use crate::cli::parse::{parse_coordinate, parse_region, resolve_text, shell_split};
 
 /// Click an element by ref or at coordinates.
 #[derive(clap::Args)]
@@ -12,7 +12,10 @@ pub struct Click {
     #[arg(help = "Element ref (@e3), coordinates (500,300), or region (400,280,80,80)")]
     pub target: String,
 
-    #[arg(long, help = "Target application name (required; coordinates are relative to window)")]
+    #[arg(
+        long,
+        help = "Target application name (required; coordinates are relative to window)"
+    )]
     pub app: Option<String>,
 
     #[arg(long, help = "Right-click (context menu)")]
@@ -100,9 +103,17 @@ pub struct Type {
 
 impl Type {
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
-        let text = resolve_text(self.positional_text.as_deref(), self.text_option.as_deref(), "type")?;
-        let element_ref = ElementRef::parse(&self.r#ref)
-            .ok_or_else(|| anyhow::anyhow!("Invalid ref: {}. Expected format: @e1, @e2, etc.", self.r#ref))?;
+        let text = resolve_text(
+            self.positional_text.as_deref(),
+            self.text_option.as_deref(),
+            "type",
+        )?;
+        let element_ref = ElementRef::parse(&self.r#ref).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Invalid ref: {}. Expected format: @e1, @e2, etc.",
+                self.r#ref
+            )
+        })?;
         let result = provider.type_ref(element_ref, text, &self.app)?;
 
         let formatter = OutputFormatter::new(self.json);
@@ -121,7 +132,10 @@ impl Type {
 
 /// Type text into the focused element (no ref needed).
 #[derive(clap::Args)]
-#[command(name = "keyboard-type", about = "Type text into the focused element (no ref needed)")]
+#[command(
+    name = "keyboard-type",
+    about = "Type text into the focused element (no ref needed)"
+)]
 pub struct KeyboardType {
     #[arg(help = "Text to type")]
     pub positional_text: Option<String>,
@@ -132,7 +146,10 @@ pub struct KeyboardType {
     )]
     pub text_option: Option<String>,
 
-    #[arg(long, help = "Target application name (activates app first; omit to type into current focus)")]
+    #[arg(
+        long,
+        help = "Target application name (activates app first; omit to type into current focus)"
+    )]
     pub app: Option<String>,
 
     #[arg(long, help = "JSON output")]
@@ -169,7 +186,10 @@ pub struct Press {
     #[arg(help = "Key combo (e.g. cmd+s, return, escape)")]
     pub combo: String,
 
-    #[arg(long, help = "Target application name (activates app first; omit for global hotkeys)")]
+    #[arg(
+        long,
+        help = "Target application name (activates app first; omit for global hotkeys)"
+    )]
     pub app: Option<String>,
 
     #[arg(long, help = "JSON output")]
@@ -268,7 +288,9 @@ impl OcrClick {
 #[derive(clap::Args)]
 #[command(about = "Move mouse to an element without clicking (triggers tooltips/hover states)")]
 pub struct Hover {
-    #[arg(help = "Element ref (@e3), text for OCR, coordinates (500,300), or region (400,280,80,80)")]
+    #[arg(
+        help = "Element ref (@e3), text for OCR, coordinates (500,300), or region (400,280,80,80)"
+    )]
     pub target: String,
 
     #[arg(long, help = "Target application name")]
@@ -527,7 +549,11 @@ impl Drag {
                  \t      drag @e3 @e7 --app Finder"
             );
         } else {
-            let coords: Vec<_> = self.targets.iter().filter_map(|t| parse_coordinate(t)).collect();
+            let coords: Vec<_> = self
+                .targets
+                .iter()
+                .filter_map(|t| parse_coordinate(t))
+                .collect();
             if coords.len() == self.targets.len() {
                 provider.drag_path(&coords, &options, self.app.as_deref())?
             } else if self.targets.len() == 2 {
@@ -577,7 +603,10 @@ fn resolve_drag_target(
     }
     // Ref-based resolution needs the provider, but we'd need app context
     // For now, just fail
-    anyhow::bail!("Invalid target: {}. Expected coordinates (500,300).", target)
+    anyhow::bail!(
+        "Invalid target: {}. Expected coordinates (500,300).",
+        target
+    )
 }
 
 fn read_coords_from_stdin() -> anyhow::Result<Vec<crate::core::types::Point>> {
@@ -596,7 +625,10 @@ fn read_coords_from_stdin() -> anyhow::Result<Vec<crate::core::types::Point>> {
             .iter()
             .filter(|t| parse_coordinate(t).is_none())
             .collect();
-        anyhow::bail!("Invalid coordinate(s): {}", bad.iter().map(|s| **s).collect::<Vec<_>>().join(", "));
+        anyhow::bail!(
+            "Invalid coordinate(s): {}",
+            bad.iter().map(|s| **s).collect::<Vec<_>>().join(", ")
+        );
     }
     Ok(coords)
 }
@@ -641,7 +673,12 @@ impl Batch {
         let formatter = OutputFormatter::new(self.json);
 
         for (i, action) in actions.iter().enumerate() {
-            let result = execute_action(action, provider, self.app.as_deref(), self.window.as_deref())?;
+            let result = execute_action(
+                action,
+                provider,
+                self.app.as_deref(),
+                self.window.as_deref(),
+            )?;
             print!(
                 "{}",
                 formatter.format(
@@ -685,23 +722,26 @@ fn execute_action(
                 } else {
                     MouseButton::Left
                 },
-                if args.iter().any(|a| a == "--double") { 2 } else { 1 },
+                if args.iter().any(|a| a == "--double") {
+                    2
+                } else {
+                    1
+                },
             );
 
             if let Some(r#ref) = ElementRef::parse(target) {
-                let app = app_name
-                    .ok_or_else(|| anyhow::anyhow!("click requires --app"))?;
+                let app = app_name.ok_or_else(|| anyhow::anyhow!("click requires --app"))?;
                 provider.click_ref(r#ref, app, &options).map_err(Into::into)
             } else if let Some(region) = parse_region(target) {
-                let app = app_name
-                    .ok_or_else(|| anyhow::anyhow!("click requires --app"))?;
-                let win = parse_option("--window", args).map(String::from).or_else(|| batch_window.map(String::from));
+                let app = app_name.ok_or_else(|| anyhow::anyhow!("click requires --app"))?;
+                let win = parse_option("--window", args)
+                    .map(String::from)
+                    .or_else(|| batch_window.map(String::from));
                 provider
                     .click_region(region, app, win.as_deref(), &options)
                     .map_err(Into::into)
             } else if let Some(point) = parse_coordinate(target) {
-                let app = app_name
-                    .ok_or_else(|| anyhow::anyhow!("click requires --app"))?;
+                let app = app_name.ok_or_else(|| anyhow::anyhow!("click requires --app"))?;
                 provider
                     .click_at_point(point, app, &options)
                     .map_err(Into::into)
@@ -720,13 +760,13 @@ fn execute_action(
             let smooth = args.iter().any(|a| a == "--smooth");
 
             if let Some(r#ref) = ElementRef::parse(target) {
-                let app = app_name
-                    .ok_or_else(|| anyhow::anyhow!("hover requires --app"))?;
+                let app = app_name.ok_or_else(|| anyhow::anyhow!("hover requires --app"))?;
                 provider.hover_ref(r#ref, app).map_err(Into::into)
             } else if let Some(region) = parse_region(target) {
-                let app = app_name
-                    .ok_or_else(|| anyhow::anyhow!("hover requires --app"))?;
-                let win = parse_option("--window", args).map(String::from).or_else(|| batch_window.map(String::from));
+                let app = app_name.ok_or_else(|| anyhow::anyhow!("hover requires --app"))?;
+                let win = parse_option("--window", args)
+                    .map(String::from)
+                    .or_else(|| batch_window.map(String::from));
                 provider
                     .hover_region(region, app, win.as_deref(), smooth)
                     .map_err(Into::into)
@@ -735,9 +775,10 @@ fn execute_action(
                     .hover_at_point(point, app_name, smooth)
                     .map_err(Into::into)
             } else {
-                let app = app_name
-                    .ok_or_else(|| anyhow::anyhow!("hover requires --app"))?;
-                let win = parse_option("--window", args).map(String::from).or_else(|| batch_window.map(String::from));
+                let app = app_name.ok_or_else(|| anyhow::anyhow!("hover requires --app"))?;
+                let win = parse_option("--window", args)
+                    .map(String::from)
+                    .or_else(|| batch_window.map(String::from));
                 provider
                     .ocr_hover(target, app, win.as_deref(), None)
                     .map_err(Into::into)
@@ -752,21 +793,23 @@ fn execute_action(
             let text = parse_option("--text", args)
                 .map(String::from)
                 .or_else(|| collect_positional_text(args, 1));
-            let text = text
-                .ok_or_else(|| anyhow::anyhow!("type requires text"))?;
+            let text = text.ok_or_else(|| anyhow::anyhow!("type requires text"))?;
             let app_name = parse_option("--app", args)
                 .map(String::from)
                 .or_else(|| batch_app.map(String::from))
                 .ok_or_else(|| anyhow::anyhow!("type requires --app"))?;
-            provider.type_ref(r#ref, &text, &app_name).map_err(Into::into)
+            provider
+                .type_ref(r#ref, &text, &app_name)
+                .map_err(Into::into)
         }
         "keyboard-type" => {
             let text = parse_option("--text", args)
                 .map(String::from)
                 .or_else(|| collect_positional_text(args, 0));
-            let text = text
-                .ok_or_else(|| anyhow::anyhow!("keyboard-type requires text"))?;
-            let app_name = parse_option("--app", args).map(String::from).or_else(|| batch_app.map(String::from));
+            let text = text.ok_or_else(|| anyhow::anyhow!("keyboard-type requires text"))?;
+            let app_name = parse_option("--app", args)
+                .map(String::from)
+                .or_else(|| batch_app.map(String::from));
             provider
                 .keyboard_type(&text, app_name.as_deref())
                 .map_err(Into::into)
@@ -776,7 +819,9 @@ fn execute_action(
                 .first()
                 .ok_or_else(|| anyhow::anyhow!("press requires a key combo"))?;
             let key_combo = KeyCombo::parse(combo_str);
-            let app_name = parse_option("--app", args).map(String::from).or_else(|| batch_app.map(String::from));
+            let app_name = parse_option("--app", args)
+                .map(String::from)
+                .or_else(|| batch_app.map(String::from));
             provider
                 .press(&key_combo, app_name.as_deref())
                 .map_err(Into::into)
@@ -792,7 +837,9 @@ fn execute_action(
             let amount = parse_option("--amount", args)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(3);
-            let win = parse_option("--window", args).map(String::from).or_else(|| batch_window.map(String::from));
+            let win = parse_option("--window", args)
+                .map(String::from)
+                .or_else(|| batch_window.map(String::from));
             let scroll_ref = parse_option("--ref", args).and_then(ElementRef::parse);
             let scroll_at = parse_option("--at", args).and_then(parse_coordinate);
             provider
@@ -815,14 +862,20 @@ fn execute_action(
                 .map(String::from)
                 .or_else(|| batch_app.map(String::from))
                 .ok_or_else(|| anyhow::anyhow!("ocr-click requires --app"))?;
-            let win = parse_option("--window", args).map(String::from).or_else(|| batch_window.map(String::from));
+            let win = parse_option("--window", args)
+                .map(String::from)
+                .or_else(|| batch_window.map(String::from));
             let options = ClickOptions::new(
                 if args.iter().any(|a| a == "--right") {
                     MouseButton::Right
                 } else {
                     MouseButton::Left
                 },
-                if args.iter().any(|a| a == "--double") { 2 } else { 1 },
+                if args.iter().any(|a| a == "--double") {
+                    2
+                } else {
+                    1
+                },
             );
             let ocr_index = parse_option("--index", args).and_then(|s| s.parse().ok());
             provider
@@ -833,7 +886,9 @@ fn execute_action(
             if args.len() < 2 {
                 anyhow::bail!("drag requires at least 2 targets");
             }
-            let app_name = parse_option("--app", args).map(String::from).or_else(|| batch_app.map(String::from));
+            let app_name = parse_option("--app", args)
+                .map(String::from)
+                .or_else(|| batch_app.map(String::from));
             let drag_steps = parse_option("--steps", args)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(30);
@@ -841,9 +896,10 @@ fn execute_action(
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0.3);
             let drag_pressure = parse_option("--pressure", args).and_then(|s| s.parse().ok());
-            let drag_mods = crate::core::key_combo::Modifier::parse_modifiers(
-                parse_option("--modifiers", args),
-            );
+            let drag_mods = crate::core::key_combo::Modifier::parse_modifiers(parse_option(
+                "--modifiers",
+                args,
+            ));
             let drag_right = args.iter().any(|a| a == "--right");
             let drag_close = args.iter().any(|a| a == "--close");
 
@@ -881,9 +937,10 @@ fn execute_action(
                 let from_ref = ElementRef::parse(drag_targets[0]);
                 let to_ref = ElementRef::parse(drag_targets[1]);
                 if let (Some(from), Some(to)) = (from_ref, to_ref) {
-                    let app = app_name
-                        .ok_or_else(|| anyhow::anyhow!("drag requires --app"))?;
-                    provider.drag_refs(from, to, &app, &drag_options).map_err(Into::into)
+                    let app = app_name.ok_or_else(|| anyhow::anyhow!("drag requires --app"))?;
+                    provider
+                        .drag_refs(from, to, &app, &drag_options)
+                        .map_err(Into::into)
                 } else {
                     anyhow::bail!("Invalid drag targets. Use coordinates or refs")
                 }
@@ -900,7 +957,9 @@ fn execute_action(
                 .map(String::from)
                 .or_else(|| batch_app.map(String::from))
                 .ok_or_else(|| anyhow::anyhow!("wait requires --app"))?;
-            let win = parse_option("--window", args).map(String::from).or_else(|| batch_window.map(String::from));
+            let win = parse_option("--window", args)
+                .map(String::from)
+                .or_else(|| batch_window.map(String::from));
             let timeout = parse_option("--timeout", args)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10.0);

@@ -7,8 +7,7 @@
 use std::collections::HashMap;
 
 use crate::core::element_tree::{
-    ElementNode, ElementRef, ElementTree, SnapshotTiming,
-    is_interactive_role,
+    is_interactive_role, ElementNode, ElementRef, ElementTree, SnapshotTiming,
 };
 use crate::core::errors::ForepawError;
 use crate::core::icon_class_parser::IconClassParser;
@@ -44,19 +43,19 @@ const ATTR_COUNT: usize = 13;
 
 /// Attribute names for batch fetching.
 const BATCH_ATTR_NAMES: [&str; ATTR_COUNT] = [
-    "AXRole",              // 0
-    "AXTitle",             // 1
-    "AXDescription",       // 2
-    "AXValue",             // 3
-    "AXPosition",          // 4
-    "AXSize",              // 5
-    "AXChildren",          // 6
-    "AXSubrole",           // 7
-    "AXTitleUIElement",    // 8
-    "AXHelp",              // 9
-    "AXPlaceholderValue",  // 10
-    "AXDOMClassList",      // 11
-    "AXRoleDescription",   // 12
+    "AXRole",             // 0
+    "AXTitle",            // 1
+    "AXDescription",      // 2
+    "AXValue",            // 3
+    "AXPosition",         // 4
+    "AXSize",             // 5
+    "AXChildren",         // 6
+    "AXSubrole",          // 7
+    "AXTitleUIElement",   // 8
+    "AXHelp",             // 9
+    "AXPlaceholderValue", // 10
+    "AXDOMClassList",     // 11
+    "AXRoleDescription",  // 12
 ];
 
 /// Cached CFArray of attribute name strings for batch fetching.
@@ -71,8 +70,10 @@ unsafe impl Sync for SendableCFArray {}
 fn get_batch_attr_array() -> CFArrayRef {
     BATCH_ATTR_ARRAY
         .get_or_init(|| {
-            let cf_strings: Vec<CFStringRef> =
-                BATCH_ATTR_NAMES.iter().map(|s| cf_string_from_str(s)).collect();
+            let cf_strings: Vec<CFStringRef> = BATCH_ATTR_NAMES
+                .iter()
+                .map(|s| cf_string_from_str(s))
+                .collect();
             let ptrs: Vec<*const std::ffi::c_void> =
                 cf_strings.iter().map(|s| *s as *const _).collect();
             let array = unsafe {
@@ -195,7 +196,11 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
 
     let timing = if options.timing {
         let node_count = SnapshotTiming::count_nodes(&result.root);
-        Some(SnapshotTiming::new(walk_ms, node_count, result.root.clone()))
+        Some(SnapshotTiming::new(
+            walk_ms,
+            node_count,
+            result.root.clone(),
+        ))
     } else {
         None
     };
@@ -408,9 +413,8 @@ impl Drop for BatchAttrs {
 fn fetch_batch_attributes(element: AXUIElementRef) -> Option<BatchAttrs> {
     let attr_array = get_batch_attr_array();
     let mut values: CFArrayRef = std::ptr::null();
-    let result = unsafe {
-        AXUIElementCopyMultipleAttributeValues(element, attr_array, 0, &mut values)
-    };
+    let result =
+        unsafe { AXUIElementCopyMultipleAttributeValues(element, attr_array, 0, &mut values) };
     if result != AXError::Success || values.is_null() {
         None
     } else {
@@ -437,7 +441,9 @@ fn build_tree(
         None => return ElementNode::new("AXUnknown"),
     };
 
-    let role = attrs.string(ATTR_ROLE).unwrap_or_else(|| "AXUnknown".to_string());
+    let role = attrs
+        .string(ATTR_ROLE)
+        .unwrap_or_else(|| "AXUnknown".to_string());
 
     // Skip menu bar subtree if requested.
     if pruning.skip_menu_bar && role == "AXMenuBar" {
@@ -819,7 +825,8 @@ fn number_to_rust_string(number: CFNumberRef) -> Option<String> {
 
 /// Return None for empty strings -- AX APIs often return "" rather than nil.
 fn non_empty(s: &Option<String>) -> Option<String> {
-    s.as_ref().and_then(|v| if v.is_empty() { None } else { Some(v.clone()) })
+    s.as_ref()
+        .and_then(|v| if v.is_empty() { None } else { Some(v.clone()) })
 }
 
 #[cfg(test)]
@@ -828,7 +835,10 @@ mod tests {
 
     #[test]
     fn non_empty_returns_some_for_nonempty() {
-        assert_eq!(non_empty(&Some("hello".to_string())), Some("hello".to_string()));
+        assert_eq!(
+            non_empty(&Some("hello".to_string())),
+            Some("hello".to_string())
+        );
     }
 
     #[test]
@@ -944,7 +954,10 @@ mod tests {
         assert_eq!(BATCH_ATTR_NAMES[ATTR_SUBROLE], "AXSubrole");
         assert_eq!(BATCH_ATTR_NAMES[ATTR_TITLE_UI_ELEMENT], "AXTitleUIElement");
         assert_eq!(BATCH_ATTR_NAMES[ATTR_HELP], "AXHelp");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_PLACEHOLDER_VALUE], "AXPlaceholderValue");
+        assert_eq!(
+            BATCH_ATTR_NAMES[ATTR_PLACEHOLDER_VALUE],
+            "AXPlaceholderValue"
+        );
         assert_eq!(BATCH_ATTR_NAMES[ATTR_DOM_CLASS_LIST], "AXDOMClassList");
         assert_eq!(BATCH_ATTR_NAMES[ATTR_ROLE_DESCRIPTION], "AXRoleDescription");
     }

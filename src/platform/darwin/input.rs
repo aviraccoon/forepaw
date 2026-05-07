@@ -9,15 +9,13 @@ use crate::core::errors::ForepawError;
 use crate::core::key_combo::{ClickOptions, DragOptions, KeyCombo, Modifier, MouseButton};
 use crate::core::types::Point;
 use crate::platform::darwin::app::{self, ResolvedWindow};
-use crate::platform::darwin::ffi::{
-    self, CGPointFFI, CGRectFFI,
-};
+use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI};
 use crate::platform::darwin::key_code;
 use crate::platform::darwin::snapshot;
 use crate::platform::ActionResult;
 
-use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
 use objc2::rc::Retained;
+use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
 
 /// Activate an app and wait for it to come to the foreground.
 pub fn activate_app(app_name: &str) -> Result<(Retained<NSRunningApplication>, i32), ForepawError> {
@@ -50,14 +48,11 @@ unsafe fn post_mouse_event(
     button: u32,
     click_state: Option<i64>,
 ) -> Result<(), ForepawError> {
-    let event = ffi::CGEventCreateMouseEvent(
-        std::ptr::null_mut(),
-        event_type,
-        point,
-        button,
-    );
+    let event = ffi::CGEventCreateMouseEvent(std::ptr::null_mut(), event_type, point, button);
     if event.is_null() {
-        return Err(ForepawError::ActionFailed("failed to create mouse event".into()));
+        return Err(ForepawError::ActionFailed(
+            "failed to create mouse event".into(),
+        ));
     }
     if let Some(count) = click_state {
         ffi::CGEventSetIntegerValueField(event, ffi::K_CG_MOUSE_EVENT_CLICK_STATE, count);
@@ -70,17 +65,24 @@ unsafe fn post_mouse_event(
 /// Move the cursor to a screen point (teleport, no intermediate events).
 pub fn move_mouse_to(point: CGPointFFI) -> Result<(), ForepawError> {
     unsafe {
-        post_mouse_event(ffi::K_CG_EVENT_MOUSE_MOVED, point, ffi::K_CG_MOUSE_BUTTON_LEFT, None)?;
+        post_mouse_event(
+            ffi::K_CG_EVENT_MOUSE_MOVED,
+            point,
+            ffi::K_CG_MOUSE_BUTTON_LEFT,
+            None,
+        )?;
     }
     thread::sleep(Duration::from_millis(50));
     Ok(())
 }
 
-
-
 /// Move the cursor smoothly from its current position to the target.
 /// Posts intermediate mouseMoved events so hover handlers fire.
-fn smooth_move_mouse(target: CGPointFFI, steps: usize, duration: Duration) -> Result<(), ForepawError> {
+fn smooth_move_mouse(
+    target: CGPointFFI,
+    steps: usize,
+    duration: Duration,
+) -> Result<(), ForepawError> {
     let current = unsafe {
         let locator_event = ffi::CGEventCreateMouseEvent(
             std::ptr::null_mut(),
@@ -104,7 +106,12 @@ fn smooth_move_mouse(target: CGPointFFI, steps: usize, duration: Duration) -> Re
         let y = current.y + (target.y - current.y) * t;
         let point = CGPointFFI { x, y };
         unsafe {
-            post_mouse_event(ffi::K_CG_EVENT_MOUSE_MOVED, point, ffi::K_CG_MOUSE_BUTTON_LEFT, None)?;
+            post_mouse_event(
+                ffi::K_CG_EVENT_MOUSE_MOVED,
+                point,
+                ffi::K_CG_MOUSE_BUTTON_LEFT,
+                None,
+            )?;
         }
         thread::sleep(step_delay);
     }
@@ -219,7 +226,9 @@ pub fn click_element(
         }
     }
 
-    Ok(ActionResult::fail("click failed: no position and AXPress unsuccessful"))
+    Ok(ActionResult::fail(
+        "click failed: no position and AXPress unsuccessful",
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +241,7 @@ pub fn click_element(
 pub fn type_via_keyboard(text: &str) -> Result<(), ForepawError> {
     for ch in text.chars() {
         let mut utf16_buf = [0u16; 2];
-    let utf16 = ch.encode_utf16(&mut utf16_buf);
+        let utf16 = ch.encode_utf16(&mut utf16_buf);
         unsafe {
             // Key down
             let key_down = ffi::CGEventCreateKeyboardEvent(
@@ -247,11 +256,7 @@ pub fn type_via_keyboard(text: &str) -> Result<(), ForepawError> {
             }
 
             // Key up
-            let key_up = ffi::CGEventCreateKeyboardEvent(
-                std::ptr::null_mut(),
-                0,
-                0,
-            );
+            let key_up = ffi::CGEventCreateKeyboardEvent(std::ptr::null_mut(), 0, 0);
             if !key_up.is_null() {
                 ffi::CGEventPost(ffi::K_CG_EVENT_TAP_CGHID, key_up);
                 ffi::CFRelease(key_up as ffi::CFTypeRef);
@@ -312,7 +317,9 @@ pub fn press_via_keyboard(combo: &KeyCombo) -> Result<(), ForepawError> {
         let key_down = ffi::CGEventCreateKeyboardEvent(std::ptr::null_mut(), key_code, 1);
         let key_up = ffi::CGEventCreateKeyboardEvent(std::ptr::null_mut(), key_code, 0);
         if key_down.is_null() || key_up.is_null() {
-            return Err(ForepawError::ActionFailed("failed to create keyboard events".into()));
+            return Err(ForepawError::ActionFailed(
+                "failed to create keyboard events".into(),
+            ));
         }
         ffi::CGEventSetFlags(key_down, flags);
         ffi::CGEventSetFlags(key_up, flags);
@@ -354,7 +361,9 @@ fn post_scroll_event(delta_y: i32, delta_x: i32) -> Result<(), ForepawError> {
             0,
         );
         if event.is_null() {
-            return Err(ForepawError::ActionFailed("failed to create scroll event".into()));
+            return Err(ForepawError::ActionFailed(
+                "failed to create scroll event".into(),
+            ));
         }
         ffi::CGEventPost(ffi::K_CG_EVENT_TAP_CGHID, event);
         ffi::CFRelease(event as ffi::CFTypeRef);
@@ -391,8 +400,7 @@ fn capture_scroll_fingerprint(window_id: u32) -> Option<Vec<u8>> {
             },
             ffi::CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY,
             window_id,
-            ffi::CG_WINDOW_IMAGE_NOMINAL_RESOLUTION
-                | ffi::CG_WINDOW_IMAGE_BOUNDS_IGNORE_FRAMING,
+            ffi::CG_WINDOW_IMAGE_NOMINAL_RESOLUTION | ffi::CG_WINDOW_IMAGE_BOUNDS_IGNORE_FRAMING,
         );
         if image.is_null() {
             return None;
@@ -506,14 +514,12 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
 
     // Mouse down
     unsafe {
-        let mouse_down = ffi::CGEventCreateMouseEvent(
-            std::ptr::null_mut(),
-            down_type,
-            first,
-            cg_button,
-        );
+        let mouse_down =
+            ffi::CGEventCreateMouseEvent(std::ptr::null_mut(), down_type, first, cg_button);
         if mouse_down.is_null() {
-            return Err(ForepawError::ActionFailed("failed to create mouseDown event".into()));
+            return Err(ForepawError::ActionFailed(
+                "failed to create mouseDown event".into(),
+            ));
         }
         if flags != 0 {
             ffi::CGEventSetFlags(mouse_down, flags);
@@ -542,12 +548,8 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
             };
 
             unsafe {
-                let drag_event = ffi::CGEventCreateMouseEvent(
-                    std::ptr::null_mut(),
-                    drag_type,
-                    point,
-                    cg_button,
-                );
+                let drag_event =
+                    ffi::CGEventCreateMouseEvent(std::ptr::null_mut(), drag_type, point, cg_button);
                 if drag_event.is_null() {
                     continue;
                 }
@@ -555,7 +557,11 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
                     ffi::CGEventSetFlags(drag_event, flags);
                 }
                 if let Some(pressure) = options.pressure {
-                    ffi::CGEventSetDoubleValueField(drag_event, ffi::K_CG_MOUSE_EVENT_PRESSURE, pressure);
+                    ffi::CGEventSetDoubleValueField(
+                        drag_event,
+                        ffi::K_CG_MOUSE_EVENT_PRESSURE,
+                        pressure,
+                    );
                 }
                 ffi::CGEventPost(ffi::K_CG_EVENT_TAP_CGHID, drag_event);
                 ffi::CFRelease(drag_event as ffi::CFTypeRef);
@@ -566,14 +572,11 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
 
     // Mouse up
     unsafe {
-        let mouse_up = ffi::CGEventCreateMouseEvent(
-            std::ptr::null_mut(),
-            up_type,
-            last,
-            cg_button,
-        );
+        let mouse_up = ffi::CGEventCreateMouseEvent(std::ptr::null_mut(), up_type, last, cg_button);
         if mouse_up.is_null() {
-            return Err(ForepawError::ActionFailed("failed to create mouseUp event".into()));
+            return Err(ForepawError::ActionFailed(
+                "failed to create mouseUp event".into(),
+            ));
         }
         if flags != 0 {
             ffi::CGEventSetFlags(mouse_up, flags);
@@ -612,7 +615,10 @@ pub fn click_at_point(
     let (_, pid, _resolved) = activate_and_resolve_window(app_name, None)?;
     app::validate_point_in_window(&point, pid)?;
     let screen_point = app::to_screen_point(&point, pid)?;
-    let cg_point = CGPointFFI { x: screen_point.x, y: screen_point.y };
+    let cg_point = CGPointFFI {
+        x: screen_point.x,
+        y: screen_point.y,
+    };
 
     perform_mouse_click(cg_point, options.button, options.click_count)?;
 
@@ -640,13 +646,18 @@ pub fn click_region(
     );
     app::validate_point_in_window(&center, pid)?;
     let screen_point = app::to_screen_point(&center, pid)?;
-    let cg_point = CGPointFFI { x: screen_point.x, y: screen_point.y };
+    let cg_point = CGPointFFI {
+        x: screen_point.x,
+        y: screen_point.y,
+    };
 
     perform_mouse_click(cg_point, options.button, options.click_count)?;
 
     let rel_x = center.x as i32;
     let rel_y = center.y as i32;
-    Ok(ActionResult::ok_msg(format!("clicked region at {rel_x},{rel_y}")))
+    Ok(ActionResult::ok_msg(format!(
+        "clicked region at {rel_x},{rel_y}"
+    )))
 }
 
 /// Hover over an element ref.
@@ -688,9 +699,15 @@ pub fn hover_at_point(
         let (_, pid) = activate_app(app_name)?;
         app::validate_point_in_window(&point, pid)?;
         let screen = app::to_screen_point(&point, pid)?;
-        CGPointFFI { x: screen.x, y: screen.y }
+        CGPointFFI {
+            x: screen.x,
+            y: screen.y,
+        }
     } else {
-        CGPointFFI { x: point.x, y: point.y }
+        CGPointFFI {
+            x: point.x,
+            y: point.y,
+        }
     };
 
     if smooth {
@@ -698,7 +715,10 @@ pub fn hover_at_point(
     } else {
         move_mouse_to(target)?;
     }
-    Ok(ActionResult::ok_msg(format!("hovered at {},{}", point.x as i32, point.y as i32)))
+    Ok(ActionResult::ok_msg(format!(
+        "hovered at {},{}",
+        point.x as i32, point.y as i32
+    )))
 }
 
 /// Hover at the center of a region.
@@ -736,10 +756,7 @@ pub fn keyboard_type(text: &str, app_name: Option<&str>) -> Result<ActionResult,
 }
 
 /// Press a key combo, optionally activating an app first.
-pub fn press_key(
-    keys: &KeyCombo,
-    app_name: Option<&str>,
-) -> Result<ActionResult, ForepawError> {
+pub fn press_key(keys: &KeyCombo, app_name: Option<&str>) -> Result<ActionResult, ForepawError> {
     if let Some(app_name) = app_name {
         let _ = activate_app(app_name)?;
     }
@@ -764,12 +781,16 @@ pub fn scroll(
         crate::core::coordinate_validation::validate(&point, &window_size)
             .map_or(Ok(()), |e| Err(ForepawError::ActionFailed(e)))?;
         let screen = app::to_screen_point(&point, pid)?;
-        CGPointFFI { x: screen.x, y: screen.y }
+        CGPointFFI {
+            x: screen.x,
+            y: screen.y,
+        }
     } else if let Some(r#ref) = r#ref {
         // Scroll at element center
         let element = snapshot::resolve_ref_element(r#ref.id, app_name)?;
-        let pos = snapshot::get_element_position(element)
-            .ok_or_else(|| ForepawError::ActionFailed(format!("Cannot determine position of {ref}")))?;
+        let pos = snapshot::get_element_position(element).ok_or_else(|| {
+            ForepawError::ActionFailed(format!("Cannot determine position of {ref}"))
+        })?;
         let (w, h) = snapshot::get_element_size(element)
             .ok_or_else(|| ForepawError::ActionFailed(format!("Cannot determine size of {ref}")))?;
         CGPointFFI {
@@ -779,7 +800,10 @@ pub fn scroll(
     } else {
         // Default: center of window
         let center = resolved.center();
-        CGPointFFI { x: center.x, y: center.y }
+        CGPointFFI {
+            x: center.x,
+            y: center.y,
+        }
     };
 
     let (delta_y, delta_x) = match direction {
@@ -787,10 +811,12 @@ pub fn scroll(
         "down" => (-(amount as i32), 0),
         "left" => (0, amount as i32),
         "right" => (0, -(amount as i32)),
-        _ => return Err(ForepawError::ActionFailed(format!(
-            "Unknown direction '{}'. Use up, down, left, or right.",
-            direction
-        ))),
+        _ => {
+            return Err(ForepawError::ActionFailed(format!(
+                "Unknown direction '{}'. Use up, down, left, or right.",
+                direction
+            )))
+        }
     };
 
     // Move mouse to scroll target, wait for hover effects to settle
@@ -834,16 +860,15 @@ pub fn drag_path(
     app_name: Option<&str>,
 ) -> Result<ActionResult, ForepawError> {
     if path.len() < 2 {
-        return Err(ForepawError::ActionFailed("Drag path requires at least 2 points".into()));
+        return Err(ForepawError::ActionFailed(
+            "Drag path requires at least 2 points".into(),
+        ));
     }
 
     let cg_path: Vec<CGPointFFI> = if let Some(app_name) = app_name {
         let (_, pid) = activate_app(app_name)?;
         path.iter()
-            .map(|p| {
-                app::to_screen_point(p, pid)
-                    .map(|sp| CGPointFFI { x: sp.x, y: sp.y })
-            })
+            .map(|p| app::to_screen_point(p, pid).map(|sp| CGPointFFI { x: sp.x, y: sp.y }))
             .collect::<Result<Vec<_>, _>>()?
     } else {
         path.iter().map(|p| CGPointFFI { x: p.x, y: p.y }).collect()
@@ -862,14 +887,19 @@ pub fn drag_path(
     let msg = if path.len() == 2 {
         format!(
             "dragged from {},{} to {},{} ({} steps, {:.1}s)",
-            path[0].x as i32, path[0].y as i32,
-            path[1].x as i32, path[1].y as i32,
-            options.steps, options.duration,
+            path[0].x as i32,
+            path[0].y as i32,
+            path[1].x as i32,
+            path[1].y as i32,
+            options.steps,
+            options.duration,
         )
     } else {
         format!(
             "dragged through {} points ({} steps/segment, {:.1}s)",
-            path.len(), options.steps, options.duration,
+            path.len(),
+            options.steps,
+            options.duration,
         )
     };
     Ok(ActionResult::ok_msg(msg))
@@ -891,15 +921,19 @@ pub fn drag_refs(
     let to_screen = app::to_screen_point(&to, pid)?;
 
     let path = [
-        CGPointFFI { x: from_screen.x, y: from_screen.y },
-        CGPointFFI { x: to_screen.x, y: to_screen.y },
+        CGPointFFI {
+            x: from_screen.x,
+            y: from_screen.y,
+        },
+        CGPointFFI {
+            x: to_screen.x,
+            y: to_screen.y,
+        },
     ];
     perform_mouse_drag(&path, options)?;
 
     Ok(ActionResult::ok_msg(format!(
         "dragged from {},{} to {},{} ({} steps, {:.1}s)",
-        from.x as i32, from.y as i32,
-        to.x as i32, to.y as i32,
-        options.steps, options.duration,
+        from.x as i32, from.y as i32, to.x as i32, to.y as i32, options.steps, options.duration,
     )))
 }

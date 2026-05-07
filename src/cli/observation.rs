@@ -1,16 +1,14 @@
 /// CLI subcommands: observation (snapshot, screenshot, list-apps, list-windows, ocr).
 use clap::Args;
 
+use crate::cli::parse::parse_region;
 use crate::core::annotation::AnnotationStyle;
 use crate::core::crop_region::CropRegion;
 use crate::core::element_tree::ElementRef;
 use crate::core::snapshot_cache::SnapshotCache;
 use crate::core::snapshot_diff::SnapshotDiffer;
 use crate::core::tree_renderer::TreeRenderer;
-use crate::platform::{
-    DesktopProvider, ImageFormat, ScreenshotOptions, SnapshotOptions,
-};
-use crate::cli::parse::parse_region;
+use crate::platform::{DesktopProvider, ImageFormat, ScreenshotOptions, SnapshotOptions};
 
 /// Shared global options (app, window, json).
 #[derive(Args, Clone)]
@@ -44,13 +42,20 @@ pub struct Snapshot {
     #[arg(long, help = "Show diff against previous snapshot of this app")]
     pub diff: bool,
 
-    #[arg(long, help = "Context lines around changes in diff output (default: 0)", default_value = "0")]
+    #[arg(
+        long,
+        help = "Context lines around changes in diff output (default: 0)",
+        default_value = "0"
+    )]
     pub context: usize,
 
     #[arg(long, help = "Include menu bar (excluded by default with -i)")]
     pub menu: bool,
 
-    #[arg(long, help = "Include zero-size elements (excluded by default with -i)")]
+    #[arg(
+        long,
+        help = "Include zero-size elements (excluded by default with -i)"
+    )]
     pub zero_size: bool,
 
     #[arg(long, help = "Include offscreen elements (excluded by default)")]
@@ -121,13 +126,13 @@ pub struct Screenshot {
     #[command(flatten)]
     pub global: GlobalOptions,
 
-    #[arg(long, help = "Annotate with numbered labels (shorthand for --style badges)")]
-    pub annotate: bool,
-
     #[arg(
         long,
-        help = "Annotation style: badges, labeled, spotlight"
+        help = "Annotate with numbered labels (shorthand for --style badges)"
     )]
+    pub annotate: bool,
+
+    #[arg(long, help = "Annotation style: badges, labeled, spotlight")]
     pub style: Option<String>,
 
     #[arg(long, num_args = 1.., help = "Only annotate these refs (e.g. --only @e5 @e8)")]
@@ -145,7 +150,10 @@ pub struct Screenshot {
     #[arg(long, help = "Exclude mouse cursor from screenshot")]
     pub no_cursor: bool,
 
-    #[arg(long, help = "Crop to element ref bounds (e.g. --ref @e5). Requires --app.")]
+    #[arg(
+        long,
+        help = "Crop to element ref bounds (e.g. --ref @e5). Requires --app."
+    )]
     pub r#ref: Option<String>,
 
     #[arg(long, help = "Crop to region: x,y,w,h. Requires --app.")]
@@ -238,8 +246,9 @@ impl Screenshot {
         }
 
         if let Some(ref region) = self.region {
-            let rect = parse_region(region)
-                .ok_or_else(|| anyhow::anyhow!("Invalid region format: {}. Expected x,y,w,h", region))?;
+            let rect = parse_region(region).ok_or_else(|| {
+                anyhow::anyhow!("Invalid region format: {}. Expected x,y,w,h", region)
+            })?;
             return Ok(Some(CropRegion::new(rect, pad)));
         }
 
@@ -269,10 +278,7 @@ impl ListApps {
                         .as_deref()
                         .map(|b| format!(", \"bundleID\": \"{}\"", b))
                         .unwrap_or_default();
-                    format!(
-                        "{{\"name\": \"{}\"{}, \"pid\": {}}}",
-                        a.name, bundle, a.pid
-                    )
+                    format!("{{\"name\": \"{}\"{}, \"pid\": {}}}", a.name, bundle, a.pid)
                 })
                 .collect();
             println!("{}]", items.join(", "));
@@ -320,7 +326,10 @@ pub struct Ocr {
     #[arg(long, help = "Filter results containing this text")]
     pub find: Option<String>,
 
-    #[arg(long, help = "Skip saving the display screenshot (only output OCR text)")]
+    #[arg(
+        long,
+        help = "Skip saving the display screenshot (only output OCR text)"
+    )]
     pub no_screenshot: bool,
 
     #[arg(long, help = "Image format for screenshot: jpeg, png, or webp")]

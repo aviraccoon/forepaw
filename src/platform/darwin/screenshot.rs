@@ -9,17 +9,15 @@ use std::process::Command;
 
 use crate::core::annotation::{AnnotationCollector, AnnotationLegend};
 use crate::core::crop_region::CropRegion;
-use crate::core::errors::ForepawError;
 use crate::core::element_tree::ElementRef;
+use crate::core::errors::ForepawError;
 use crate::core::types::{Point, Rect};
 use crate::platform::darwin::annotation;
 use crate::platform::darwin::app;
-use crate::platform::darwin::ffi::{
-    self, CGRectFFI, CGPointFFI, CGSizeFFI,
-};
+use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI, CGSizeFFI};
 use crate::platform::darwin::snapshot;
-use crate::platform::{ScreenshotOptions, ScreenshotParams, SnapshotOptions};
 use crate::platform::ScreenshotResult;
+use crate::platform::{ScreenshotOptions, ScreenshotParams, SnapshotOptions};
 
 /// Generate a unique temp file tag based on timestamp + random suffix.
 pub fn temp_tag() -> String {
@@ -44,10 +42,7 @@ fn rand_suffix() -> u32 {
 
 /// Run the system `screencapture` CLI to capture a window or full screen.
 /// Returns the path to the captured PNG file.
-fn capture_screenshot(
-    window_id: Option<u32>,
-    cursor: bool,
-) -> Result<String, ForepawError> {
+fn capture_screenshot(window_id: Option<u32>, cursor: bool) -> Result<String, ForepawError> {
     let tag = temp_tag();
     let path = format!("/tmp/forepaw-{tag}.png");
 
@@ -91,12 +86,7 @@ fn crop_image(
                 "Failed to load image for cropping: {input_path}"
             )));
         }
-        let image = ffi::CGImageCreateWithPNGDataProvider(
-            data_provider,
-            std::ptr::null(),
-            0,
-            0,
-        );
+        let image = ffi::CGImageCreateWithPNGDataProvider(data_provider, std::ptr::null(), 0, 0);
         ffi::CFRelease(data_provider as ffi::CFTypeRef);
         if image.is_null() {
             return Err(ForepawError::ActionFailed(format!(
@@ -114,8 +104,14 @@ fn crop_image(
         let ch = rect.3.clamp(1, img_h - cy);
 
         let crop_cg_rect = CGRectFFI {
-            origin: CGPointFFI { x: cx as f64, y: cy as f64 },
-            size: CGSizeFFI { width: cw as f64, height: ch as f64 },
+            origin: CGPointFFI {
+                x: cx as f64,
+                y: cy as f64,
+            },
+            size: CGSizeFFI {
+                width: cw as f64,
+                height: ch as f64,
+            },
         };
 
         let cropped = ffi::CGImageCreateWithImageInRect(image, crop_cg_rect);
@@ -125,7 +121,9 @@ fn crop_image(
         }
 
         // Write cropped image to output path
-        let output_url = objc2_foundation::NSURL::fileURLWithPath(&objc2_foundation::NSString::from_str(output_path));
+        let output_url = objc2_foundation::NSURL::fileURLWithPath(
+            &objc2_foundation::NSString::from_str(output_path),
+        );
         let png_type = objc2_foundation::NSString::from_str("public.png");
         let dest = {
             ffi::CGImageDestinationCreateWithURL(
@@ -236,10 +234,7 @@ pub fn post_process_screenshot(
     if needs_scale {
         let target_width = image_pixel_width(raw_path)? / 2;
         if target_width > 0 {
-            sips_args.extend_from_slice(&[
-                "--resampleWidth".to_string(),
-                target_width.to_string(),
-            ]);
+            sips_args.extend_from_slice(&["--resampleWidth".to_string(), target_width.to_string()]);
         }
     }
 
@@ -254,7 +249,11 @@ pub fn post_process_screenshot(
         ]);
     }
 
-    sips_args.extend_from_slice(&[raw_path.to_string(), "--out".to_string(), output_path.clone()]);
+    sips_args.extend_from_slice(&[
+        raw_path.to_string(),
+        "--out".to_string(),
+        output_path.clone(),
+    ]);
 
     let status = Command::new("/usr/bin/sips")
         .args(&sips_args)
@@ -309,7 +308,16 @@ pub fn apply_crop(
         None => return Ok(input_path.to_string()),
     };
     let cropped_path = format!("/tmp/forepaw-{tag}{suffix}-cropped.png");
-    crop_image(input_path, &cropped_path, (crop_rect.0 as i32, crop_rect.1 as i32, crop_rect.2 as i32, crop_rect.3 as i32))?;
+    crop_image(
+        input_path,
+        &cropped_path,
+        (
+            crop_rect.0 as i32,
+            crop_rect.1 as i32,
+            crop_rect.2 as i32,
+            crop_rect.3 as i32,
+        ),
+    )?;
     let _ = fs::remove_file(input_path);
     Ok(cropped_path)
 }
@@ -364,8 +372,12 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
         Some(s) => s,
         None => {
             return render_plain(
-                &raw_path, &tag, params.crop, resolved_window.as_ref(),
-                params.grid_spacing, params.options,
+                &raw_path,
+                &tag,
+                params.crop,
+                resolved_window.as_ref(),
+                params.grid_spacing,
+                params.options,
             );
         }
     };
@@ -375,8 +387,12 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
         Some(a) => a,
         None => {
             return render_plain(
-                &raw_path, &tag, params.crop, resolved_window.as_ref(),
-                params.grid_spacing, params.options,
+                &raw_path,
+                &tag,
+                params.crop,
+                resolved_window.as_ref(),
+                params.grid_spacing,
+                params.options,
             );
         }
     };
@@ -406,7 +422,12 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
             match screen {
                 Some(s) => {
                     let frame = s.frame();
-                    Rect::new(frame.origin.x, frame.origin.y, frame.size.width, frame.size.height)
+                    Rect::new(
+                        frame.origin.x,
+                        frame.origin.y,
+                        frame.size.width,
+                        frame.size.height,
+                    )
                 }
                 None => Rect::new(0.0, 0.0, 1440.0, 900.0),
             }
@@ -426,9 +447,8 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     }
 
     if annotations.is_empty() {
-        let current_path = apply_crop_if_needed(
-            &raw_path, &tag, params.crop, resolved_window.as_ref(),
-        )?;
+        let current_path =
+            apply_crop_if_needed(&raw_path, &tag, params.crop, resolved_window.as_ref())?;
         return Ok(ScreenshotResult {
             path: current_path,
             annotations: None,
@@ -456,7 +476,12 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
         if let Some(ref resolved) = resolved_window {
             let window_size = Point::new(resolved.bounds.width, resolved.bounds.height);
             current_annotated = apply_crop(
-                crop, &window_size, scale_factor, &current_annotated, &tag, "-annotated",
+                crop,
+                &window_size,
+                scale_factor,
+                &current_annotated,
+                &tag,
+                "-annotated",
             )?;
         }
     }
@@ -465,9 +490,8 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     let legend = AnnotationLegend::new().format(&annotations);
 
     // Post-process the annotated image (scale + format conversion)
-    let final_path = post_process_screenshot(
-        &current_annotated, &tag, params.options, "-annotated",
-    )?;
+    let final_path =
+        post_process_screenshot(&current_annotated, &tag, params.options, "-annotated")?;
 
     Ok(ScreenshotResult {
         path: final_path,
