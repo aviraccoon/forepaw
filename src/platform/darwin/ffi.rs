@@ -436,6 +436,16 @@ extern "C" {
     pub fn CGImageDestinationAddImage(dest: CGImageDestinationRef, image: CGImageRef, properties: *const c_void);
     pub fn CGImageDestinationFinalize(dest: CGImageDestinationRef) -> Boolean;
 
+    // Context state and drawing helpers
+    pub fn CGContextSaveGState(ctx: CGContextRef);
+    pub fn CGContextRestoreGState(ctx: CGContextRef);
+    pub fn CGContextSetTextPosition(ctx: CGContextRef, x: CGFloat, y: CGFloat);
+    pub fn CGContextEOFillPath(ctx: CGContextRef);
+    pub fn CGBitmapContextGetHeight(ctx: CGContextRef) -> usize;
+    pub fn CGBitmapContextGetWidth(ctx: CGContextRef) -> usize;
+    pub fn CGContextMoveToPoint(ctx: CGContextRef, x: CGFloat, y: CGFloat);
+    pub fn CGContextAddLineToPoint(ctx: CGContextRef, x: CGFloat, y: CGFloat);
+
     // Null rect for full-screen capture
     pub static kCGNullRect: CGRectFFI;
 }
@@ -510,4 +520,54 @@ pub const K_CF_STRING_ENCODING_UTF8: u32 = 0x08000100;
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
     pub static kCFNull: CFTypeRef;
+}
+
+// ---------------------------------------------------------------------------
+// CoreText - Font + Line rendering (for annotation text)
+// ---------------------------------------------------------------------------
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct CTFont(c_void);
+
+pub type CTFontRef = *const CTFont;
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct CTLine(c_void);
+
+pub type CTLineRef = *const CTLine;
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct CFAttributedString(c_void);
+
+pub type CFAttributedStringRef = *const CFAttributedString;
+
+#[link(name = "CoreText", kind = "framework")]
+extern "C" {
+    pub fn CTFontCreateWithName(
+        name: CFStringRef,
+        size: CGFloat,
+        matrix: *const c_void,
+    ) -> CTFontRef;
+    pub fn CTLineCreateWithAttributedString(string: CFAttributedStringRef) -> CTLineRef;
+    pub fn CTLineGetBoundsWithOptions(line: CTLineRef, options: u32) -> CGRectFFI;
+    pub fn CTLineDraw(line: CTLineRef, context: CGContextRef);
+}
+
+#[link(name = "CoreFoundation", kind = "framework")]
+extern "C" {
+    pub fn CFAttributedStringCreate(
+        allocator: *const c_void,
+        string: CFStringRef,
+        attributes: CFDictionaryRef,
+    ) -> CFAttributedStringRef;
+}
+
+// CoreText attribute key constants (defined as CFStringRef globals)
+#[link(name = "CoreText", kind = "framework")]
+extern "C" {
+    pub static kCTFontAttributeName: CFStringRef;
+    pub static kCTForegroundColorAttributeName: CFStringRef;
 }

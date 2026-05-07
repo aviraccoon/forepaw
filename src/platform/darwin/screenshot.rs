@@ -7,14 +7,19 @@ use std::ffi::CString;
 use std::fs;
 use std::process::Command;
 
+use crate::core::annotation::{AnnotationCollector, AnnotationLegend};
 use crate::core::crop_region::CropRegion;
 use crate::core::errors::ForepawError;
-use crate::core::types::Point;
+use crate::core::element_tree::ElementRef;
+use crate::core::types::{Point, Rect};
+use crate::platform::darwin::annotation;
 use crate::platform::darwin::app;
 use crate::platform::darwin::ffi::{
     self, CGRectFFI, CGPointFFI, CGSizeFFI,
 };
-use crate::platform::{ScreenshotOptions, ScreenshotResult};
+use crate::platform::darwin::snapshot;
+use crate::platform::{AnnotationStyle, ScreenshotOptions, SnapshotOptions};
+use crate::platform::ScreenshotResult;
 
 /// Generate a unique temp file tag based on timestamp + random suffix.
 pub fn temp_tag() -> String {
@@ -321,14 +326,17 @@ pub fn backing_scale_factor() -> f64 {
     }
 }
 
-/// Take a screenshot of an app window (or full screen).
+/// Take a screenshot of an app window (or full screen), with optional annotations.
 ///
 /// This is the main entry point called from the DesktopProvider trait impl.
 pub fn screenshot(
     app_name: Option<&str>,
     window: Option<&str>,
+    style: Option<AnnotationStyle>,
+    only: Option<&[ElementRef]>,
     options: &ScreenshotOptions,
     crop: Option<&CropRegion>,
+    grid_spacing: Option<u32>,
 ) -> Result<ScreenshotResult, ForepawError> {
     // Check screen recording permission
     if unsafe { ffi::CGPreflightScreenCaptureAccess() == 0 } {
@@ -359,22 +367,175 @@ pub fn screenshot(
         raw_path = capture_screenshot(None, options.cursor)?;
     }
 
-    // Apply crop if requested
-    let mut current_path = raw_path.clone();
-    if let Some(crop) = crop {
-        if let Some(ref resolved) = resolved_window {
-            let window_size = Point::new(resolved.bounds.width, resolved.bounds.height);
-            let scale = backing_scale_factor();
-            current_path = apply_crop(crop, &window_size, scale, &current_path, &tag, "")?;
+    // Non-annotated path: crop (if requested), grid, then post-process
+    let style = match style {
+        Some(s) => s,
+        None => {
+            return render_plain(&raw_path, &tag, crop, resolved_window.as_ref(), grid_spacing, options);
+        }
+    };
+
+    // Annotation requires an app name (for AX tree)
+    let app_name = match app_name {
+        Some(a) => a,
+        None => {
+            return render_plain(&raw_path, &tag, crop, resolved_window.as_ref(), grid_spacing, options);
+        }
+    };
+
+    // Get the AX tree for annotations
+    let snapshot_opts = SnapshotOptions {
+        interactive_only: true,
+        max_depth: SnapshotOptions::DEFAULT_DEPTH,
+        ..Default::default()
+    };
+    let tree = snapshot::snapshot(app_name, &snapshot_opts)?;
+
+    // Determine window bounds for coordinate conversion
+    let window_bounds = match resolved_window.as_ref() {
+        Some(resolved) => Rect::new(
+            resolved.bounds.x,
+            resolved.bounds.y,
+            resolved.bounds.width,
+            resolved.bounds.height,
+        ),
+        None => {
+            // Full screen fallback
+            let screen = unsafe {
+                let mtm = objc2::MainThreadMarker::new_unchecked();
+                objc2_app_kit::NSScreen::mainScreen(mtm)
+            };
+            match screen {
+                Some(s) => {
+                    let frame = s.frame();
+                    Rect::new(frame.origin.x, frame.origin.y, frame.size.width, frame.size.height)
+                }
+                None => Rect::new(0.0, 0.0, 1440.0, 900.0),
+            }
+        }
+    };
+
+    // Collect annotations
+    let collector = AnnotationCollector::new();
+    let mut annotations = collector.collect(&tree.root, window_bounds);
+
+    // Filter to specific refs if requested
+    if let Some(only) = only {
+        if !only.is_empty() {
+            let ref_set: std::collections::HashSet<ElementRef> = only.iter().copied().collect();
+            annotations.retain(|a| ref_set.contains(&a.r#ref));
         }
     }
 
-    // Post-process (scale + format conversion)
-    let final_path = post_process_screenshot(&current_path, &tag, options, "")?;
+    if annotations.is_empty() {
+        let current_path = apply_crop_if_needed(
+            &raw_path, &tag, crop, resolved_window.as_ref(),
+        )?;
+        return Ok(ScreenshotResult {
+            path: current_path,
+            annotations: None,
+            legend: Some("No interactive elements found".into()),
+        });
+    }
 
+    // Render annotations on the full window image
+    let annotated_path = format!("/tmp/forepaw-{tag}-annotated.png");
+    let scale_factor = backing_scale_factor();
+    annotation::render(
+        &raw_path,
+        &annotations,
+        style,
+        scale_factor,
+        &annotated_path,
+    )
+    .map_err(|e| ForepawError::ActionFailed(e.to_string()))?;
+
+    let _ = fs::remove_file(&raw_path);
+
+    // Crop the annotated image if requested
+    let mut current_annotated = annotated_path;
+    if let Some(crop) = crop {
+        if let Some(ref resolved) = resolved_window {
+            let window_size = Point::new(resolved.bounds.width, resolved.bounds.height);
+            current_annotated = apply_crop(
+                crop, &window_size, scale_factor, &current_annotated, &tag, "-annotated",
+            )?;
+        }
+    }
+
+    // Generate legend
+    let legend = AnnotationLegend::new().format(&annotations);
+
+    // Post-process the annotated image (scale + format conversion)
+    let final_path = post_process_screenshot(
+        &current_annotated, &tag, options, "-annotated",
+    )?;
+
+    Ok(ScreenshotResult {
+        path: final_path,
+        annotations: Some(annotations),
+        legend: Some(legend),
+    })
+}
+
+/// Non-annotated path: crop + grid + post-process.
+fn render_plain(
+    raw_path: &str,
+    tag: &str,
+    crop: Option<&CropRegion>,
+    resolved_window: Option<&app::ResolvedWindow>,
+    grid_spacing: Option<u32>,
+    options: &ScreenshotOptions,
+) -> Result<ScreenshotResult, ForepawError> {
+    let mut current_path = raw_path.to_string();
+
+    if let Some(crop) = crop {
+        if let Some(resolved) = resolved_window {
+            let window_size = Point::new(resolved.bounds.width, resolved.bounds.height);
+            let scale = backing_scale_factor();
+            current_path = apply_crop(crop, &window_size, scale, &current_path, tag, "")?;
+        }
+    }
+
+    if let Some(spacing) = grid_spacing {
+        let scale_factor = backing_scale_factor();
+        let grid_path = format!("/tmp/forepaw-{tag}-grid.png");
+        // Pass crop origin so grid labels show window-relative coords
+        let crop_origin = crop.map(|c| (c.rect.x - c.padding, c.rect.y - c.padding));
+        let origin_offset = crop_origin.unwrap_or((0.0, 0.0));
+        annotation::render_grid(
+            &current_path,
+            spacing,
+            scale_factor,
+            &grid_path,
+            origin_offset,
+        )
+        .map_err(|e| ForepawError::ActionFailed(e.to_string()))?;
+        let _ = fs::remove_file(&current_path);
+        current_path = grid_path;
+    }
+
+    let final_path = post_process_screenshot(&current_path, tag, options, "")?;
     Ok(ScreenshotResult {
         path: final_path,
         annotations: None,
         legend: None,
     })
+}
+
+/// Apply crop if needed, returning the (possibly new) path.
+fn apply_crop_if_needed(
+    raw_path: &str,
+    tag: &str,
+    crop: Option<&CropRegion>,
+    resolved_window: Option<&app::ResolvedWindow>,
+) -> Result<String, ForepawError> {
+    match (crop, resolved_window) {
+        (Some(crop), Some(resolved)) => {
+            let window_size = Point::new(resolved.bounds.width, resolved.bounds.height);
+            let scale = backing_scale_factor();
+            apply_crop(crop, &window_size, scale, raw_path, tag, "")
+        }
+        _ => Ok(raw_path.to_string()),
+    }
 }

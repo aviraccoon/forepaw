@@ -11,16 +11,14 @@
 #[allow(dead_code)]
 mod ffi;
 
+pub mod annotation;
 pub mod app;
 pub mod input;
 pub mod key_code;
 pub mod ocr;
+pub mod saliency;
 pub mod screenshot;
 pub mod snapshot;
-
-// TODO: implement remaining modules
-// mod annotation;
-// mod saliency;
 
 use crate::core::errors::ForepawError;
 use crate::platform::DesktopProvider;
@@ -63,7 +61,15 @@ impl DesktopProvider for DarwinProvider {
         &self,
         params: &crate::platform::ScreenshotParams,
     ) -> Result<crate::platform::ScreenshotResult, ForepawError> {
-        screenshot::screenshot(params.app, params.window, params.options, params.crop)
+        screenshot::screenshot(
+            params.app,
+            params.window,
+            params.style,
+            params.only,
+            params.options,
+            params.crop,
+            params.grid_spacing,
+        )
     }
 
     fn ocr(

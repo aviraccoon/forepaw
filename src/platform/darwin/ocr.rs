@@ -37,7 +37,9 @@ pub fn ocr(
     };
 
     let screenshot_result =
-        crate::platform::darwin::screenshot::screenshot(app_name, window, &ocr_options, None)?;
+        crate::platform::darwin::screenshot::screenshot(
+            app_name, window, None, None, &ocr_options, None, None,
+        )?;
 
     // Load the image using NSImage to get pixel dimensions
     let ns_image = objc2_app_kit::NSImage::initWithContentsOfFile(
