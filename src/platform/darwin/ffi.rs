@@ -65,7 +65,8 @@ pub type CFBooleanRef = *const CFBoolean;
 pub type CFDataRef = *const CFData;
 pub type CFAllocatorRef = *const CFAllocator;
 
-// CFArray callbacks (use default kCFTypeArrayCallbacks)
+// CFArray callbacks -- use the system-provided global kCFTypeArrayCallBacks
+// (which has actual retain/release/equal functions, not a zeroed struct).
 #[repr(C)]
 pub struct CFArrayCallBacks {
     pub version: CFIndex,
@@ -74,14 +75,6 @@ pub struct CFArrayCallBacks {
     pub copy_description: Option<unsafe extern "C" fn(*const c_void) -> CFStringRef>,
     pub equal: Option<unsafe extern "C" fn(*const c_void, *const c_void) -> Boolean>,
 }
-
-pub const K_CF_TYPE_ARRAY_CALLBACKS: CFArrayCallBacks = CFArrayCallBacks {
-    version: 0,
-    r#retain: None,
-    release: None,
-    copy_description: None,
-    equal: None,
-};
 
 // CFDictionary callbacks -- we use the system-provided globals
 // (kCFTypeDictionaryKeyCallBacks / kCFTypeDictionaryValueCallBacks)
@@ -111,7 +104,7 @@ pub struct CFDictionaryValueCallBacks {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct AXUIElementRef(*const c_void);
+pub struct AXUIElementRef(pub *const c_void);
 
 // SAFETY: AXUIElementRef is a CF object pointer. It's safe to send between
 // threads as long as we don't share mutable references. The Swift version
@@ -149,7 +142,7 @@ pub enum AXError {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct AXValueRef(*const c_void);
+pub struct AXValueRef(pub *const c_void);
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -453,6 +446,12 @@ extern "C" {
 
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
+    pub fn CFArrayCreate(
+        allocator: *const c_void,
+        values: *const *const c_void,
+        num_values: CFIndex,
+        callbacks: *const CFArrayCallBacks,
+    ) -> CFArrayRef;
     pub fn CFArrayGetCount(array: CFArrayRef) -> CFIndex;
     pub fn CFArrayGetValueAtIndex(array: CFArrayRef, idx: CFIndex) -> *const c_void;
     pub fn CFDictionaryGetValue(dict: CFDictionaryRef, key: *const c_void) -> *const c_void;
@@ -494,6 +493,9 @@ extern "C" {
     // CFDictionary callback globals
     pub static kCFTypeDictionaryKeyCallBacks: CFDictionaryKeyCallBacks;
     pub static kCFTypeDictionaryValueCallBacks: CFDictionaryValueCallBacks;
+
+    // CFArray callback global
+    pub static kCFTypeArrayCallBacks: CFArrayCallBacks;
 
     // CFBoolean constants
     pub static kCFBooleanTrue: CFTypeRef;

@@ -37,6 +37,7 @@ No external task runner. Cargo is the build system.
 - Run `cargo clippy` and `cargo test` before committing.
 - Keep `src/core/` free of platform imports. All platform-specific code goes in `src/platform/`.
 - Every new public API in `src/platform/` must have a corresponding method on the `DesktopProvider` trait.
+- Every new type, function, or constant in any module needs unit tests -- including platform backends (`src/platform/darwin/`). Test pure logic (helpers, pruning math, constants, name computation chains) even when the FFI-dependent tree walk itself needs a live app.
 - Implement `std::str::FromStr` for string-parsed enums (clippy enforces this over custom `from_str` methods).
 - Use `anyhow::Result` in CLI command methods; use `Result<_, ForepawError>` in platform/trait methods.
 - Every new type or function in `src/core/` needs unit tests.

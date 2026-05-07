@@ -13,9 +13,9 @@ mod ffi;
 
 pub mod app;
 pub mod key_code;
+pub mod snapshot;
 
 // TODO: implement remaining modules
-// mod snapshot;
 // mod input;
 // mod screenshot;
 // mod ocr;
@@ -53,10 +53,10 @@ impl DesktopProvider for DarwinProvider {
 
     fn snapshot(
         &self,
-        _app: &str,
-        _options: &crate::platform::SnapshotOptions,
+        app: &str,
+        options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
-        Err(ForepawError::ActionFailed("snapshot not yet implemented".into()))
+        snapshot::snapshot(app, options)
     }
 
     fn screenshot(
@@ -221,22 +221,18 @@ impl DesktopProvider for DarwinProvider {
 
     fn resolve_ref_position(
         &self,
-        _ref: crate::core::element_tree::ElementRef,
-        _app: &str,
+        r#ref: crate::core::element_tree::ElementRef,
+        app: &str,
     ) -> Result<crate::core::types::Point, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "resolve_ref_position not yet implemented".into(),
-        ))
+        snapshot::resolve_ref_position(r#ref.id, app)
     }
 
     fn resolve_ref_bounds(
         &self,
-        _ref: crate::core::element_tree::ElementRef,
-        _app: &str,
+        r#ref: crate::core::element_tree::ElementRef,
+        app: &str,
     ) -> Result<crate::core::types::Rect, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "resolve_ref_bounds not yet implemented".into(),
-        ))
+        snapshot::resolve_ref_bounds(r#ref.id, app)
     }
 
     fn has_permissions(&self) -> bool {

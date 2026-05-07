@@ -438,4 +438,15 @@ mod tests {
         assert_eq!(diff.added().len(), 1);
         assert_eq!(diff.removed().len(), 1);
     }
+
+    #[test]
+    fn summary_describes_changes() {
+        let old = "app: TestApp\n  button @e1 \"A\"\n  button @e2 \"B\"";
+        let new = "app: TestApp\n  button @e1 \"A\"\n  button @e2 \"C\"\n  button @e3 \"D\"";
+        let differ = SnapshotDiffer::new();
+        let diff = differ.diff(old, new);
+        let summary = diff.summary();
+        assert!(summary.contains("added"));
+        assert!(summary.contains("removed"));
+    }
 }
