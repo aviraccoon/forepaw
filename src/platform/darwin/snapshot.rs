@@ -362,6 +362,8 @@ impl BatchAttrs {
             let mut result = Vec::with_capacity(count as usize);
             for i in 0..count {
                 let child = CFArrayGetValueAtIndex(val as CFArrayRef, i);
+                // CFRetain: CFArrayGetValueAtIndex returns a non-retained pointer.
+                CFRetain(child as CFTypeRef);
                 result.push(AXUIElementRef::from_raw(child));
             }
             result
@@ -703,6 +705,8 @@ fn get_ax_element_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
         let mut children = Vec::with_capacity(count as usize);
         for i in 0..count {
             let child = CFArrayGetValueAtIndex(value as CFArrayRef, i);
+            // CFRetain: CFArrayGetValueAtIndex returns a non-retained pointer.
+            CFRetain(child as CFTypeRef);
             children.push(AXUIElementRef::from_raw(child));
         }
         CFRelease(value);

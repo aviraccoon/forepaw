@@ -473,6 +473,9 @@ extern "C" {
         callbacks: *const CFArrayCallBacks,
     ) -> CFArrayRef;
     pub fn CFArrayGetCount(array: CFArrayRef) -> CFIndex;
+    /// Returns a non-retained pointer to the value at the given index.
+    /// Callers must CFRetain the returned pointer if they need to keep it
+    /// beyond the lifetime of the array.
     pub fn CFArrayGetValueAtIndex(array: CFArrayRef, idx: CFIndex) -> *const c_void;
     pub fn CFDictionaryGetValue(dict: CFDictionaryRef, key: *const c_void) -> *const c_void;
     pub fn CFDictionaryCreate(
