@@ -1,0 +1,380 @@
+//! Screenshot capture via `screencapture` CLI, with crop and post-processing.
+//!
+//! Uses the system `screencapture` binary for window/full-screen capture,
+//! CoreGraphics for cropping, and `sips`/`cwebp` for format conversion.
+
+use std::ffi::CString;
+use std::fs;
+use std::process::Command;
+
+use crate::core::crop_region::CropRegion;
+use crate::core::errors::ForepawError;
+use crate::core::types::Point;
+use crate::platform::darwin::app;
+use crate::platform::darwin::ffi::{
+    self, CGRectFFI, CGPointFFI, CGSizeFFI,
+};
+use crate::platform::{ScreenshotOptions, ScreenshotResult};
+
+/// Generate a unique temp file tag based on timestamp + random suffix.
+pub fn temp_tag() -> String {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let rand: u32 = rand_suffix();
+    format!("{ts}-{rand:04x}")
+}
+
+/// Simple random suffix without external dependency.
+fn rand_suffix() -> u32 {
+    // Use address space layout randomization for a cheap random value
+    let stack_addr = &temp_tag as *const _ as usize;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    (stack_addr.wrapping_mul(2654435761) ^ ts as usize) as u32 & 0xFFFF
+}
+
+/// Run the system `screencapture` CLI to capture a window or full screen.
+/// Returns the path to the captured PNG file.
+fn capture_screenshot(
+    window_id: Option<u32>,
+    cursor: bool,
+) -> Result<String, ForepawError> {
+    let tag = temp_tag();
+    let path = format!("/tmp/forepaw-{tag}.png");
+
+    let mut args: Vec<String> = vec!["-x".into(), "-o".into()];
+    if cursor {
+        args.push("-C".into());
+    }
+    if let Some(wid) = window_id {
+        args.push("-l".into());
+        args.push(wid.to_string());
+    }
+    args.push(path.clone());
+
+    let status = Command::new("/usr/sbin/screencapture")
+        .args(&args)
+        .status()
+        .map_err(|e| ForepawError::ActionFailed(format!("failed to run screencapture: {e}")))?;
+
+    if !status.success() {
+        return Err(ForepawError::ActionFailed(format!(
+            "screencapture exited with status {}",
+            status.code().unwrap_or(-1)
+        )));
+    }
+
+    Ok(path)
+}
+
+/// Crop an image to a pixel rectangle using CoreGraphics.
+fn crop_image(
+    input_path: &str,
+    output_path: &str,
+    rect: (i32, i32, i32, i32),
+) -> Result<(), ForepawError> {
+    let c_path = CString::new(input_path)
+        .map_err(|_| ForepawError::ActionFailed(format!("Invalid path: {input_path}")))?;
+    unsafe {
+        let data_provider = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
+        if data_provider.is_null() {
+            return Err(ForepawError::ActionFailed(format!(
+                "Failed to load image for cropping: {input_path}"
+            )));
+        }
+        let image = ffi::CGImageCreateWithPNGDataProvider(
+            data_provider,
+            std::ptr::null(),
+            0,
+            0,
+        );
+        ffi::CFRelease(data_provider as ffi::CFTypeRef);
+        if image.is_null() {
+            return Err(ForepawError::ActionFailed(format!(
+                "Failed to decode PNG: {input_path}"
+            )));
+        }
+
+        let img_w = ffi::CGImageGetWidth(image) as i32;
+        let img_h = ffi::CGImageGetHeight(image) as i32;
+
+        // Clamp rect to image bounds
+        let cx = rect.0.clamp(0, img_w - 1);
+        let cy = rect.1.clamp(0, img_h - 1);
+        let cw = rect.2.clamp(1, img_w - cx);
+        let ch = rect.3.clamp(1, img_h - cy);
+
+        let crop_cg_rect = CGRectFFI {
+            origin: CGPointFFI { x: cx as f64, y: cy as f64 },
+            size: CGSizeFFI { width: cw as f64, height: ch as f64 },
+        };
+
+        let cropped = ffi::CGImageCreateWithImageInRect(image, crop_cg_rect);
+        ffi::CFRelease(image as ffi::CFTypeRef);
+        if cropped.is_null() {
+            return Err(ForepawError::ActionFailed("Failed to crop image".into()));
+        }
+
+        // Write cropped image to output path
+        let output_url = objc2_foundation::NSURL::fileURLWithPath(&objc2_foundation::NSString::from_str(output_path));
+        let png_type = objc2_foundation::NSString::from_str("public.png");
+        let dest = {
+            ffi::CGImageDestinationCreateWithURL(
+                objc2::rc::Retained::as_ptr(&output_url) as *const std::ffi::c_void,
+                objc2::rc::Retained::as_ptr(&png_type) as *const std::ffi::c_void,
+                1,
+                std::ptr::null(),
+            )
+        };
+        if dest.is_null() {
+            ffi::CFRelease(cropped as ffi::CFTypeRef);
+            return Err(ForepawError::ActionFailed(format!(
+                "Failed to create image destination: {output_path}"
+            )));
+        }
+
+        ffi::CGImageDestinationAddImage(dest, cropped, std::ptr::null());
+        let finalized = ffi::CGImageDestinationFinalize(dest);
+        ffi::CFRelease(dest as ffi::CFTypeRef);
+        ffi::CFRelease(cropped as ffi::CFTypeRef);
+
+        if finalized == 0 {
+            return Err(ForepawError::ActionFailed(format!(
+                "Failed to write cropped image: {output_path}"
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// Post-process a screenshot: downscale (1x) and/or convert format.
+/// Returns the final output path.
+pub fn post_process_screenshot(
+    raw_path: &str,
+    tag: &str,
+    options: &ScreenshotOptions,
+    suffix: &str,
+) -> Result<String, ForepawError> {
+    let needs_scale = options.scale == 1;
+    let needs_format = options.format != crate::platform::ImageFormat::Png;
+
+    if !needs_scale && !needs_format {
+        return Ok(raw_path.to_string());
+    }
+
+    let ext = options.format.file_extension();
+    let output_path = format!("/tmp/forepaw-{tag}{suffix}.{ext}");
+
+    // WebP: scale with sips first if needed, then convert with cwebp
+    if options.format == crate::platform::ImageFormat::Webp {
+        let mut scaled_path = raw_path.to_string();
+
+        if needs_scale {
+            let target_width = image_pixel_width(raw_path)? / 2;
+            if target_width > 0 {
+                let scaled = format!("/tmp/forepaw-{tag}{suffix}-scaled.png");
+                let status = Command::new("/usr/bin/sips")
+                    .args([
+                        "--resampleWidth",
+                        &target_width.to_string(),
+                        raw_path,
+                        "--out",
+                        &scaled,
+                    ])
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .map_err(|e| ForepawError::ActionFailed(format!("sips failed: {e}")))?;
+
+                if status.success() {
+                    scaled_path = scaled;
+                }
+            }
+        }
+
+        let status = Command::new("/usr/bin/env")
+            .args([
+                "cwebp",
+                "-q",
+                &options.quality.to_string(),
+                &scaled_path,
+                "-o",
+                &output_path,
+            ])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map_err(|e| ForepawError::ActionFailed(format!("cwebp failed: {e}")))?;
+
+        if !status.success() {
+            return Err(ForepawError::ActionFailed(
+                "cwebp failed. Is cwebp installed?".into(),
+            ));
+        }
+
+        if scaled_path != raw_path {
+            let _ = fs::remove_file(&scaled_path);
+        }
+        if output_path != raw_path {
+            let _ = fs::remove_file(raw_path);
+        }
+        return Ok(output_path);
+    }
+
+    // JPEG: use sips for scale + format conversion
+    let mut sips_args: Vec<String> = Vec::new();
+
+    if needs_scale {
+        let target_width = image_pixel_width(raw_path)? / 2;
+        if target_width > 0 {
+            sips_args.extend_from_slice(&[
+                "--resampleWidth".to_string(),
+                target_width.to_string(),
+            ]);
+        }
+    }
+
+    if needs_format {
+        sips_args.extend_from_slice(&[
+            "-s".to_string(),
+            "format".to_string(),
+            "jpeg".to_string(),
+            "-s".to_string(),
+            "formatOptions".to_string(),
+            options.quality.to_string(),
+        ]);
+    }
+
+    sips_args.extend_from_slice(&[raw_path.to_string(), "--out".to_string(), output_path.clone()]);
+
+    let status = Command::new("/usr/bin/sips")
+        .args(&sips_args)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|e| ForepawError::ActionFailed(format!("sips failed: {e}")))?;
+
+    if !status.success() {
+        return Ok(raw_path.to_string()); // fallback: return original
+    }
+
+    if output_path != raw_path {
+        let _ = fs::remove_file(raw_path);
+    }
+
+    Ok(output_path)
+}
+
+/// Get the pixel width of an image file via CoreGraphics.
+fn image_pixel_width(path: &str) -> Result<usize, ForepawError> {
+    let c_path = CString::new(path.to_string())
+        .map_err(|_| ForepawError::ActionFailed("Invalid path".into()))?;
+    unsafe {
+        let dp = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
+        if dp.is_null() {
+            return Ok(0); // can't determine, let caller handle
+        }
+        let image = ffi::CGImageCreateWithPNGDataProvider(dp, std::ptr::null(), 0, 0);
+        ffi::CFRelease(dp as ffi::CFTypeRef);
+        if image.is_null() {
+            return Ok(0);
+        }
+        let w = ffi::CGImageGetWidth(image);
+        ffi::CFRelease(image as ffi::CFTypeRef);
+        Ok(w)
+    }
+}
+
+/// Apply a crop region to an image file.
+/// Returns the path to the cropped image (or the original if crop doesn't overlap).
+pub fn apply_crop(
+    crop: &CropRegion,
+    window_size: &Point,
+    scale_factor: f64,
+    input_path: &str,
+    tag: &str,
+    suffix: &str,
+) -> Result<String, ForepawError> {
+    let crop_rect = match crop.image_crop_rect(window_size, scale_factor) {
+        Some(r) => r,
+        None => return Ok(input_path.to_string()),
+    };
+    let cropped_path = format!("/tmp/forepaw-{tag}{suffix}-cropped.png");
+    crop_image(input_path, &cropped_path, (crop_rect.0 as i32, crop_rect.1 as i32, crop_rect.2 as i32, crop_rect.3 as i32))?;
+    let _ = fs::remove_file(input_path);
+    Ok(cropped_path)
+}
+
+/// Get the main screen's Retina backing scale factor.
+pub fn backing_scale_factor() -> f64 {
+    // Access NSScreen.mainScreen via objc2
+    use objc2_app_kit::NSScreen;
+    let mtm = unsafe { objc2::MainThreadMarker::new_unchecked() };
+    let screen = NSScreen::mainScreen(mtm);
+    match screen {
+        Some(s) => s.backingScaleFactor(),
+        None => 2.0, // default Retina assumption
+    }
+}
+
+/// Take a screenshot of an app window (or full screen).
+///
+/// This is the main entry point called from the DesktopProvider trait impl.
+pub fn screenshot(
+    app_name: Option<&str>,
+    window: Option<&str>,
+    options: &ScreenshotOptions,
+    crop: Option<&CropRegion>,
+) -> Result<ScreenshotResult, ForepawError> {
+    // Check screen recording permission
+    if unsafe { ffi::CGPreflightScreenCaptureAccess() == 0 } {
+        return Err(ForepawError::ScreenRecordingDenied);
+    }
+
+    let tag = temp_tag();
+    let raw_path;
+
+    let mut resolved_window: Option<app::ResolvedWindow> = None;
+
+    if let Some(app_name) = app_name {
+        let (_running_app, pid) = {
+            let running_app = app::find_app(app_name)?;
+            let pid = running_app.processIdentifier();
+            #[allow(deprecated)]
+            running_app.activateWithOptions(
+                objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
+            );
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            (running_app, pid)
+        };
+
+        let resolved = app::find_window(pid, window)?;
+        raw_path = capture_screenshot(Some(resolved.window_id), options.cursor)?;
+        resolved_window = Some(resolved);
+    } else {
+        raw_path = capture_screenshot(None, options.cursor)?;
+    }
+
+    // Apply crop if requested
+    let mut current_path = raw_path.clone();
+    if let Some(crop) = crop {
+        if let Some(ref resolved) = resolved_window {
+            let window_size = Point::new(resolved.bounds.width, resolved.bounds.height);
+            let scale = backing_scale_factor();
+            current_path = apply_crop(crop, &window_size, scale, &current_path, &tag, "")?;
+        }
+    }
+
+    // Post-process (scale + format conversion)
+    let final_path = post_process_screenshot(&current_path, &tag, options, "")?;
+
+    Ok(ScreenshotResult {
+        path: final_path,
+        annotations: None,
+        legend: None,
+    })
+}

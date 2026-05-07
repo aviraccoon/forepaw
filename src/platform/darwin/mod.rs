@@ -14,11 +14,11 @@ mod ffi;
 pub mod app;
 pub mod input;
 pub mod key_code;
+pub mod ocr;
+pub mod screenshot;
 pub mod snapshot;
 
 // TODO: implement remaining modules
-// mod screenshot;
-// mod ocr;
 // mod annotation;
 // mod saliency;
 
@@ -61,19 +61,19 @@ impl DesktopProvider for DarwinProvider {
 
     fn screenshot(
         &self,
-        _params: &crate::platform::ScreenshotParams,
+        params: &crate::platform::ScreenshotParams,
     ) -> Result<crate::platform::ScreenshotResult, ForepawError> {
-        Err(ForepawError::ActionFailed("screenshot not yet implemented".into()))
+        screenshot::screenshot(params.app, params.window, params.options, params.crop)
     }
 
     fn ocr(
         &self,
-        _app: Option<&str>,
-        _window: Option<&str>,
-        _find: Option<&str>,
-        _screenshot_options: Option<&crate::platform::ScreenshotOptions>,
+        app: Option<&str>,
+        window: Option<&str>,
+        find: Option<&str>,
+        screenshot_options: Option<&crate::platform::ScreenshotOptions>,
     ) -> Result<crate::core::ocr_result::OCROutput, ForepawError> {
-        Err(ForepawError::ActionFailed("ocr not yet implemented".into()))
+        ocr::ocr(app, window, find, screenshot_options)
     }
 
     fn click_ref(
@@ -133,12 +133,12 @@ impl DesktopProvider for DarwinProvider {
 
     fn ocr_hover(
         &self,
-        _text: &str,
-        _app: &str,
-        _window: Option<&str>,
-        _index: Option<usize>,
+        text: &str,
+        app: &str,
+        window: Option<&str>,
+        index: Option<usize>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("ocr-hover not yet implemented".into()))
+        ocr::ocr_hover(text, app, window, index)
     }
 
     fn type_ref(
@@ -199,24 +199,24 @@ impl DesktopProvider for DarwinProvider {
 
     fn ocr_click(
         &self,
-        _text: &str,
-        _app: &str,
-        _window: Option<&str>,
-        _options: &crate::core::key_combo::ClickOptions,
-        _index: Option<usize>,
+        text: &str,
+        app: &str,
+        window: Option<&str>,
+        options: &crate::core::key_combo::ClickOptions,
+        index: Option<usize>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("ocr-click not yet implemented".into()))
+        ocr::ocr_click(text, app, window, options, index)
     }
 
     fn wait(
         &self,
-        _text: &str,
-        _app: &str,
-        _window: Option<&str>,
-        _timeout: f64,
-        _interval: f64,
+        text: &str,
+        app: &str,
+        window: Option<&str>,
+        timeout: f64,
+        interval: f64,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed("wait not yet implemented".into()))
+        ocr::wait(text, app, window, timeout, interval)
     }
 
     fn resolve_ref_position(

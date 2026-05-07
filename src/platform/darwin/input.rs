@@ -30,6 +30,11 @@ fn activate_app(app_name: &str) -> Result<(Retained<NSRunningApplication>, i32),
     Ok((running_app, pid))
 }
 
+/// Public wrapper for activate_app (used by ocr.rs).
+pub fn activate_app_internal(app_name: &str) -> Result<(Retained<NSRunningApplication>, i32), ForepawError> {
+    activate_app(app_name)
+}
+
 /// Activate an app and resolve its main window.
 fn activate_and_resolve_window(
     app_name: &str,
@@ -77,6 +82,11 @@ fn move_mouse_to(point: CGPointFFI) -> Result<(), ForepawError> {
     Ok(())
 }
 
+/// Public wrapper for move_mouse_to (used by ocr.rs).
+pub fn move_mouse_to_pub(point: CGPointFFI) -> Result<(), ForepawError> {
+    move_mouse_to(point)
+}
+
 /// Move the cursor smoothly from its current position to the target.
 /// Posts intermediate mouseMoved events so hover handlers fire.
 fn smooth_move_mouse(target: CGPointFFI, steps: usize, duration: Duration) -> Result<(), ForepawError> {
@@ -111,7 +121,7 @@ fn smooth_move_mouse(target: CGPointFFI, steps: usize, duration: Duration) -> Re
 }
 
 /// Perform a mouse click at a screen point.
-fn perform_mouse_click(
+pub fn perform_mouse_click(
     point: CGPointFFI,
     button: MouseButton,
     click_count: u32,
