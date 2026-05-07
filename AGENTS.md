@@ -6,8 +6,9 @@ Rust rewrite of forepaw (desktop automation CLI for AI agents). Orphan branch `r
 
 ```bash
 cargo build              # Build
-cargo test               # Run tests (135 total)
+cargo test               # Run tests
 cargo clippy             # Lint
+cargo fmt                # Auto-format
 cargo run -- --help      # CLI help
 ```
 
@@ -32,9 +33,15 @@ No external task runner. Cargo is the build system.
 - **Single crate with cfg gates** for phase 1 (macOS parity). Workspace split happens when adding Windows/Linux backends.
 - **`r#ref` everywhere** because `ref` is a Rust keyword.
 
+## Formatting
+
+- **rustfmt** (ships with Rust toolchain). Config in `rustfmt.toml` if present, otherwise defaults.
+- Run `cargo fmt` before committing.
+- Zero clippy warnings: `cargo clippy` must pass clean.
+- `cargo test && cargo clippy` before every commit.
+
 ## Guidelines
 
-- Run `cargo clippy` and `cargo test` before committing.
 - Keep `src/core/` free of platform imports. All platform-specific code goes in `src/platform/`.
 - Every new public API in `src/platform/` must have a corresponding method on the `DesktopProvider` trait.
 - Every new type, function, or constant in any module needs unit tests -- including platform backends (`src/platform/darwin/`). Test pure logic (helpers, pruning math, constants, name computation chains) even when the FFI-dependent tree walk itself needs a live app.
