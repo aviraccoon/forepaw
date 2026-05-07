@@ -11,6 +11,8 @@
 #[allow(dead_code)]
 mod ffi;
 
+pub mod key_code;
+
 // TODO: implement each module
 // mod app;
 // mod snapshot;
@@ -19,7 +21,6 @@ mod ffi;
 // mod ocr;
 // mod annotation;
 // mod saliency;
-// mod key_code;
 
 use crate::platform::DesktopProvider;
 
