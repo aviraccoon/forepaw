@@ -13,33 +13,35 @@ impl Permissions {
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let mut failed = false;
 
-        let ax_help = "\n\
-            To grant accessibility permission:\n\
-              1. Open System Settings > Privacy & Security > Accessibility\n\
-              2. Click the + button\n\
-              3. Add your terminal app (Terminal, Ghostty, Warp, iTerm2, etc.)\n\
-              4. Ensure the toggle is enabled";
-
-        let sr_help = "\n\
-            To grant screen recording permission:\n\
-              1. Open System Settings > Privacy & Security > Screen & System Audio Recording\n\
-              2. Click the + button\n\
-              3. Add your terminal app\n\
-              4. Ensure the toggle is enabled";
+        let binary = std::env::current_exe().unwrap_or_default();
+        let binary_display = binary.display();
 
         if self.request {
             if provider.request_permissions() {
                 println!("Accessibility: granted");
             } else {
                 println!("Accessibility: not granted");
-                println!("{}", ax_help);
+                print_add_help("Accessibility", &binary_display);
                 failed = true;
             }
             if provider.request_screen_recording_permission() {
-                println!("Screen recording: granted");
+                // CGRequestScreenCaptureAccess opens System Settings.
+                // But the API can report success while data is still redacted
+                // (new binary, cache lag, etc). Validate by checking actual
+                // window data.
+                let sr_validated = provider.validate_screen_recording();
+                if sr_validated {
+                    println!("Screen recording: granted");
+                } else {
+                    println!("Screen recording: API reports granted, but window data is redacted");
+                    println!("  The binary may need to be added to System Settings manually:");
+                    println!("  {}", binary_display);
+                    print_add_help("Screen & System Audio Recording", &binary_display);
+                    failed = true;
+                }
             } else {
                 println!("Screen recording: not granted");
-                println!("{}", sr_help);
+                print_add_help("Screen & System Audio Recording", &binary_display);
                 failed = true;
             }
         } else {
@@ -47,14 +49,22 @@ impl Permissions {
                 println!("Accessibility: granted");
             } else {
                 println!("Accessibility: not granted");
-                println!("{}", ax_help);
+                print_add_help("Accessibility", &binary_display);
                 failed = true;
             }
             if provider.has_screen_recording_permission() {
-                println!("Screen recording: granted");
+                let sr_validated = provider.validate_screen_recording();
+                if sr_validated {
+                    println!("Screen recording: granted");
+                } else {
+                    println!("Screen recording: API reports granted, but window data is redacted");
+                    println!("  Binary: {}", binary_display);
+                    print_add_help("Screen & System Audio Recording", &binary_display);
+                    failed = true;
+                }
             } else {
                 println!("Screen recording: not granted");
-                println!("{}", sr_help);
+                print_add_help("Screen & System Audio Recording", &binary_display);
                 failed = true;
             }
         }
@@ -65,4 +75,17 @@ impl Permissions {
             Ok(())
         }
     }
+}
+
+fn print_add_help(section: &str, binary: &std::path::Display<'_>) {
+    println!(
+        "\n\
+          Add this binary to System Settings:\n\
+          1. Open System Settings > Privacy & Security > {}\n\
+          2. Click the + button\n\
+          3. Navigate to and select:\n\
+             {}\n\
+          4. Ensure the toggle is enabled",
+        section, binary
+    );
 }

@@ -2,7 +2,6 @@
 ///
 /// Each backend implements the `DesktopProvider` trait.
 /// The correct backend is selected via cfg attributes.
-
 #[cfg(target_os = "macos")]
 pub mod darwin;
 use crate::core::annotation::{AnnotationStyle, Annotation};
@@ -296,6 +295,7 @@ pub trait DesktopProvider: Send + Sync {
     // Permissions
     fn has_permissions(&self) -> bool;
     fn has_screen_recording_permission(&self) -> bool;
+    fn validate_screen_recording(&self) -> bool;
     fn request_permissions(&self) -> bool;
     fn request_screen_recording_permission(&self) -> bool;
 }

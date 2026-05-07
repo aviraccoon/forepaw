@@ -8,6 +8,7 @@ use forepaw::cli::action::{
 };
 use forepaw::cli::observation::{ListApps, ListWindows, Ocr, Screenshot, Snapshot};
 use forepaw::cli::system::Permissions;
+use forepaw::platform::DesktopProvider;
 
 /// Base version. Updated at release time.
 const BASE_VERSION: &str = "0.3.0";
@@ -53,17 +54,32 @@ enum Commands {
 }
 
 fn main() -> anyhow::Result<()> {
-    let _app = App::parse();
+    let app = App::parse();
 
-    // For now, we have no platform backend. Each command would need a provider.
-    // The platform module will provide a factory function once a backend exists.
-    eprintln!("forepaw cancrivorus -- CLI structure wired, no platform backend yet");
-    std::process::exit(1);
+    #[cfg(target_os = "macos")]
+    let provider = forepaw::platform::darwin::DarwinProvider::new();
 
-    // Once a platform backend exists:
-    // let provider = forepaw::platform::create_provider();
-    // match _app.command {
-    //     Commands::Snapshot(cmd) => cmd.run(provider.as_ref()),
-    //     ...
-    // }
+    // Future: #[cfg(target_os = "windows")] let provider = WindowsProvider::new();
+    // Future: #[cfg(target_os = "linux")] let provider = LinuxProvider::new();
+
+    let provider = &provider as &dyn DesktopProvider;
+
+    match app.command {
+        Commands::Snapshot(cmd) => cmd.run(provider),
+        Commands::Screenshot(cmd) => cmd.run(provider),
+        Commands::ListApps(cmd) => cmd.run(provider),
+        Commands::ListWindows(cmd) => cmd.run(provider),
+        Commands::Ocr(cmd) => cmd.run(provider),
+        Commands::Click(cmd) => cmd.run(provider),
+        Commands::Type(cmd) => cmd.run(provider),
+        Commands::KeyboardType(cmd) => cmd.run(provider),
+        Commands::Press(cmd) => cmd.run(provider),
+        Commands::OcrClick(cmd) => cmd.run(provider),
+        Commands::Hover(cmd) => cmd.run(provider),
+        Commands::Wait(cmd) => cmd.run(provider),
+        Commands::Scroll(cmd) => cmd.run(provider),
+        Commands::Drag(cmd) => cmd.run(provider),
+        Commands::Batch(cmd) => cmd.run(provider),
+        Commands::Permissions(cmd) => cmd.run(provider),
+    }
 }

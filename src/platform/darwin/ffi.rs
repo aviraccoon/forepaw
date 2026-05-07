@@ -83,6 +83,28 @@ pub const K_CF_TYPE_ARRAY_CALLBACKS: CFArrayCallBacks = CFArrayCallBacks {
     equal: None,
 };
 
+// CFDictionary callbacks -- we use the system-provided globals
+// (kCFTypeDictionaryKeyCallBacks / kCFTypeDictionaryValueCallBacks)
+// so we only need the struct definitions for the FFI extern block.
+#[repr(C)]
+pub struct CFDictionaryKeyCallBacks {
+    pub version: CFIndex,
+    pub r#retain: Option<unsafe extern "C" fn(CFAllocatorRef, *const c_void) -> *const c_void>,
+    pub release: Option<unsafe extern "C" fn(CFAllocatorRef, *const c_void)>,
+    pub copy_description: Option<unsafe extern "C" fn(*const c_void) -> CFStringRef>,
+    pub equal: Option<unsafe extern "C" fn(*const c_void, *const c_void) -> Boolean>,
+    pub hash: Option<unsafe extern "C" fn(*const c_void) -> u64>,
+}
+
+#[repr(C)]
+pub struct CFDictionaryValueCallBacks {
+    pub version: CFIndex,
+    pub r#retain: Option<unsafe extern "C" fn(CFAllocatorRef, *const c_void) -> *const c_void>,
+    pub release: Option<unsafe extern "C" fn(CFAllocatorRef, *const c_void)>,
+    pub copy_description: Option<unsafe extern "C" fn(*const c_void) -> CFStringRef>,
+    pub equal: Option<unsafe extern "C" fn(*const c_void, *const c_void) -> Boolean>,
+}
+
 // ---------------------------------------------------------------------------
 // Accessibility (AXUIElement) - linked via ApplicationServices
 // ---------------------------------------------------------------------------
@@ -96,6 +118,13 @@ pub struct AXUIElementRef(*const c_void);
 // uses @unchecked Sendable for the same reason.
 unsafe impl Send for AXUIElementRef {}
 unsafe impl Sync for AXUIElementRef {}
+
+impl AXUIElementRef {
+    /// Create an AXUIElementRef from a raw pointer (e.g. from CFArrayGetValueAtIndex).
+    pub unsafe fn from_raw(ptr: *const std::ffi::c_void) -> Self {
+        Self(ptr)
+    }
+}
 
 #[repr(isize)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -124,6 +153,7 @@ pub struct AXValueRef(*const c_void);
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)] // FFI bindings match Apple's naming
 pub enum AXValueType {
     CGPoint = 1,
     CGSize = 2,
@@ -426,7 +456,21 @@ extern "C" {
     pub fn CFArrayGetCount(array: CFArrayRef) -> CFIndex;
     pub fn CFArrayGetValueAtIndex(array: CFArrayRef, idx: CFIndex) -> *const c_void;
     pub fn CFDictionaryGetValue(dict: CFDictionaryRef, key: *const c_void) -> *const c_void;
+    pub fn CFDictionaryCreate(
+        allocator: *const c_void,
+        keys: *const *const c_void,
+        values: *const *const c_void,
+        num_values: CFIndex,
+        key_callbacks: *const CFDictionaryKeyCallBacks,
+        value_callbacks: *const CFDictionaryValueCallBacks,
+    ) -> CFDictionaryRef;
     pub fn CFStringGetCStringPtr(string: CFStringRef, encoding: u32) -> *const i8;
+    pub fn CFStringGetCString(
+        string: CFStringRef,
+        buffer: *mut std::ffi::c_char,
+        buffer_size: CFIndex,
+        encoding: u32,
+    ) -> bool;
     pub fn CFStringGetLength(string: CFStringRef) -> CFIndex;
     pub fn CFNumberGetValue(number: CFNumberRef, the_type: u32, value_ptr: *mut c_void) -> Boolean;
     pub fn CFBooleanGetValue(boolean: CFBooleanRef) -> Boolean;
@@ -437,6 +481,7 @@ extern "C" {
     pub fn CFNumberGetTypeID() -> CFTypeID;
     pub fn CFBooleanGetTypeID() -> CFTypeID;
     pub fn CFArrayGetTypeID() -> CFTypeID;
+    pub fn CFDictionaryGetTypeID() -> CFTypeID;
     pub fn CFDataGetTypeID() -> CFTypeID;
 
     // CGWindowListCopyWindowInfo keys (defined as CFStringRef globals)
@@ -445,6 +490,13 @@ extern "C" {
     pub static kCGWindowOwnerPID: CFStringRef;
     pub static kCGWindowName: CFStringRef;
     pub static kCGWindowBounds: CFStringRef;
+
+    // CFDictionary callback globals
+    pub static kCFTypeDictionaryKeyCallBacks: CFDictionaryKeyCallBacks;
+    pub static kCFTypeDictionaryValueCallBacks: CFDictionaryValueCallBacks;
+
+    // CFBoolean constants
+    pub static kCFBooleanTrue: CFTypeRef;
 }
 
 // CFNumber type constants
