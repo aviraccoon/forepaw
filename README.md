@@ -15,14 +15,14 @@ forepaw is the paws. The brain is whatever you connect them to.
 ## Quick start
 
 ```bash
-# Build (requires Swift 6 / Xcode)
-swift build
+# Build (requires Rust / cargo)
+cargo build
 
 # Grant permissions (Accessibility + Screen Recording)
-swift run forepaw permissions --request
+cargo run -- permissions --request
 
 # See what's running
-swift run forepaw list-apps
+cargo run -- list-apps
 ```
 
 ### The core loop: observe, act, observe
@@ -167,7 +167,7 @@ Without `--window`, commands target the largest window. Ambiguous matches are re
 ## Requirements
 
 - macOS 14+
-- Swift 6.0+ / Xcode (for building)
+- Rust toolchain (for building)
 - Two permissions, granted to your terminal app:
 
 | Permission | Needed for | Where to grant |
@@ -185,7 +185,7 @@ forepaw permissions --request  # trigger system dialogs
 - **Accessibility-first.** Feel first, look second. A text tree is ~50 lines. A screenshot is ~1500 tokens. forepaw defaults to the cheaper, more precise option. OCR is the fallback, not the primary strategy.
 - **CLI, not library or daemon.** Works with any language, any agent framework, any automation tool that can shell out. No SDK lock-in, no protocol to implement.
 - **AX actions before mouse simulation.** `AXPress` doesn't move the physical cursor. More reliable, less disruptive. Mouse is the fallback.
-- **Platform-agnostic core.** The ref system, tree rendering, diffing, and output formatting live in `ForepawCore` with no macOS imports. Only `ForepawDarwin` touches platform APIs. A Linux backend (AT-SPI2/DBus) would plug in with the same CLI.
+- **Platform-agnostic core.** The ref system, tree rendering, diffing, and output formatting live in `src/core/` with no macOS imports. Only `src/platform/darwin/` touches platform APIs. A Windows backend (UIA) or Linux backend (AT-SPI2) would plug in with the same CLI.
 - **Built for agents, useful for humans.** Raccoons are generalists. forepaw reads the same tree that VoiceOver does. Annotated screenshots make invisible structure visible -- useful for AI agents, but also for sighted people helping blind users debug UIs, developers auditing accessibility, or anyone trying to understand an unfamiliar app's interactive structure.
 
 ## Further reading
@@ -198,36 +198,38 @@ forepaw permissions --request  # trigger system dialogs
 
 ## Development
 
-Uses [mise](https://mise.jdx.dev) for task running. Swift 6 / Xcode required.
+Uses [mise](https://mise.jdx.dev) for task running, Cargo for building.
 
 ```bash
-mise run check          # lint + build + test (run before committing)
+mise run check          # lint + test (run before committing)
 mise run dev <command>  # build + run (e.g. mise run dev snapshot --app Finder -i)
-mise run fmt            # auto-format (swift-format)
+mise run fmt            # auto-format (cargo fmt + swift-format for test apps)
 ```
 
 Or without mise:
 
 ```bash
-swift build && swift test
-xcrun swift-format lint -r Sources/ Tests/ TestApps/ --strict
+cargo build && cargo test
+cargo clippy -- -D warnings
+cargo fmt
 ```
 
 ### Project layout
 
 ```
-Sources/
-  Forepaw/         # CLI commands (swift-argument-parser)
-  ForepawCore/     # Platform-agnostic: types, refs, rendering, diffing
-  ForepawDarwin/   # macOS: AXUIElement, CGEvent, Vision OCR, CoreGraphics
-Tests/
-  ForepawCoreTests/  # Unit tests for the platform-agnostic core
-TestApps/            # SwiftUI test apps for manual testing
+src/
+  main.rs             # CLI entry point (clap derive)
+  cli/                # Command handlers
+  core/               # Platform-agnostic: types, refs, rendering, diffing
+  platform/
+    mod.rs            # DesktopProvider trait definition
+    darwin/           # macOS: AXUIElement, CGEvent, Vision OCR, CoreGraphics
+TestApps/             # SwiftUI test apps for manual testing
 ```
 
 ### Contributing guidelines
 
-- `ForepawCore` must stay free of platform imports. All macOS code goes in `ForepawDarwin`.
-- New public APIs need a `DesktopProvider` protocol method using platform-agnostic types (`Point`, `Rect`).
-- Every new type or function in `ForepawCore` needs unit tests.
-- `mise run check` must pass before committing.
+- `src/core/` must stay free of platform imports. All macOS code goes in `src/platform/darwin/`.
+- New public APIs need a `DesktopProvider` trait method using platform-agnostic types (`Point`, `Rect`).
+- Every new type or function in `src/core/` needs unit tests.
+- `cargo clippy -- -D warnings` and `cargo test` must pass before committing.

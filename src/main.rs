@@ -1,6 +1,4 @@
 /// Forepaw: desktop automation CLI for AI agents.
-///
-/// Crab-eating raccoon edition (Rust rewrite).
 use clap::Parser;
 
 use forepaw::cli::action::{
@@ -10,11 +8,8 @@ use forepaw::cli::observation::{ListApps, ListWindows, Ocr, Screenshot, Snapshot
 use forepaw::cli::system::Permissions;
 use forepaw::platform::DesktopProvider;
 
-/// Base version. Updated at release time.
-const BASE_VERSION: &str = "0.3.0";
-
 fn version() -> &'static str {
-    BASE_VERSION
+    env!("CARGO_PKG_VERSION")
 }
 
 #[derive(Parser)]

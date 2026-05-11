@@ -13,18 +13,20 @@ description: Release a new version of forepaw. Use when asked to tag, release, o
    ```
    Codenames come from the extended raccoon family: raccoons, possums, coatis, kinkajous, olingos, ringtails, tanuki, civets, binturongs, red pandas, etc. Keep it playful.
 
-2. **Update version in `Sources/Forepaw/Version.swift`** -- change `baseVersion`:
-   ```swift
-   let baseVersion = "0.X.0"
+2. **Update version in `Cargo.toml`** -- change the `version` field:
+   ```toml
+   version = "0.X.0"
    ```
+   The CLI reads this via `env!("CARGO_PKG_VERSION")` -- no other file needs a version bump.
 
 3. **Update docs** -- make sure README.md, `.agents/skills/forepaw/SKILL.md`, and AGENTS.md reflect all changes since last release.
 
 4. **Build and test**:
    ```bash
-   swift build
-   swift test
-   xcrun swift-format lint -r Sources/ Tests/
+   cargo build
+   cargo test
+   cargo clippy -- -D warnings
+   cargo fmt --check
    ```
 
 5. **Commit the release**:
@@ -46,8 +48,8 @@ description: Release a new version of forepaw. Use when asked to tag, release, o
 ## Version scheme
 
 - Semver: `MAJOR.MINOR.PATCH`
-- Dev builds auto-append git hash: `0.2.0-dev+abc1234`
-- Release builds use the tag: `v0.2.0`
+- Version is defined once in `Cargo.toml`, read by the CLI via `env!("CARGO_PKG_VERSION")`
+- Dev builds are whatever `Cargo.toml` says (no git hash suffix)
 
 ## Previous codenames
 

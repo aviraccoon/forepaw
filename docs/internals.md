@@ -75,7 +75,7 @@ Electron apps using icon libraries (Lucide, Tabler, FontAwesome, etc.) get autom
 
 > **The raccoon version:** Raccoons remember routes by sequence -- third tree, second fence, first dumpster. forepaw numbers every interactive element in the order it finds them. `@e3` means "the 3rd interactive thing I touched on my walk through the tree."
 
-Refs are assigned by `RefAssigner` (ForepawCore) which walks the tree depth-first and assigns sequential numbers to interactive elements. The interactive role set: button, text field, text area, checkbox, radio button, slider, combo box, popup button, menu button, link, menu item, tab, switch, incrementor, color well, tree item, cell, dock item.
+Refs are assigned by `RefAssigner` (`src/core/`) which walks the tree depth-first and assigns sequential numbers to interactive elements. The interactive role set: button, text field, text area, checkbox, radio button, slider, combo box, popup button, menu button, link, menu item, tab, switch, incrementor, color well, tree item, cell, dock item.
 
 During `buildTree` (DarwinProvider), `AXUIElement` handles are collected into a `[Int: AXUIElement]` map at the same positions that `RefAssigner` will use. After assignment, the map is transferred to `refTable` keyed by `ElementRef`.
 
@@ -219,9 +219,9 @@ Snapshots are cached per-app in temp files (`/tmp/forepaw-snapshot-<app>.txt`) v
 
 The annotation pipeline is split across targets:
 
-1. **`AnnotationCollector`** (ForepawCore) walks the element tree and collects `Annotation` structs for interactive elements with bounds. Converts to window-relative coordinates and filters off-screen elements.
-2. **`AnnotationRenderer`** (ForepawDarwin) draws on the image via CoreGraphics. Three styles: `badges` (numbered pills), `labeled` (bounding boxes with role+name), `spotlight` (dims non-interactive areas). Color-coded by `AnnotationCategory`: green=buttons, yellow=text fields, blue=selection controls, purple=navigation.
-3. **`AnnotationLegend`** (ForepawCore) formats the text legend mapping display numbers to refs.
+1. **`Annotation`** (`src/core/`) walks the element tree and collects annotation structs for interactive elements with bounds. Converts to window-relative coordinates and filters off-screen elements.
+2. **`annotation`** (`src/platform/darwin/`) draws on the image via CoreGraphics. Three styles: `badges` (numbered pills), `labeled` (bounding boxes with role+name), `spotlight` (dims non-interactive areas). Color-coded by category: green=buttons, yellow=text fields, blue=selection controls, purple=navigation.
+3. **`Annotation`** (`src/core/`) formats the text legend mapping display numbers to refs.
 
 Annotations are rendered on the full window image, then cropped if `--ref` or `--region` is specified.
 
@@ -254,29 +254,32 @@ Both are per-app (granted to the terminal, not to forepaw itself). After grantin
 
 > **The raccoon version:** Raccoons live everywhere -- cities, forests, suburbs. forepaw is designed the same way: the core logic (how to number elements, render trees, parse keys) is habitat-agnostic. Only the paws are specialized -- different grips for different dumpsters.
 
-`ForepawCore` defines `DesktopProvider`, a protocol with no platform-specific types. All coordinates use `Point` and `Rect` (not `CGPoint`/`CGRect`). The macOS implementation (`ForepawDarwin/DarwinProvider`) converts to platform types internally.
+`src/core/` defines `DesktopProvider`, a trait with no platform-specific types. All coordinates use `Point` and `Rect` (not `CGPoint`/`CGRect`). The macOS implementation (`src/platform/darwin/`) converts to platform types internally.
 
-ForepawCore contains:
-- `DesktopProvider` protocol (all public API)
-- `ElementTree`, `ElementNode`, `ElementRef` (tree types)
+`src/core/` contains:
+- `DesktopProvider` trait (all public API)
+- `ElementTree`, `ElementNode` (tree types)
 - `RefAssigner` (ref assignment, depth-first)
 - `TreeRenderer` (text output with window-relative coords)
-- `SnapshotDiffer`, `SnapshotCache` (diffing)
-- `AnnotationCollector`, `AnnotationLegend` (annotation data)
+- `SnapshotDiff`, `SnapshotCache` (diffing)
+- `Annotation`, annotation data structures
 - `IconClassParser` (CSS class to icon name)
 - `CoordinateValidation` (bounds checking)
 - `CropRegion` (area screenshot math)
 - `KeyCombo` (key combo parsing)
 - `OutputFormatter` (JSON/text output)
 
-ForepawDarwin contains:
+`src/platform/darwin/` contains:
 - `DarwinProvider` (the `DesktopProvider` implementation)
-- `DarwinProvider+Snapshot` (AX tree walk, batching, pruning, name resolution)
-- `DarwinProvider+Input` (click, type, press, scroll, hover, drag, wait)
-- `DarwinProvider+Screenshot` (screencapture, OCR, annotations, cropping)
-- `AnnotationRenderer` (CoreGraphics drawing)
-- `OCREngine` (Vision framework)
-- `KeyCodeMap` (virtual key codes)
+- `snapshot` (AX tree walk, batching, pruning, name resolution)
+- `input` (click, type, press, scroll, hover, drag, wait)
+- `app` (app/window management, Electron detection)
+- `screenshot` (screencapture, OCR, annotations, cropping)
+- `annotation` (CoreGraphics annotation rendering)
+- `ocr` (Vision framework)
+- `key_code` (virtual key codes)
+- `saliency` (region click/hover target detection)
+- `ffi` (CoreFoundation / AXUIElement FFI bindings)
 
 A Linux implementation would use AT-SPI2 over DBus for the accessibility tree and uinput/libxdo for input simulation. The CLI, ref system, tree rendering, and output formatting would be identical.
 
@@ -285,7 +288,7 @@ A Linux implementation would use AT-SPI2 over DBus for the accessibility tree an
 - **Retina coordinate math**: OCR coordinates assume the primary display's scale factor. Multi-display setups with different scale factors may produce incorrect click positions.
 - **Menu timing**: Opening a dropdown menu changes the accessibility tree. A snapshot taken immediately after clicking a menu button may not include the menu items if the UI hasn't updated yet. Add a small delay between click and snapshot.
 - **Web content in browsers**: AXPress on links doesn't trigger navigation in some browsers (confirmed in Orion). Mouse click works but requires app activation.
-- **Text arguments starting with `--`**: ArgumentParser interprets `--` as end-of-options. Use the `--text` option (with `parsing: .unconditional`) instead of the positional argument.
+- **Text arguments starting with `--`**: clap interprets `--` as end-of-options. Use the `--text` option instead of the positional argument.
 - **Window-specific screenshots**: Uses `screencapture -l <windowID>` which captures the window as-is, including any overlapping windows. Not a clean window capture if other windows are on top.
 - **Ref depth mismatch**: `resolveRef` uses depth 15 (native) or 25 (Electron). Using a non-default `--depth` on `snapshot` makes refs inconsistent with action commands.
 - **Hover teleportation**: Without `--smooth`, hover teleports the cursor, which doesn't trigger `mouseEnter`/`mouseLeave` tracking areas. Some apps (e.g., Orion's sidebar) don't register the mouse leaving their hover zone.
