@@ -2,11 +2,12 @@
 //!
 //! Implements the `DesktopProvider` trait using:
 //! - EnumWindows / GetWindowThreadProcessId for app and window enumeration
-//! - IUIAutomation for accessibility tree walking (future)
+//! - IUIAutomation + ControlView TreeWalker for accessibility tree walking
 //! - SendInput for keyboard/mouse input (future)
 //! - Windows.Media.Ocr for OCR (future)
 
 pub mod app;
+pub mod snapshot;
 
 use crate::core::errors::ForepawError;
 use crate::platform::DesktopProvider;
@@ -16,6 +17,7 @@ pub struct WindowsProvider;
 
 impl WindowsProvider {
     pub fn new() -> Self {
+        snapshot::init_com();
         Self
     }
 }
@@ -43,11 +45,9 @@ impl DesktopProvider for WindowsProvider {
     fn snapshot(
         &self,
         app: &str,
-        _options: &crate::platform::SnapshotOptions,
+        options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
-        Err(ForepawError::ActionFailed(format!(
-            "snapshot not yet implemented on Windows (requested app: {app})"
-        )))
+        snapshot::snapshot(app, options)
     }
 
     fn screenshot(

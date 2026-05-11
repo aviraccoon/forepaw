@@ -12,7 +12,7 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-    GetWindowThreadProcessId, IsWindowVisible,
+    GetWindowThreadProcessId, IsWindowVisible, SetForegroundWindow,
 };
 
 use crate::core::errors::ForepawError;
@@ -24,6 +24,11 @@ use crate::platform::{AppInfo, WindowInfo};
 /// Enumerates all visible top-level windows, deduplicates by owning process,
 /// and returns one AppInfo per process. Process name comes from the executable
 /// filename (without extension), which matches how Windows users identify apps.
+///
+/// Exception: UWP apps run inside `ApplicationFrameHost.exe`. Multiple UWP apps
+/// can share the same host process but have separate windows with distinct titles
+/// (e.g. "Calculator", "Settings"). For these, we emit one AppInfo per window
+/// so each app appears separately in the listing.
 pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
     let windows = collect_visible_windows();
 
@@ -37,8 +42,24 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
     for (pid, entries) in by_pid {
         let process_name = get_process_name(pid).unwrap_or_else(|| format!("pid-{pid}"));
 
-        // Prefer entries with titles for a better display name,
-        // but fall back to any entry
+        // UWP apps (ApplicationFrameHost) get one entry per titled window.
+        // Multiple UWP apps can share the same host process.
+        if process_name.eq_ignore_ascii_case("ApplicationFrameHost") {
+            for entry in &entries {
+                if !entry.title.is_empty() {
+                    apps.push(AppInfo {
+                        name: entry.title.clone(),
+                        // Use the window title as bundle_id for UWP apps
+                        // (the actual exe name is unhelpful)
+                        bundle_id: Some(entry.title.clone()),
+                        pid: pid as i32,
+                    });
+                }
+            }
+            continue;
+        }
+
+        // Regular apps: one entry per process
         let display_name = entries
             .iter()
             .find(|e| !e.title.is_empty())
@@ -177,6 +198,61 @@ unsafe extern "system" fn enum_window_callback(
     });
 
     BOOL(1) // continue enumeration
+}
+
+/// Find the best visible window matching an app name (case-insensitive substring).
+///
+/// Matches against both window title and process executable name.
+/// Returns the window handle and its bounds.
+///
+/// Selection priority:
+/// 1. Windows whose title matches the query (user explicitly targets by name)
+/// 2. Non-desktop windows with a title (avoid "Program Manager" shell window)
+/// 3. Largest window by area as tiebreaker
+pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
+    let entries = collect_visible_windows();
+    let filter_lower = app_name.to_lowercase();
+
+    let matching: Vec<&WindowEntry> = entries
+        .iter()
+        .filter(|e| {
+            e.title.to_lowercase().contains(&filter_lower)
+                || e.process_name.to_lowercase().contains(&filter_lower)
+        })
+        .collect();
+
+    if matching.is_empty() {
+        return Err(ForepawError::AppNotFound(app_name.to_string()));
+    }
+
+    // Score each candidate: prefer title match > non-desktop > titled > largest area
+    let best = matching
+        .iter()
+        .max_by_key(|e| {
+            let title_match = e.title.to_lowercase().contains(&filter_lower);
+            let is_desktop = e.title == "Program Manager";
+            let has_title = !e.title.is_empty();
+            let area = e.bounds.as_ref().map(|b| (b.width * b.height) as u64).unwrap_or(0);
+
+            // Pack into a tuple for lexicographic comparison:
+            // (title_matches_query, not_desktop, has_title, area)
+            (title_match, !is_desktop, has_title, area)
+        })
+        .unwrap();
+
+    let bounds = best.bounds.ok_or_else(|| {
+        ForepawError::ActionFailed("matched window has no bounds".into())
+    })?;
+
+    Ok((HWND(best.hwnd as *mut std::ffi::c_void), bounds))
+}
+
+/// Bring a window to the foreground.
+pub fn activate_app(hwnd: HWND) {
+    unsafe {
+        let _ = SetForegroundWindow(hwnd);
+    }
+    std::thread::sleep(std::time::Duration::from_millis(300));
 }
 
 // ---------------------------------------------------------------------------
