@@ -15,7 +15,7 @@ fn version() -> &'static str {
 #[derive(Parser)]
 #[command(
     name = "forepaw",
-    about = "A raccoon's paws on your UI. Desktop automation for AI agents.",
+    about = "A raccoon's paws on your desktop. Cross-platform automation CLI.",
     version = version(),
 )]
 struct App {
@@ -54,7 +54,9 @@ fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     let provider = forepaw::platform::darwin::DarwinProvider::new();
 
-    // Future: #[cfg(target_os = "windows")] let provider = WindowsProvider::new();
+    #[cfg(target_os = "windows")]
+    let provider = forepaw::platform::windows::WindowsProvider::new();
+
     // Future: #[cfg(target_os = "linux")] let provider = LinuxProvider::new();
 
     let provider = &provider as &dyn DesktopProvider;

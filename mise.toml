@@ -36,6 +36,13 @@ run = [
 description = "Build release binary (Rust)"
 run = "cargo build --release"
 
+[tasks.build-windows]
+description = "Cross-compile for Windows (both architectures)"
+run = [
+    "cargo xwin build --target aarch64-pc-windows-msvc",
+    "cargo xwin build --target x86_64-pc-windows-msvc",
+]
+
 [tasks.swift-build]
 description = "Build Swift test apps"
 run = "cd TestApps/ClickTarget && swift build"

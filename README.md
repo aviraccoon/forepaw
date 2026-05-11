@@ -1,12 +1,12 @@
 # forepaw
 
-Desktop automation CLI for macOS. Control any application through accessibility trees, OCR, and input simulation.
+A raccoon's paws on your desktop. Cross-platform automation CLI. Control any application through accessibility trees, OCR, and input simulation.
 
 Named after the raccoon's dexterous forepaws -- precise manipulation of UI elements without brute force.
 
 ## What is this?
 
-forepaw lets programs (and people, through programs) interact with any macOS application the same way a human would: reading what's on screen, clicking buttons, typing text, scrolling around. It reads the same accessibility tree that screen readers like VoiceOver use, and acts through the same input channels as a keyboard and mouse.
+forepaw lets programs (and people, through programs) interact with any desktop application the same way a human would: reading what's on screen, clicking buttons, typing text, scrolling around. On macOS it reads the same accessibility tree that VoiceOver uses. On Windows it uses UI Automation (the same tree Narrator uses). Input simulation works through native platform APIs on both.
 
 The original motivation was curiosity -- what would it take to let an AI agent use a desktop app? But the interesting part turned out to be bigger than that. An LLM with forepaw can operate applications on behalf of anyone: navigating complex UIs, filling out forms, reading screen content aloud, automating repetitive tasks. For blind and low-vision users, this means an AI assistant that can see and describe what's on screen, click the right buttons, and read back results -- using the same accessibility infrastructure that was always there, just with a more capable intermediary.
 
@@ -166,18 +166,20 @@ Without `--window`, commands target the largest window. Ambiguous matches are re
 
 ## Requirements
 
-- macOS 14+
 - Rust toolchain (for building)
-- Two permissions, granted to your terminal app:
+- macOS 14+ (Apple Silicon or Intel)
+- Two permissions on macOS, granted to your terminal app:
 
 | Permission | Needed for | Where to grant |
 |-----------|-----------|---------------|
 | Accessibility | snapshot, click, type, hover | System Settings > Privacy & Security > Accessibility |
 | Screen Recording | screenshot, ocr, ocr-click | System Settings > Privacy & Security > Screen & System Audio Recording |
 
+Windows has no equivalent permission gates for UI Automation or input simulation.
+
 ```bash
 forepaw permissions          # check status
-forepaw permissions --request  # trigger system dialogs
+forepaw permissions --request  # trigger system dialogs (macOS only)
 ```
 
 ## Design decisions
@@ -185,7 +187,7 @@ forepaw permissions --request  # trigger system dialogs
 - **Accessibility-first.** Feel first, look second. A text tree is ~50 lines. A screenshot is ~1500 tokens. forepaw defaults to the cheaper, more precise option. OCR is the fallback, not the primary strategy.
 - **CLI, not library or daemon.** Works with any language, any agent framework, any automation tool that can shell out. No SDK lock-in, no protocol to implement.
 - **AX actions before mouse simulation.** `AXPress` doesn't move the physical cursor. More reliable, less disruptive. Mouse is the fallback.
-- **Platform-agnostic core.** The ref system, tree rendering, diffing, and output formatting live in `src/core/` with no macOS imports. Only `src/platform/darwin/` touches platform APIs. A Windows backend (UIA) or Linux backend (AT-SPI2) would plug in with the same CLI.
+- **Platform-agnostic core.** The ref system, tree rendering, diffing, and output formatting live in `src/core/` with no platform imports. `src/platform/darwin/` handles macOS (AXUIElement, CGEvent, Vision OCR), `src/platform/windows/` handles Windows (UIA, Win32). A Linux backend (AT-SPI2) would plug in with the same CLI.
 - **Built for agents, useful for humans.** Raccoons are generalists. forepaw reads the same tree that VoiceOver does. Annotated screenshots make invisible structure visible -- useful for AI agents, but also for sighted people helping blind users debug UIs, developers auditing accessibility, or anyone trying to understand an unfamiliar app's interactive structure.
 
 ## Further reading
@@ -198,7 +200,7 @@ forepaw permissions --request  # trigger system dialogs
 
 ## Development
 
-Uses [mise](https://mise.jdx.dev) for task running, Cargo for building.
+Uses [mise](https://mise.jdx.dev) for task running and Cargo for building.
 
 ```bash
 mise run check          # lint + test (run before committing)
@@ -214,6 +216,28 @@ cargo clippy -- -D warnings
 cargo fmt
 ```
 
+### Cross-compiling for Windows
+
+Build Windows binaries from any platform using [cargo-xwin](https://github.com/rust-cross/cargo-xwin) (downloads MSVC CRT + Windows SDK automatically):
+
+```bash
+# Install targets
+rustup target add aarch64-pc-windows-msvc x86_64-pc-windows-msvc
+
+# Build (requires cargo-xwin and lld)
+cargo xwin build --target aarch64-pc-windows-msvc
+cargo xwin build --target x86_64-pc-windows-msvc
+```
+
+Install `cargo-xwin` and `lld` however you prefer:
+
+| Method | Command |
+|--------|----------|
+| Cargo | `cargo install cargo-xwin` |
+| Nix | `nix shell nixpkgs#cargo-xwin nixpkgs#lld` |
+
+The project includes a [nix flake](flake.nix) and [direnv](.envrc) config that provides `cargo-xwin` and `lld` automatically if you use them.
+
 ### Project layout
 
 ```
@@ -224,6 +248,7 @@ src/
   platform/
     mod.rs            # DesktopProvider trait definition
     darwin/           # macOS: AXUIElement, CGEvent, Vision OCR, CoreGraphics
+    windows/          # Windows: UIA, EnumWindows, SendInput (in progress)
 TestApps/             # SwiftUI test apps for manual testing
 ```
 

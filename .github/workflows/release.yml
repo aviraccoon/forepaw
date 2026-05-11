@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  macos:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
@@ -24,8 +24,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          key: cargo-macos-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-macos-
 
       - name: Lint + test
         run: |
@@ -43,41 +43,107 @@ jobs:
           tar czf forepaw-darwin-arm64.tar.gz forepaw
           shasum -a 256 forepaw-darwin-arm64.tar.gz > forepaw-darwin-arm64.tar.gz.sha256
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: dist/
+
+  windows:
+    runs-on: windows-2025
+    strategy:
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $target = "${{ matrix.target }}"
+          $arch = if ($target -eq "x86_64-pc-windows-msvc") { "x86_64" } else { "arm64" }
+          New-Item -ItemType Directory -Force -Path dist
+          Compress-Archive -Path "target/$target/release/forepaw.exe" -DestinationPath "dist/forepaw-windows-$arch.zip"
+          (Get-FileHash "dist/forepaw-windows-$arch.zip" -Algorithm SHA256).Hash.ToLower() + "  forepaw-windows-$arch.zip" | Set-Content "dist/forepaw-windows-$arch.zip.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.target }}-artifacts
+          path: dist/
+
+  release:
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
       - name: Extract changelog
         id: changelog
         run: |
-          # Extract the section for the current tag from CHANGELOG.md
           version="${GITHUB_REF_NAME#v}"
-          # Extract codename from the version header (e.g. '"Kinkajou"' from '## v0.3.0 "Kinkajou" (2026-04-06)')
           codename=$(grep "^## v${version//./\\.}" CHANGELOG.md | sed -n 's/.*"\(.*\)".*/\1/p')
           if [ -n "${codename}" ]; then
             echo "title=${GITHUB_REF_NAME} \"${codename}\"" >> "$GITHUB_OUTPUT"
           else
             echo "title=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
-          # Get everything between this version's header and the next ## header (or EOF)
           awk "/^## v${version//./\\.}/{found=1; next} /^## v/{if(found) exit} found" CHANGELOG.md > dist/release-notes.md
-          # Append install instructions
-          tag="${GITHUB_REF_NAME}"
           cat >> dist/release-notes.md << INSTALL
 
           ### Install
 
+          **macOS (Apple Silicon)**
           \`\`\`bash
-          curl -L https://github.com/aviraccoon/forepaw/releases/download/${tag}/forepaw-darwin-arm64.tar.gz | tar xz
+          curl -L https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-darwin-arm64.tar.gz | tar xz
           mv forepaw /usr/local/bin/
           forepaw permissions --request
           \`\`\`
 
           Requires macOS 14+, Apple Silicon. Needs Accessibility and Screen Recording permissions.
+
+          **Windows (x86_64)**
+          \`\`\`powershell
+          curl -LO https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-windows-x86_64.zip
+          Expand-Archive forepaw-windows-x86_64.zip
+          mv forepaw.exe ~/bin/
+          \`\`\`
+
+          **Windows (ARM64)**
+          \`\`\`powershell
+          curl -LO https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-windows-arm64.zip
+          Expand-Archive forepaw-windows-arm64.zip
+          mv forepaw.exe ~/bin/
+          \`\`\`
+
+          Windows binaries are cross-compiled from macOS -- no Windows SDK needed on your machine.
           INSTALL
 
       - name: Release
-        # TODO: upgrade to v3 when released (Node 24 support, see softprops/action-gh-release#654)
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.changelog.outputs.title }}
           files: |
             dist/forepaw-darwin-arm64.tar.gz
             dist/forepaw-darwin-arm64.tar.gz.sha256
+            dist/forepaw-windows-x86_64.zip
+            dist/forepaw-windows-x86_64.zip.sha256
+            dist/forepaw-windows-arm64.zip
+            dist/forepaw-windows-arm64.zip.sha256
           body_path: dist/release-notes.md

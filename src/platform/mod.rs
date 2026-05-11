@@ -4,6 +4,9 @@
 /// The correct backend is selected via cfg attributes.
 #[cfg(target_os = "macos")]
 pub mod darwin;
+
+#[cfg(target_os = "windows")]
+pub mod windows;
 use crate::core::annotation::{Annotation, AnnotationStyle};
 use crate::core::crop_region::CropRegion;
 use crate::core::element_tree::ElementRef;
