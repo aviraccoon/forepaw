@@ -1,32 +1,45 @@
 [vars]
-swift_dirs = "Sources/ Tests/ TestApps/"
+swift_dirs = "TestApps/"
 
 [tasks.build]
-description = "Build debug binary"
-run = "swift build"
+description = "Build debug binary (Rust)"
+run = "cargo build"
 
 [tasks.dev]
 description = "Build debug binary and run"
 usage = 'arg "<command>" var=#true help="forepaw subcommand and arguments"'
-run = "swift build && swift run forepaw ${usage_command}"
+run = "cargo build && cargo run -- ${usage_command}"
 
 [tasks.test]
-run = "swift test"
+description = "Run tests (Rust)"
+run = "cargo test"
 
 [tasks.check]
 description = "Lint and test"
 run = [
-    "xcrun swift-format lint -r {{vars.swift_dirs}} --strict",
-    "swift test",
+    "cargo clippy -- -D warnings",
+    "cargo test",
 ]
 
 [tasks.lint]
-run = "xcrun swift-format lint -r {{vars.swift_dirs}} --strict"
+description = "Lint (clippy)"
+run = "cargo clippy -- -D warnings"
 
 [tasks.fmt]
-description = "Auto-format Swift files"
-run = "xcrun swift-format format -i -r {{vars.swift_dirs}}"
+description = "Auto-format (Rust + Swift)"
+run = [
+    "cargo fmt",
+    "xcrun swift-format format -i -r {{vars.swift_dirs}}",
+]
 
 [tasks.release-build]
-description = "Build release binary"
-run = "swift build -c release -Xswiftc -DRELEASE_BUILD"
+description = "Build release binary (Rust)"
+run = "cargo build --release"
+
+[tasks.swift-build]
+description = "Build Swift test apps"
+run = "cd TestApps/ClickTarget && swift build"
+
+[tasks.swift-fmt]
+description = "Auto-format Swift test apps"
+run = "xcrun swift-format format -i -r {{vars.swift_dirs}}"
