@@ -1,8 +1,12 @@
+# Rust
+/target
+
+# Swift (for TestApps)
 .build/
 .swiftpm/
 *.xcodeproj/
 *.xcworkspace/
 DerivedData/
+
+# General
 .DS_Store
-AGENTS.local.md
-CLAUDE.local.md

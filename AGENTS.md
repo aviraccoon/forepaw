@@ -1,36 +1,41 @@
 # AGENTS.md
 
-Desktop automation CLI for AI agents. Swift, macOS-first with cross-platform interface design.
+Desktop automation CLI for AI agents. Rust, macOS-first with cross-platform interface design.
 
 ## Quick Reference
 
 ```bash
-mise run check                           # Lint + build + test (use before committing)
-mise run dev <command>                   # Build + run (e.g. mise run dev snapshot --app Finder -i)
-mise run fmt                             # Auto-format
-mise run lint                            # Lint only
-mise run build                           # Build only
-mise run test                            # Test only
+mise run check              # Lint + test (use before committing)
+mise run dev <command>      # Build + run (e.g. mise run dev snapshot --app Finder -i)
+mise run fmt                # Auto-format (Rust + Swift test apps)
+mise run lint               # Lint only (clippy)
+mise run build              # Build only
+mise run test               # Test only
 ```
+
+No external task runner required -- Cargo is the build system. Mise tasks wrap Cargo for convenience.
 
 ## Key Paths
 
 | Task | Location |
 |------|----------|
-| Add/modify CLI commands | `Sources/Forepaw/Commands+*.swift` |
-| Platform-agnostic types & logic | `Sources/ForepawCore/` |
-| macOS AX/OCR/input implementation | `Sources/ForepawDarwin/` |
-| Core tests | `Tests/ForepawCoreTests/` |
+| Add/modify CLI commands | `src/cli/action.rs`, `src/cli/observation.rs`, `src/cli/system.rs` |
+| Platform-agnostic types & logic | `src/core/` |
+| Platform abstraction (DesktopProvider trait) | `src/platform/mod.rs` |
+| macOS backend (AX, OCR, input, screenshots) | `src/platform/darwin/` |
 | Test apps (SwiftUI, manual testing) | `TestApps/` |
+| Research docs | `docs/` |
+| Windows diagnostic scripts | `scripts/windows/` |
 
 ## Project Context
 
-- **Swift 6** with strict concurrency. `DesktopProvider` is `Sendable`.
-- **swift-argument-parser** for CLI. Subcommand pattern matching `agent-browser`.
-- **No external dependencies** beyond ArgumentParser. macOS APIs (AXUIElement, CGEvent, screencapture, Vision) used directly.
+- **Rust edition 2021**, strict clippy.
+- **clap** derive for CLI. Subcommand pattern matching `agent-browser`.
+- **Dependencies**: clap, anyhow, regex. Platform APIs via `objc2` (macOS). No external cross-platform deps.
 - **Ref system**: `@e1`, `@e2` assigned depth-first by `RefAssigner`. Positional -- action commands re-walk the tree to resolve refs across CLI invocations.
-- **AX-first actions**: `click` tries `AXPress` before CGEvent mouse fallback. Exception: web content links use mouse-first (AXPress doesn't trigger browser navigation).
-- **OCR via Vision framework**: `VNRecognizeTextRequest` on window screenshots. Coordinates need Retina scale factor (backingScaleFactor) and window origin offset for screen-space clicks.
+- **DesktopProvider trait** in `src/platform/mod.rs` defines the full platform surface. All CLI commands call through `&dyn DesktopProvider`. Every new platform method must be added to the trait first.
+- **Single crate with cfg gates** for macOS. Workspace split happens when adding Windows/Linux backends.
+- **`r#ref` everywhere** because `ref` is a Rust keyword.
 - **Two permissions**: Accessibility (for AX tree, actions) and Screen Recording (for screenshots, OCR). Both checked in `forepaw permissions`.
 
 ## Releases
@@ -41,25 +46,25 @@ mise run test                            # Test only
 
 ## Formatting
 
-- **swift-format** (ships with Xcode toolchain). Config in `.swift-format`.
-- 4-space indent, 120 char line length.
-- Run `mise run fmt` before committing.
-- Lint with `mise run lint` -- must be zero warnings.
-- `mise run check` does lint + test in one shot (`swift test` builds all targets).
+- **rustfmt** (ships with Rust toolchain). Default settings.
+- Run `cargo fmt` before committing.
+- Zero clippy warnings: `cargo clippy` must pass clean.
+- Swift test apps use `swift-format` (via `mise run fmt`).
 
 ## Guidelines
 
-- Keep `ForepawCore` free of platform imports (`ApplicationServices`, `Cocoa`, `Carbon`, `Vision`). `Foundation` is allowed in ForepawCore (used by `EncoderDetection`, `OutputFormatter`). All macOS-specific code goes in `ForepawDarwin`. The CLI target (`Forepaw`) also stays platform-agnostic -- no `Cocoa` imports.
-- **Every new public API in `ForepawDarwin` must have a corresponding method on the `DesktopProvider` protocol in `ForepawCore`.** Use platform-agnostic types (`Point`, `Rect`, not `CGPoint`, `CGRect`) in the protocol. Convert to platform types inside the Darwin implementation. The CLI target should only depend on `ForepawCore` types.
+- Keep `src/core/` free of platform imports. All platform-specific code goes in `src/platform/`.
+- **Every new public API in `src/platform/` must have a corresponding method on the `DesktopProvider` trait.** Use platform-agnostic types (`Point`, `Rect`, not `CGPoint`, `CGRect`) in the trait. Convert to platform types inside the Darwin implementation. The CLI should only depend on trait types.
 - **Read skill files completely before using the tool.** The skill description says "read this before running any forepaw command" -- that means the full file, not skimming. Skills contain behavioral rules, gotchas, and patterns that prevent errors. A partial read leads to misused flags, wrong coordinate systems, and broken workflows.
 - Mirror `agent-browser`'s CLI patterns where applicable (same flag names, similar output format, `@e` ref syntax).
 - `--app` activates the target app before mouse/keyboard actions. Make it optional for commands where global input makes sense (e.g. `press` for system hotkeys, `keyboard-type` for typing into current focus).
-- Test `ForepawCore` logic (ref assignment, tree rendering, key parsing) with unit tests. `ForepawDarwin` tests need interactive accessibility access -- keep them separate.
-- **Every new type or function in `ForepawCore` needs unit tests.** Adding `DragOptions`? Add `DragOptionsTests.swift`. Adding `parseModifiers`? Test it. The test suite is the safety net for the cross-platform core -- if it's not tested, it'll break silently when refactored.
+- Every new type or function in `src/core/` needs unit tests. Test pure logic even when FFI-dependent code needs a live app.
 - Output is plain text by default, `--json` for structured JSON.
 - Element names: check `AXTitle`, then `AXDescription`, then `AXTitleUIElement` (points to a label element), then first `AXStaticText` child's `AXValue`. This chain (`computedName`) handles cells, rows, and other container elements.
 - Keystroke simulation needs inter-character delay (~8ms) for Electron apps. Without it, characters get dropped.
-- **User text arguments that could start with dashes** need `@Option(parsing: .unconditional)` as an alternative to the positional `@Argument`. ArgumentParser treats dash-prefixed values as flags, so a positional `@Argument` can't accept text like `"--verbose"`. The pattern: keep the positional as optional for normal text, add `@Option(name: .customLong("text"), parsing: .unconditional)` as a named alternative, and use `resolveText()` to pick one. See `keyboard-type`, `type`, `ocr-click`, `wait` for examples.
 - **Every feature or behavior change must update the agent skill** (`.agents/skills/forepaw/SKILL.md`) and `README.md`. The skill is how agents learn to use forepaw -- if a capability isn't documented there, it doesn't exist to them.
 - **Load the forepaw skill before testing interactively.** The skill documents the observe-act loop, command patterns, and behavioral gotchas. Read it before running forepaw commands against real apps.
-- **Coordinate-based actions validate against window bounds.** `clickAtPoint` and `hoverAtPoint` reject coordinates outside the target window (errors, not clamps -- a misplaced click could be destructive). The validation logic lives in `ForepawCore/CoordinateValidation.swift` (pure, testable) with a thin Darwin wrapper in `validatePointInWindow`. Any new coordinate-based action must call `validatePointInWindow` when `--app` is specified.
+- **Coordinate-based actions validate against window bounds.** `click_at_point` and `hover_at_point` reject coordinates outside the target window (errors, not clamps -- a misplaced click could be destructive). Any new coordinate-based action must validate when `--app` is specified.
+- Implement `std::str::FromStr` for string-parsed enums (clippy enforces this over custom `from_str` methods).
+- Use `anyhow::Result` in CLI command methods; use `Result<_, ForepawError>` in platform/trait methods.
+- `forepaw-audit` and other companion tools depend on this crate as a library dependency (not subprocess/JSON). Keep the lib surface clean.
