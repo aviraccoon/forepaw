@@ -32,8 +32,13 @@ pub fn ocr(
     let (rgba_pixels, width, height) =
         crate::platform::windows::screenshot::capture_pixels(app_name, window)?;
 
-    // Create SoftwareBitmap from the pixel data
-    let bitmap = create_software_bitmap(&rgba_pixels, width, height)?;
+    // Upscale 2x before OCR -- Windows.Media.Ocr struggles with small text.
+    // Lanczos3 preserves sharpness better than bilinear for text edges.
+    let scale = 3u32;
+    let (ocr_pixels, ocr_width, ocr_height) = upscale_rgba(&rgba_pixels, width, height, scale);
+
+    // Create SoftwareBitmap from the upscaled pixel data
+    let bitmap = create_software_bitmap(&ocr_pixels, ocr_width, ocr_height)?;
 
     // Run OCR
     let engine = OcrEngine::TryCreateFromUserProfileLanguages()
@@ -97,10 +102,10 @@ pub fn ocr(
         results.push(OCRResult {
             text,
             bounds: Rect::new(
-                min_x as f64,
-                min_y as f64,
-                (max_x - min_x) as f64,
-                (max_y - min_y) as f64,
+                (min_x / scale as f32) as f64,
+                (min_y / scale as f32) as f64,
+                ((max_x - min_x) / scale as f32) as f64,
+                ((max_y - min_y) / scale as f32) as f64,
             ),
         });
     }
@@ -212,4 +217,18 @@ fn block_on_async<T: windows::core::RuntimeType + 'static>(
 
     op.GetResults()
         .map_err(|e| ForepawError::ActionFailed(format!("OCR GetResults failed: {e}")))
+}
+
+/// Upscale RGBA pixels by an integer factor using Lanczos3 resampling.
+///
+/// Returns (upscaled_rgba, new_width, new_height).
+fn upscale_rgba(rgba: &[u8], width: u32, height: u32, scale: u32) -> (Vec<u8>, u32, u32) {
+    let img = match image::RgbaImage::from_raw(width, height, rgba.to_vec()) {
+        Some(i) => i,
+        None => return (rgba.to_vec(), width, height), // fallback: no upscale
+    };
+    let new_w = width * scale;
+    let new_h = height * scale;
+    let upscaled = image::imageops::resize(&img, new_w, new_h, image::imageops::FilterType::Lanczos3);
+    (upscaled.into_raw(), new_w, new_h)
 }
