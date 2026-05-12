@@ -32,10 +32,20 @@ objc2-vision = { version = "0.3", features = [
 block2 = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+image = "0.25"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_Xps",          # PrintWindow + PRINT_WINDOW_FLAGS
+    "Win32_Security",
     "Win32_System_Com",
     "Win32_System_Threading",
+    "Win32_System_WinRT",
     "Win32_UI_Accessibility",
+    "Win32_UI_HiDpi",
     "Win32_UI_WindowsAndMessaging",
+    "Foundation",
+    "Graphics_Imaging",
+    "Media_Ocr",
 ] }
+windows-future = "0.3"

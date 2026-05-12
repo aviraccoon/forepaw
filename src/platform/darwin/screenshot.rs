@@ -19,25 +19,9 @@ use crate::platform::darwin::snapshot;
 use crate::platform::ScreenshotResult;
 use crate::platform::{ScreenshotOptions, ScreenshotParams, SnapshotOptions};
 
-/// Generate a unique temp file tag based on timestamp + random suffix.
+/// Generate a unique temp file tag for screenshot filenames.
 pub fn temp_tag() -> String {
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let rand: u32 = rand_suffix();
-    format!("{ts}-{rand:04x}")
-}
-
-/// Simple random suffix without external dependency.
-fn rand_suffix() -> u32 {
-    // Use address space layout randomization for a cheap random value
-    let stack_addr = &temp_tag as *const _ as usize;
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    (stack_addr.wrapping_mul(2654435761) ^ ts as usize) as u32 & 0xFFFF
+    crate::core::temp::temp_tag()
 }
 
 /// Run the system `screencapture` CLI to capture a window or full screen.

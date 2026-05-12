@@ -3,10 +3,13 @@
 //! Implements the `DesktopProvider` trait using:
 //! - EnumWindows / GetWindowThreadProcessId for app and window enumeration
 //! - IUIAutomation + ControlView TreeWalker for accessibility tree walking
+//! - GDI BitBlt for screenshots (physical pixels, DPI-aware)
+//! - Windows.Media.Ocr (WinRT) for OCR
 //! - SendInput for keyboard/mouse input (future)
-//! - Windows.Media.Ocr for OCR (future)
 
 pub mod app;
+pub mod ocr;
+pub mod screenshot;
 pub mod snapshot;
 
 use crate::core::errors::ForepawError;
@@ -17,6 +20,7 @@ pub struct WindowsProvider;
 
 impl WindowsProvider {
     pub fn new() -> Self {
+        screenshot::init_dpi_awareness();
         snapshot::init_com();
         Self
     }
@@ -52,23 +56,24 @@ impl DesktopProvider for WindowsProvider {
 
     fn screenshot(
         &self,
-        _params: &crate::platform::ScreenshotParams,
+        params: &crate::platform::ScreenshotParams,
     ) -> Result<crate::platform::ScreenshotResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "screenshot not yet implemented on Windows".into(),
-        ))
+        let path = screenshot::screenshot(params.app, params.window)?;
+        Ok(crate::platform::ScreenshotResult {
+            path,
+            annotations: None,
+            legend: None,
+        })
     }
 
     fn ocr(
         &self,
-        _app: Option<&str>,
-        _window: Option<&str>,
-        _find: Option<&str>,
-        _screenshot_options: Option<&crate::platform::ScreenshotOptions>,
+        app: Option<&str>,
+        window: Option<&str>,
+        find: Option<&str>,
+        screenshot_options: Option<&crate::platform::ScreenshotOptions>,
     ) -> Result<crate::core::ocr_result::OCROutput, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "ocr not yet implemented on Windows".into(),
-        ))
+        ocr::ocr(app, window, find, screenshot_options)
     }
 
     // --- Actions (stubs) ---
