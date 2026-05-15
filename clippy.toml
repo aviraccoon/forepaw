@@ -1,0 +1,10 @@
+# Clippy configuration.
+# These settings take effect when the corresponding lints are enabled in Cargo.toml.
+# Ref: https://doc.rust-lang.org/clippy/configuration.html
+
+# Relax panic/unwrap/indexing lints in test code.
+allow-panic-in-tests = true
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-dbg-in-tests = true

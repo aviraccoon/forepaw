@@ -22,6 +22,10 @@
               # Cross-compilation to Windows
               cargo-xwin
               lld
+              # Linting and auditing
+              cargo-audit
+              cargo-machete
+              cargo-outdated
             ];
           };
         }

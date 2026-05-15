@@ -25,6 +25,22 @@ run = [
 description = "Lint (clippy)"
 run = "cargo clippy -- -D warnings"
 
+[tasks.lint-strict]
+description = "Discover new lints (full pedantic + restriction as warnings, not blocking)"
+run = "cargo clippy --all-targets -- -W clippy::pedantic -W clippy::restriction"
+
+[tasks.miri]
+description = "Run tests under Miri (UB detection, requires nightly)"
+run = "cargo +nightly miri test"
+
+[tasks.audit]
+description = "Check dependencies for known vulnerabilities"
+run = "cargo audit"
+
+[tasks.machete]
+description = "Find unused dependencies"
+run = "cargo machete"
+
 [tasks.fmt]
 description = "Auto-format (Rust + Swift)"
 run = [
