@@ -159,20 +159,12 @@ impl SnapshotDiffer {
         let new_lines: Vec<&str> = new.split('\n').collect();
 
         // Skip the "app:" header line if present
-        let old_content: Vec<&str> = if old_lines
-            .first()
-            .map(|l| l.starts_with("app:"))
-            .unwrap_or(false)
-        {
+        let old_content: Vec<&str> = if old_lines.first().is_some_and(|l| l.starts_with("app:")) {
             old_lines[1..].to_vec()
         } else {
             old_lines.clone()
         };
-        let new_content: Vec<&str> = if new_lines
-            .first()
-            .map(|l| l.starts_with("app:"))
-            .unwrap_or(false)
-        {
+        let new_content: Vec<&str> = if new_lines.first().is_some_and(|l| l.starts_with("app:")) {
             new_lines[1..].to_vec()
         } else {
             new_lines.clone()
@@ -232,7 +224,7 @@ fn lcs(old: &[String], new: &[String]) -> Vec<DiffOp> {
     let n = new.len();
 
     // Build LCS table
-    let mut table = vec![vec![0usize; n + 1]; m + 1];
+    let mut table = vec![vec![0_usize; n + 1]; m + 1];
     for i in 1..=m {
         for j in 1..=n {
             if old[i - 1] == new[j - 1] {

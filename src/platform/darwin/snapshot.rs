@@ -783,7 +783,7 @@ fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
         }
         // Slow path: non-ASCII strings need a buffer copy
         let len = CFStringGetLength(cf_str);
-        let mut buf = vec![0u8; (len as usize + 1) * 4]; // worst case: 4 bytes per char
+        let mut buf = vec![0_u8; (len as usize + 1) * 4]; // worst case: 4 bytes per char
         if CFStringGetCString(
             cf_str,
             buf.as_mut_ptr() as *mut std::ffi::c_char,
@@ -845,7 +845,7 @@ mod tests {
 
     #[test]
     fn non_empty_returns_none_for_empty() {
-        assert_eq!(non_empty(&Some("".to_string())), None);
+        assert_eq!(non_empty(&Some(String::new())), None);
     }
 
     #[test]

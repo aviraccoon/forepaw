@@ -559,19 +559,17 @@ impl Drag {
             } else if self.targets.len() == 2 {
                 let from_ref = ElementRef::parse(&self.targets[0]);
                 let to_ref = ElementRef::parse(&self.targets[1]);
-                match (from_ref, to_ref) {
-                    (Some(from), Some(to)) => {
-                        let app = self.app.as_deref().ok_or_else(|| {
-                            anyhow::anyhow!("--app is required for ref-based drag")
-                        })?;
-                        provider.drag_refs(from, to, app, &options)?
-                    }
-                    _ => {
-                        // Mixed targets: resolve each
-                        let from = resolve_drag_target(&self.targets[0], provider)?;
-                        let to = resolve_drag_target(&self.targets[1], provider)?;
-                        provider.drag_path(&[from, to], &options, self.app.as_deref())?
-                    }
+                if let (Some(from), Some(to)) = (from_ref, to_ref) {
+                    let app = self
+                        .app
+                        .as_deref()
+                        .ok_or_else(|| anyhow::anyhow!("--app is required for ref-based drag"))?;
+                    provider.drag_refs(from, to, app, &options)?
+                } else {
+                    // Mixed targets: resolve each
+                    let from = resolve_drag_target(&self.targets[0], provider)?;
+                    let to = resolve_drag_target(&self.targets[1], provider)?;
+                    provider.drag_path(&[from, to], &options, self.app.as_deref())?
                 }
             } else {
                 return Err(anyhow::anyhow!(

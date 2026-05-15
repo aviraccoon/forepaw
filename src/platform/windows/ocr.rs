@@ -32,7 +32,7 @@ pub fn ocr(
 
     // Upscale 2x before OCR -- Windows.Media.Ocr struggles with small text.
     // Lanczos3 preserves sharpness better than bilinear for text edges.
-    let scale = 3u32;
+    let scale = 3_u32;
     let (ocr_pixels, ocr_width, ocr_height) = upscale_rgba(&rgba_pixels, width, height, scale);
 
     // Create SoftwareBitmap from the upscaled pixel data
@@ -100,10 +100,10 @@ pub fn ocr(
         results.push(OCRResult {
             text,
             bounds: Rect::new(
-                (min_x / scale as f32) as f64,
-                (min_y / scale as f32) as f64,
-                ((max_x - min_x) / scale as f32) as f64,
-                ((max_y - min_y) / scale as f32) as f64,
+                f64::from(min_x / scale as f32),
+                f64::from(min_y / scale as f32),
+                f64::from((max_x - min_x) / scale as f32),
+                f64::from((max_y - min_y) / scale as f32),
             ),
         });
     }

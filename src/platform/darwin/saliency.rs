@@ -51,7 +51,7 @@ pub fn find_target(image_path: &str, region: &Rect, scale_factor: f64) -> Option
         let color_space = ffi::CGColorSpaceCreateDeviceRGB();
         let bytes_per_pixel: usize = 4;
         let bytes_per_row = bytes_per_pixel * width;
-        let mut pixel_data = vec![0u8; height * bytes_per_row];
+        let mut pixel_data = vec![0_u8; height * bytes_per_row];
 
         let ctx = ffi::CGBitmapContextCreate(
             pixel_data.as_mut_ptr() as *mut std::ffi::c_void,
@@ -87,12 +87,12 @@ pub fn find_target(image_path: &str, region: &Rect, scale_factor: f64) -> Option
         for y in 0..height {
             for x in 0..width {
                 let offset = y * bytes_per_row + x * bytes_per_pixel;
-                let r = pixel_data[offset] as f64 / 255.0;
-                let g = pixel_data[offset + 1] as f64 / 255.0;
-                let b = pixel_data[offset + 2] as f64 / 255.0;
+                let r = f64::from(pixel_data[offset]) / 255.0;
+                let g = f64::from(pixel_data[offset + 1]) / 255.0;
+                let b = f64::from(pixel_data[offset + 2]) / 255.0;
                 let max_c = r.max(g).max(b);
                 let min_c = r.min(g).min(b);
-                let brightness = (max_c + min_c) / 2.0;
+                let brightness = f64::midpoint(max_c, min_c);
                 brightnesses.push(brightness);
             }
         }
@@ -111,13 +111,13 @@ pub fn find_target(image_path: &str, region: &Rect, scale_factor: f64) -> Option
         for y in 0..height {
             for x in 0..width {
                 let offset = y * bytes_per_row + x * bytes_per_pixel;
-                let r = pixel_data[offset] as f64 / 255.0;
-                let g = pixel_data[offset + 1] as f64 / 255.0;
-                let b = pixel_data[offset + 2] as f64 / 255.0;
+                let r = f64::from(pixel_data[offset]) / 255.0;
+                let g = f64::from(pixel_data[offset + 1]) / 255.0;
+                let b = f64::from(pixel_data[offset + 2]) / 255.0;
 
                 let max_c = r.max(g).max(b);
                 let min_c = r.min(g).min(b);
-                let brightness = (max_c + min_c) / 2.0;
+                let brightness = f64::midpoint(max_c, min_c);
 
                 // HSL saturation
                 let saturation = if (max_c - min_c).abs() < f64::EPSILON {

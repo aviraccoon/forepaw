@@ -22,7 +22,7 @@ impl RefAssigner {
     pub fn assign(&self, root: &ElementNode, interactive_only: bool) -> RefAssignment {
         let mut counter: i32 = 1;
         let mut refs = HashMap::new();
-        let new_root = self.walk(root, &mut counter, &mut refs, interactive_only);
+        let new_root = Self::walk(root, &mut counter, &mut refs, interactive_only);
         RefAssignment {
             root: new_root,
             refs,
@@ -30,7 +30,6 @@ impl RefAssigner {
     }
 
     fn walk(
-        &self,
         node: &ElementNode,
         counter: &mut i32,
         refs: &mut HashMap<ElementRef, ElementRefInfo>,
@@ -52,7 +51,7 @@ impl RefAssigner {
             node.children
                 .iter()
                 .filter_map(|child| {
-                    let walked = self.walk(child, counter, refs, true);
+                    let walked = Self::walk(child, counter, refs, true);
                     if walked.r#ref.is_some() || !walked.children.is_empty() {
                         Some(walked)
                     } else {
@@ -63,16 +62,16 @@ impl RefAssigner {
         } else {
             node.children
                 .iter()
-                .map(|child| self.walk(child, counter, refs, false))
+                .map(|child| Self::walk(child, counter, refs, false))
                 .collect()
         };
 
         let mut new_node = ElementNode::new(&node.role);
-        new_node.name = node.name.clone();
-        new_node.value = node.value.clone();
+        new_node.name.clone_from(&node.name);
+        new_node.value.clone_from(&node.value);
         new_node.r#ref = new_ref.or(node.r#ref);
         new_node.bounds = node.bounds;
-        new_node.attributes = node.attributes.clone();
+        new_node.attributes.clone_from(&node.attributes);
         new_node.children = children;
         new_node
     }

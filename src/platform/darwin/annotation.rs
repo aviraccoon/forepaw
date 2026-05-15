@@ -422,7 +422,7 @@ fn render_spotlight(
 
     // Fill with even-odd rule: overlay covers everything except the holes
     let overlay_color =
-        unsafe { ffi::CGColorCreate(color_space, [0.0f64, 0.0, 0.0, 0.6].as_ptr()) };
+        unsafe { ffi::CGColorCreate(color_space, [0.0_f64, 0.0, 0.0, 0.6].as_ptr()) };
     unsafe {
         ffi::CGContextSetFillColorWithColor(ctx, overlay_color);
         ffi::CGContextAddPath(ctx, overlay_path as ffi::CGPathRef);
@@ -467,16 +467,16 @@ pub fn render_grid(
     let font = create_font("Helvetica", 9.0 * scale_factor);
 
     // Colors
-    let grid_color = unsafe { ffi::CGColorCreate(color_space, [1.0f64, 1.0, 1.0, 0.3].as_ptr()) };
+    let grid_color = unsafe { ffi::CGColorCreate(color_space, [1.0_f64, 1.0, 1.0, 0.3].as_ptr()) };
     let label_bg_color =
-        unsafe { ffi::CGColorCreate(color_space, [0.0f64, 0.0, 0.0, 0.6].as_ptr()) };
+        unsafe { ffi::CGColorCreate(color_space, [0.0_f64, 0.0, 0.0, 0.6].as_ptr()) };
     let label_text_color =
-        unsafe { ffi::CGColorCreate(color_space, [1.0f64, 1.0, 1.0, 0.9].as_ptr()) };
+        unsafe { ffi::CGColorCreate(color_space, [1.0_f64, 1.0, 1.0, 0.9].as_ptr()) };
 
     let line_width = 1.0 * scale_factor;
     let offset_x = origin_offset.0;
     let offset_y = origin_offset.1;
-    let spacing_f = spacing as f64;
+    let spacing_f = f64::from(spacing);
 
     // First grid X: next multiple of spacing after offsetX
     let first_grid_x = ((offset_x / spacing_f).floor() + 1.0) * spacing_f;

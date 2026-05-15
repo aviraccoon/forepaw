@@ -302,7 +302,7 @@ fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Opt
 
 /// Get the element's ControlType, mapped to an AX-style role name.
 fn get_control_type(element: &IUIAutomationElement) -> String {
-    let ct = unsafe { element.CurrentControlType().map(|ct| ct.0).unwrap_or(0) };
+    let ct = unsafe { element.CurrentControlType().map_or(0, |ct| ct.0) };
     control_type_to_role(ct).to_string()
 }
 
@@ -326,10 +326,10 @@ fn get_element_bounds(element: &IUIAutomationElement) -> Option<Rect> {
     let rect: RECT = unsafe { element.CurrentBoundingRectangle().ok() }?;
 
     let r = Rect::new(
-        rect.left as f64,
-        rect.top as f64,
-        (rect.right - rect.left) as f64,
-        (rect.bottom - rect.top) as f64,
+        f64::from(rect.left),
+        f64::from(rect.top),
+        f64::from(rect.right - rect.left),
+        f64::from(rect.bottom - rect.top),
     );
 
     if r.width <= 0.0 || r.height <= 0.0 {
@@ -344,8 +344,7 @@ fn is_offscreen(element: &IUIAutomationElement) -> bool {
     unsafe {
         element
             .CurrentIsOffscreen()
-            .map(windows::core::BOOL::as_bool)
-            .unwrap_or(false)
+            .is_ok_and(windows::core::BOOL::as_bool)
     }
 }
 

@@ -12,12 +12,11 @@ impl TreeRenderer {
     pub fn render(&self, tree: &ElementTree) -> String {
         let mut lines: Vec<String> = Vec::new();
         lines.push(format!("app: {}", tree.app));
-        self.render_node(&tree.root, 0, tree.window_bounds.as_ref(), &mut lines);
+        Self::render_node(&tree.root, 0, tree.window_bounds.as_ref(), &mut lines);
         lines.join("\n")
     }
 
     fn render_node(
-        &self,
         node: &crate::core::element_tree::ElementNode,
         indent: usize,
         window_origin: Option<&Rect>,
@@ -86,7 +85,7 @@ impl TreeRenderer {
         lines.push(format!("{prefix}{}", parts.join(" ")));
 
         for child in &node.children {
-            self.render_node(child, indent + 1, window_origin, lines);
+            Self::render_node(child, indent + 1, window_origin, lines);
         }
     }
 }

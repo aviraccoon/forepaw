@@ -178,7 +178,7 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
 
     match window {
         Some(w) => match_window(&app_windows, w),
-        None => select_best_window(&app_windows),
+        None => Ok(select_best_window(&app_windows)),
     }
 }
 
@@ -456,7 +456,7 @@ fn match_window(windows: &[WindowEntry], pattern: &str) -> Result<ResolvedWindow
     }
 }
 
-fn select_best_window(windows: &[WindowEntry]) -> Result<ResolvedWindow, ForepawError> {
+fn select_best_window(windows: &[WindowEntry]) -> ResolvedWindow {
     // Prefer titled windows, then largest by area.
     let titled: Vec<&WindowEntry> = windows.iter().filter(|w| !w.title.is_empty()).collect();
     let candidates = if titled.is_empty() {
@@ -476,11 +476,11 @@ fn select_best_window(windows: &[WindowEntry]) -> Result<ResolvedWindow, Forepaw
         })
         .unwrap(); // safe: windows is non-empty
 
-    Ok(ResolvedWindow {
+    ResolvedWindow {
         window_id: best.id,
         title: best.title.clone(),
         bounds: best.bounds,
-    })
+    }
 }
 
 fn find_app_by_pid(pid: i32) -> Result<Retained<NSRunningApplication>, ForepawError> {
@@ -544,7 +544,7 @@ pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option
                 .map(String::from);
         }
         // Fallback: copy into a buffer
-        let mut buf = [0u8; 1024];
+        let mut buf = [0_u8; 1024];
         if CFStringGetCString(
             val as CFStringRef,
             buf.as_mut_ptr() as *mut std::ffi::c_char,
@@ -850,7 +850,7 @@ mod tests {
             make_entry(100, "", 1000.0, 800.0),
             make_entry(200, "Document", 400.0, 300.0),
         ];
-        let result = select_best_window(&windows).unwrap();
+        let result = select_best_window(&windows);
         assert_eq!(result.window_id, 200);
         assert_eq!(result.title, "Document");
     }
@@ -861,7 +861,7 @@ mod tests {
             make_entry(100, "Small", 400.0, 300.0),
             make_entry(200, "Large", 800.0, 600.0),
         ];
-        let result = select_best_window(&windows).unwrap();
+        let result = select_best_window(&windows);
         assert_eq!(result.window_id, 200);
     }
 
@@ -871,14 +871,14 @@ mod tests {
             make_entry(100, "", 800.0, 600.0),
             make_entry(200, "", 400.0, 300.0),
         ];
-        let result = select_best_window(&windows).unwrap();
+        let result = select_best_window(&windows);
         assert_eq!(result.window_id, 100);
     }
 
     #[test]
     fn select_best_single_window() {
         let windows = vec![make_entry(100, "Only", 800.0, 600.0)];
-        let result = select_best_window(&windows).unwrap();
+        let result = select_best_window(&windows);
         assert_eq!(result.window_id, 100);
     }
 }

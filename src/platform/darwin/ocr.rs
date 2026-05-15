@@ -4,6 +4,8 @@
 //! module, then Vision processes the image. Coordinates are converted from
 //! Vision's normalized bottom-left-origin to window-relative top-left-origin.
 
+use std::fmt::Write;
+
 use objc2::AnyThread;
 use objc2_core_foundation::CGRect;
 use objc2_foundation::{NSDictionary, NSString};
@@ -218,8 +220,9 @@ pub fn resolve_ocr_text(
     if matches.len() > 1 && index.is_none() {
         let mut listing = format!("Multiple matches for '{text}':\n");
         for (i, m) in matches.iter().enumerate() {
-            listing += &format!(
-                "  --index {}: '{}' at {},{}\n",
+            let _ = writeln!(
+                listing,
+                "  --index {}: '{}' at {},{}",
                 i + 1,
                 m.text,
                 m.center().0 as i32,
@@ -270,7 +273,7 @@ pub fn ocr_click(
     let label = match options.button {
         crate::core::key_combo::MouseButton::Right => "right-clicked",
         _ if options.click_count > 1 => "double-clicked",
-        _ => "clicked",
+        crate::core::key_combo::MouseButton::Left => "clicked",
     };
     Ok(crate::platform::ActionResult::ok_msg(format!(
         "{label} '{matched_text}' at {rel_x},{rel_y}"

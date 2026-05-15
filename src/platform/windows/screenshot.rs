@@ -30,7 +30,7 @@ use crate::platform::windows::app;
 pub fn init_dpi_awareness() {
     unsafe {
         // PER_MONITOR_AWARE_V2 = -4
-        let ctx = DPI_AWARENESS_CONTEXT(-4isize as *mut _);
+        let ctx = DPI_AWARENESS_CONTEXT(-4_isize as *mut _);
         let _ = SetProcessDpiAwarenessContext(ctx);
     }
 }
@@ -121,7 +121,7 @@ fn capture_print_window(
             return Err(());
         }
 
-        let mut pixels = vec![0u8; (width * height * 4) as usize];
+        let mut pixels = vec![0_u8; (width * height * 4) as usize];
 
         let mut bmi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
@@ -221,7 +221,7 @@ fn capture_region_rgba(
         )
         .map_err(|e| ForepawError::ActionFailed(format!("BitBlt failed: {e}")))?;
 
-        let mut pixels = vec![0u8; (width * height * 4) as usize];
+        let mut pixels = vec![0_u8; (width * height * 4) as usize];
 
         let mut bmi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {

@@ -104,12 +104,11 @@ impl AnnotationCollector {
     pub fn collect(&self, root: &ElementNode, window_bounds: Rect) -> Vec<Annotation> {
         let mut annotations = Vec::new();
         let mut display_number: usize = 1;
-        self.walk(root, &mut annotations, &mut display_number, window_bounds);
+        Self::walk(root, &mut annotations, &mut display_number, window_bounds);
         annotations
     }
 
     fn walk(
-        &self,
         node: &ElementNode,
         annotations: &mut Vec<Annotation>,
         display_number: &mut usize,
@@ -146,7 +145,7 @@ impl AnnotationCollector {
         }
 
         for child in &node.children {
-            self.walk(child, annotations, display_number, window_bounds);
+            Self::walk(child, annotations, display_number, window_bounds);
         }
     }
 }

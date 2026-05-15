@@ -63,8 +63,7 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
         let display_name = entries
             .iter()
             .find(|e| !e.title.is_empty())
-            .map(|e| e.title.clone())
-            .unwrap_or_else(|| process_name.clone());
+            .map_or_else(|| process_name.clone(), |e| e.title.clone());
 
         apps.push(AppInfo {
             name: display_name,
@@ -165,10 +164,10 @@ unsafe extern "system" fn enum_window_callback(hwnd: HWND, lparam: LPARAM) -> BO
     let mut rect = RECT::default();
     let bounds = if unsafe { GetWindowRect(hwnd, &mut rect) }.is_ok() {
         let r = Rect::new(
-            rect.left as f64,
-            rect.top as f64,
-            (rect.right - rect.left) as f64,
-            (rect.bottom - rect.top) as f64,
+            f64::from(rect.left),
+            f64::from(rect.top),
+            f64::from(rect.right - rect.left),
+            f64::from(rect.bottom - rect.top),
         );
         // Skip tiny/phantom windows (same filter as macOS backend)
         if r.width < 10.0 || r.height < 10.0 {
@@ -228,11 +227,7 @@ pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
             let title_match = e.title.to_lowercase().contains(&filter_lower);
             let is_desktop = e.title == "Program Manager";
             let has_title = !e.title.is_empty();
-            let area = e
-                .bounds
-                .as_ref()
-                .map(|b| (b.width * b.height) as u64)
-                .unwrap_or(0);
+            let area = e.bounds.as_ref().map_or(0, |b| (b.width * b.height) as u64);
 
             // Pack into a tuple for lexicographic comparison:
             // (title_matches_query, not_desktop, has_title, area)
@@ -266,7 +261,7 @@ fn get_window_text(hwnd: HWND) -> String {
         if len == 0 {
             return String::new();
         }
-        let mut buf = vec![0u16; (len as usize) + 1];
+        let mut buf = vec![0_u16; (len as usize) + 1];
         let written = GetWindowTextW(hwnd, &mut buf);
         if written == 0 {
             return String::new();
@@ -282,7 +277,7 @@ fn get_process_name(pid: u32) -> Option<String> {
 
         // QueryFullProcessImageNameW returns the full path.
         let mut size: u32 = 1024;
-        let mut buf = vec![0u16; size as usize];
+        let mut buf = vec![0_u16; size as usize];
         let flags = PROCESS_NAME_WIN32;
         QueryFullProcessImageNameW(
             process,

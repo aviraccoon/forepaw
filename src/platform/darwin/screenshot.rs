@@ -89,12 +89,12 @@ fn crop_image(
 
         let crop_cg_rect = CGRectFFI {
             origin: CGPointFFI {
-                x: cx as f64,
-                y: cy as f64,
+                x: f64::from(cx),
+                y: f64::from(cy),
             },
             size: CGSizeFFI {
-                width: cw as f64,
-                height: ch as f64,
+                width: f64::from(cw),
+                height: f64::from(ch),
             },
         };
 
@@ -383,31 +383,30 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     let tree = snapshot::snapshot(app_name, &snapshot_opts)?;
 
     // Determine window bounds for coordinate conversion
-    let window_bounds = match resolved_window.as_ref() {
-        Some(resolved) => Rect::new(
+    let window_bounds = if let Some(resolved) = resolved_window.as_ref() {
+        Rect::new(
             resolved.bounds.x,
             resolved.bounds.y,
             resolved.bounds.width,
             resolved.bounds.height,
-        ),
-        None => {
-            // Full screen fallback
-            let screen = unsafe {
-                let mtm = objc2::MainThreadMarker::new_unchecked();
-                objc2_app_kit::NSScreen::mainScreen(mtm)
-            };
-            match screen {
-                Some(s) => {
-                    let frame = s.frame();
-                    Rect::new(
-                        frame.origin.x,
-                        frame.origin.y,
-                        frame.size.width,
-                        frame.size.height,
-                    )
-                }
-                None => Rect::new(0.0, 0.0, 1440.0, 900.0),
+        )
+    } else {
+        // Full screen fallback
+        let screen = unsafe {
+            let mtm = objc2::MainThreadMarker::new_unchecked();
+            objc2_app_kit::NSScreen::mainScreen(mtm)
+        };
+        match screen {
+            Some(s) => {
+                let frame = s.frame();
+                Rect::new(
+                    frame.origin.x,
+                    frame.origin.y,
+                    frame.size.width,
+                    frame.size.height,
+                )
             }
+            None => Rect::new(0.0, 0.0, 1440.0, 900.0),
         }
     };
 

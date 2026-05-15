@@ -142,8 +142,8 @@ pub fn perform_mouse_click(
 
     for i in 1..=click_count {
         unsafe {
-            post_mouse_event(down_type, point, cg_button, Some(i as i64))?;
-            post_mouse_event(up_type, point, cg_button, Some(i as i64))?;
+            post_mouse_event(down_type, point, cg_button, Some(i64::from(i)))?;
+            post_mouse_event(up_type, point, cg_button, Some(i64::from(i)))?;
         }
         if i < click_count {
             thread::sleep(Duration::from_millis(10));
@@ -199,8 +199,7 @@ pub fn click_element(
         // Report window-relative coordinates
         let window_origin = pid
             .and_then(|p| app::find_window(p, None).ok())
-            .map(|w| w.origin())
-            .unwrap_or(Point::new(0.0, 0.0));
+            .map_or(Point::new(0.0, 0.0), |w| w.origin());
         let rel_x = (screen_point.x - window_origin.x) as i32;
         let rel_y = (screen_point.y - window_origin.y) as i32;
         let label = if is_right_click {
@@ -240,7 +239,7 @@ pub fn click_element(
 /// which drop characters if events arrive too fast.
 pub fn type_via_keyboard(text: &str) -> Result<(), ForepawError> {
     for ch in text.chars() {
-        let mut utf16_buf = [0u16; 2];
+        let mut utf16_buf = [0_u16; 2];
         let utf16 = ch.encode_utf16(&mut utf16_buf);
         unsafe {
             // Key down
@@ -439,7 +438,7 @@ fn capture_scroll_fingerprint(window_id: u32) -> Option<Vec<u8>> {
         let strip_h = ffi::CGImageGetHeight(strip);
         let color_space = ffi::CGColorSpaceCreateDeviceRGB();
         let bytes_per_row = strip_w * 4;
-        let mut data = vec![0u8; bytes_per_row * strip_h];
+        let mut data = vec![0_u8; bytes_per_row * strip_h];
 
         let ctx = ffi::CGBitmapContextCreate(
             data.as_mut_ptr() as *mut std::ffi::c_void,
@@ -535,13 +534,13 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
     // Drag through segments
     let segments = path.len() - 1;
     let segment_duration = options.duration / segments as f64;
-    let step_delay = segment_duration / options.steps as f64;
+    let step_delay = segment_duration / f64::from(options.steps);
 
     for seg_idx in 0..segments {
         let seg_from = path[seg_idx];
         let seg_to = path[seg_idx + 1];
         for i in 1..=options.steps {
-            let t = i as f64 / options.steps as f64;
+            let t = f64::from(i) / f64::from(options.steps);
             let point = CGPointFFI {
                 x: seg_from.x + (seg_to.x - seg_from.x) * t,
                 y: seg_from.y + (seg_to.y - seg_from.y) * t,
@@ -627,7 +626,7 @@ pub fn click_at_point(
     let label = match options.button {
         MouseButton::Right => "right-clicked",
         MouseButton::Left if options.click_count > 1 => "double-clicked",
-        _ => "clicked",
+        MouseButton::Left => "clicked",
     };
     Ok(ActionResult::ok_msg(format!("{label} at {rel_x},{rel_y}")))
 }
@@ -680,9 +679,7 @@ pub fn hover_ref(
     move_mouse_to(screen_point)?;
 
     // Report window-relative coordinates
-    let window_origin = app::find_window(pid, None)
-        .map(|w| w.origin())
-        .unwrap_or(Point::new(0.0, 0.0));
+    let window_origin = app::find_window(pid, None).map_or(Point::new(0.0, 0.0), |w| w.origin());
     let rel_x = (screen_point.x - window_origin.x) as i32;
     let rel_y = (screen_point.y - window_origin.y) as i32;
     Ok(ActionResult::ok_msg(format!("hovered at {rel_x},{rel_y}")))

@@ -176,12 +176,11 @@ impl SnapshotTiming {
             self.total_ms, self.node_count, avg
         ));
         let threshold = std::cmp::max(self.node_count / 10, 2);
-        self.append_subtree_report(&self.root, 0, self.node_count, threshold, &mut lines);
+        Self::append_subtree_report(&self.root, 0, self.node_count, threshold, &mut lines);
         lines.join("\n")
     }
 
     fn append_subtree_report(
-        &self,
         node: &ElementNode,
         indent: usize,
         total: usize,
@@ -202,7 +201,7 @@ impl SnapshotTiming {
                 .filter(|c| Self::count_nodes(c) >= threshold)
                 .collect();
             if large_children.len() == 1 && child.name.is_none() {
-                self.append_subtree_report(child, indent, total, threshold, lines);
+                Self::append_subtree_report(child, indent, total, threshold, lines);
                 continue;
             }
 
@@ -216,7 +215,7 @@ impl SnapshotTiming {
             lines.push(format!("{prefix}{label} {count:5} nodes  {pct:5.1}%"));
 
             if count >= threshold && !child.children.is_empty() {
-                self.append_subtree_report(child, indent + 1, total, threshold, lines);
+                Self::append_subtree_report(child, indent + 1, total, threshold, lines);
             }
         }
     }
@@ -226,9 +225,7 @@ impl SnapshotTiming {
             .name
             .as_ref()
             .and_then(|n| if n.is_empty() { None } else { Some(n.as_str()) });
-        let label = name
-            .map(|n| format!("{} \"{}\"", node.role, n))
-            .unwrap_or_else(|| node.role.clone());
+        let label = name.map_or_else(|| node.role.clone(), |n| format!("{} \"{}\"", node.role, n));
         let truncated: String = label.chars().take(40).collect();
         truncated
     }
