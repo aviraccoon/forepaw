@@ -11,8 +11,8 @@ use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-    GetWindowThreadProcessId, IsWindowVisible, SetForegroundWindow,
+    EnumWindows, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
+    IsWindowVisible, SetForegroundWindow,
 };
 
 use crate::core::errors::ForepawError;
@@ -101,7 +101,7 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
         None => entries,
     };
 
-    Ok(filtered.into_iter().map(|e| e.into()).collect())
+    Ok(filtered.into_iter().map(Into::into).collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -144,10 +144,7 @@ fn collect_visible_windows() -> Vec<WindowEntry> {
     entries
 }
 
-unsafe extern "system" fn enum_window_callback(
-    hwnd: HWND,
-    lparam: LPARAM,
-) -> BOOL {
+unsafe extern "system" fn enum_window_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let entries = &mut *(lparam.0 as *mut Vec<WindowEntry>);
 
     // Skip invisible windows
@@ -184,9 +181,8 @@ unsafe extern "system" fn enum_window_callback(
     };
 
     // Skip windows without bounds (phantom windows)
-    let bounds = match bounds {
-        Some(b) => b,
-        None => return BOOL(1),
+    let Some(bounds) = bounds else {
+        return BOOL(1);
     };
 
     entries.push(WindowEntry {
@@ -232,7 +228,11 @@ pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
             let title_match = e.title.to_lowercase().contains(&filter_lower);
             let is_desktop = e.title == "Program Manager";
             let has_title = !e.title.is_empty();
-            let area = e.bounds.as_ref().map(|b| (b.width * b.height) as u64).unwrap_or(0);
+            let area = e
+                .bounds
+                .as_ref()
+                .map(|b| (b.width * b.height) as u64)
+                .unwrap_or(0);
 
             // Pack into a tuple for lexicographic comparison:
             // (title_matches_query, not_desktop, has_title, area)
@@ -240,9 +240,9 @@ pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
         })
         .unwrap();
 
-    let bounds = best.bounds.ok_or_else(|| {
-        ForepawError::ActionFailed("matched window has no bounds".into())
-    })?;
+    let bounds = best
+        .bounds
+        .ok_or_else(|| ForepawError::ActionFailed("matched window has no bounds".into()))?;
 
     Ok((HWND(best.hwnd as *mut std::ffi::c_void), bounds))
 }

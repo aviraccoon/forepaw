@@ -250,9 +250,8 @@ impl DesktopProvider for DarwinProvider {
         // check is to query the window list and see if regular apps show up.
         // System apps (System Settings, Finder) may appear even without SR,
         // so we check for third-party apps specifically.
-        let apps = match app::list_apps() {
-            Ok(a) => a,
-            Err(_) => return false,
+        let Ok(apps) = app::list_apps() else {
+            return false;
         };
         // Filter to third-party apps (skip Apple bundles starting with com.apple)
         let third_party: Vec<&str> = apps

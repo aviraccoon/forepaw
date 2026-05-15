@@ -36,12 +36,10 @@ pub fn resolve_text<'a>(
         (Some(_), Some(_)) => {
             anyhow::bail!("Provide text as either a positional argument or --text, not both.")
         }
-        (Some(text), None) => Ok(text),
-        (None, Some(text)) => Ok(text),
+        (Some(text), None) | (None, Some(text)) => Ok(text),
         (None, None) => {
             anyhow::bail!(
-                "{} requires text. Provide as argument or use --text for text starting with dashes.",
-                command
+                "{command} requires text. Provide as argument or use --text for text starting with dashes."
             )
         }
     }

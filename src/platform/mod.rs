@@ -108,9 +108,8 @@ impl ImageFormat {
     pub fn file_extension(&self) -> &str {
         match self {
             Self::Png => "png",
-            Self::Jpeg => "jpg",
+            Self::Jpeg | Self::BestAvailable => "jpg",
             Self::Webp => "webp",
-            Self::BestAvailable => "jpg", // fallback
         }
     }
 }

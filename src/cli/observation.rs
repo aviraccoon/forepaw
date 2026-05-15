@@ -100,16 +100,16 @@ impl Snapshot {
                 let result = differ.diff(&previous, &rendered);
                 println!("{}", result.render(self.context));
             } else {
-                println!("[diff: no previous snapshot cached for {}]", app);
-                println!("{}", rendered);
+                println!("[diff: no previous snapshot cached for {app}]");
+                println!("{rendered}");
             }
         } else {
-            println!("{}", rendered);
+            println!("{rendered}");
         }
 
         if let Some(ref timing_data) = tree.timing {
             let report = timing_data.report();
-            eprintln!("{}", report);
+            eprintln!("{report}");
         }
 
         // Always cache for future diffs
@@ -196,7 +196,7 @@ impl Screenshot {
 
         println!("{}", result.path);
         if let Some(legend) = &result.legend {
-            println!("{}", legend);
+            println!("{legend}");
         }
 
         Ok(())
@@ -240,14 +240,14 @@ impl Screenshot {
                 .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("--ref requires --app"))?;
             let element_ref = ElementRef::parse(ref_str)
-                .ok_or_else(|| anyhow::anyhow!("Invalid ref format: {}. Expected @eN", ref_str))?;
+                .ok_or_else(|| anyhow::anyhow!("Invalid ref format: {ref_str}. Expected @eN"))?;
             let bounds = provider.resolve_ref_bounds(element_ref, app)?;
             return Ok(Some(CropRegion::new(bounds, pad)));
         }
 
         if let Some(ref region) = self.region {
             let rect = parse_region(region).ok_or_else(|| {
-                anyhow::anyhow!("Invalid region format: {}. Expected x,y,w,h", region)
+                anyhow::anyhow!("Invalid region format: {region}. Expected x,y,w,h")
             })?;
             return Ok(Some(CropRegion::new(rect, pad)));
         }
@@ -276,7 +276,7 @@ impl ListApps {
                     let bundle = a
                         .bundle_id
                         .as_deref()
-                        .map(|b| format!(", \"bundleID\": \"{}\"", b))
+                        .map(|b| format!(", \"bundleID\": \"{b}\""))
                         .unwrap_or_default();
                     format!("{{\"name\": \"{}\"{}, \"pid\": {}}}", a.name, bundle, a.pid)
                 })
@@ -289,7 +289,7 @@ impl ListApps {
                 let bundle = app
                     .bundle_id
                     .as_deref()
-                    .map(|b| format!(" ({})", b))
+                    .map(|b| format!(" ({b})"))
                     .unwrap_or_default();
                 println!("{}{} [pid: {}]", app.name, bundle, app.pid);
             }
@@ -362,7 +362,7 @@ impl Ocr {
 
         // Print screenshot path first
         if let Some(ref path) = output.screenshot_path {
-            println!("{}", path);
+            println!("{path}");
         }
 
         if self.global.json {
@@ -385,7 +385,7 @@ impl Ocr {
 
         if output.results.is_empty() {
             if let Some(ref find) = self.find {
-                println!("No text matching '{}' found", find);
+                println!("No text matching '{find}' found");
             } else {
                 println!("No text recognized");
             }

@@ -287,9 +287,8 @@ pub fn apply_crop(
     tag: &str,
     suffix: &str,
 ) -> Result<String, ForepawError> {
-    let crop_rect = match crop.image_crop_rect(window_size, scale_factor) {
-        Some(r) => r,
-        None => return Ok(input_path.to_string()),
+    let Some(crop_rect) = crop.image_crop_rect(window_size, scale_factor) else {
+        return Ok(input_path.to_string());
     };
     let cropped_path = format!("/tmp/forepaw-{tag}{suffix}-cropped.png");
     crop_image(
@@ -352,33 +351,27 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     }
 
     // Non-annotated path: crop (if requested), grid, then post-process
-    let style = match params.style {
-        Some(s) => s,
-        None => {
-            return render_plain(
-                &raw_path,
-                &tag,
-                params.crop,
-                resolved_window.as_ref(),
-                params.grid_spacing,
-                params.options,
-            );
-        }
+    let Some(style) = params.style else {
+        return render_plain(
+            &raw_path,
+            &tag,
+            params.crop,
+            resolved_window.as_ref(),
+            params.grid_spacing,
+            params.options,
+        );
     };
 
     // Annotation requires an app name (for AX tree)
-    let app_name = match params.app {
-        Some(a) => a,
-        None => {
-            return render_plain(
-                &raw_path,
-                &tag,
-                params.crop,
-                resolved_window.as_ref(),
-                params.grid_spacing,
-                params.options,
-            );
-        }
+    let Some(app_name) = params.app else {
+        return render_plain(
+            &raw_path,
+            &tag,
+            params.crop,
+            resolved_window.as_ref(),
+            params.grid_spacing,
+            params.options,
+        );
     };
 
     // Get the AX tree for annotations

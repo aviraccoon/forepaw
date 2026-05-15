@@ -10,8 +10,7 @@
 use windows::Win32::Foundation::RECT;
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, COINIT_MULTITHREADED};
 use windows::Win32::UI::Accessibility::{
-    CUIAutomation, IUIAutomation, IUIAutomationElement,
-    IUIAutomationTreeWalker,
+    CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationTreeWalker,
 };
 
 use crate::core::element_tree::{ElementNode, ElementTree, SnapshotTiming};
@@ -31,48 +30,36 @@ use super::app;
 /// Source: https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controltype-ids
 fn control_type_to_role(control_type: i32) -> &'static str {
     match control_type {
-        50000 => "AXButton",          // Button
-        50001 => "AXCalendar",        // Calendar
-        50002 => "AXCheckBox",        // CheckBox
-        50003 => "AXComboBox",        // ComboBox
-        50004 => "AXTextField",       // Edit
-        50005 => "AXLink",            // Hyperlink
-        50006 => "AXImage",           // Image
-        50007 => "AXCell",            // ListItem
-        50008 => "AXList",            // List
-        50009 => "AXMenu",            // Menu
-        50010 => "AXMenuBar",         // MenuBar
-        50011 => "AXMenuItem",        // MenuItem
-        50012 => "AXProgressIndicator", // ProgressBar
-        50013 => "AXRadioButton",     // RadioButton
-        50014 => "AXScrollBar",       // ScrollBar
-        50015 => "AXSlider",          // Slider
-        50016 => "AXIncrementor",     // Spinner
-        50017 => "AXStaticText",      // StatusBar -> text-like
-        50018 => "AXTabGroup",        // Tab (container)
-        50019 => "AXTab",             // TabItem
-        50020 => "AXStaticText",      // Text
-        50021 => "AXToolbar",         // ToolBar
-        50022 => "AXUnknown",         // ToolTip
-        50023 => "AXOutline",         // Tree
-        50024 => "AXTreeItem",        // TreeItem
-        50025 => "AXUnknown",         // Custom
-        50026 => "AXGroup",           // Group
-        50027 => "AXUnknown",         // Thumb
-        50028 => "AXTable",           // DataGrid
-        50029 => "AXCell",            // DataItem
-        50030 => "AXTextArea",        // Document
-        50031 => "AXMenuButton",      // SplitButton
-        50032 => "AXWindow",          // Window
-        50033 => "AXGroup",           // Pane
-        50034 => "AXGroup",           // Header
-        50035 => "AXStaticText",      // HeaderItem
-        50036 => "AXTable",           // Table
-        50037 => "AXStaticText",      // TitleBar
-        50038 => "AXUnknown",         // Separator
-        50039 => "AXUnknown",         // SemanticZoom
-        50040 => "AXUnknown",         // AppBar
-        50041 => "AXGroup",           // Pane (duplicate ID)
+        50000 => "AXButton",                             // Button
+        50001 => "AXCalendar",                           // Calendar
+        50002 => "AXCheckBox",                           // CheckBox
+        50003 => "AXComboBox",                           // ComboBox
+        50004 => "AXTextField",                          // Edit
+        50005 => "AXLink",                               // Hyperlink
+        50006 => "AXImage",                              // Image
+        50007 | 50029 => "AXCell",                       // ListItem, DataItem
+        50008 => "AXList",                               // List
+        50009 => "AXMenu",                               // Menu
+        50010 => "AXMenuBar",                            // MenuBar
+        50011 => "AXMenuItem",                           // MenuItem
+        50012 => "AXProgressIndicator",                  // ProgressBar
+        50013 => "AXRadioButton",                        // RadioButton
+        50014 => "AXScrollBar",                          // ScrollBar
+        50015 => "AXSlider",                             // Slider
+        50016 => "AXIncrementor",                        // Spinner
+        50017 | 50020 | 50035 | 50037 => "AXStaticText", // StatusBar, Text, HeaderItem, TitleBar
+        50018 => "AXTabGroup",                           // Tab (container)
+        50019 => "AXTab",                                // TabItem
+        50021 => "AXToolbar",                            // ToolBar
+        50023 => "AXOutline",                            // Tree
+        50024 => "AXTreeItem",                           // TreeItem
+        50026 | 50033 | 50034 | 50041 => "AXGroup",      // Group, Pane, Header, Pane (dup)
+        50028 | 50036 => "AXTable",                      // DataGrid, Table
+        50030 => "AXTextArea",                           // Document
+        50031 => "AXMenuButton",                         // SplitButton
+        50032 => "AXWindow",                             // Window
+        // ToolTip(50022), Custom(50025), Thumb(50027), Separator(50038),
+        // SemanticZoom(50039), AppBar(50040), and anything else
         _ => "AXUnknown",
     }
 }
@@ -115,23 +102,21 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
             None,
             windows::Win32::System::Com::CLSCTX_ALL,
         )
-        .map_err(|e| {
-            ForepawError::ActionFailed(format!("failed to create IUIAutomation: {e}"))
-        })?
+        .map_err(|e| ForepawError::ActionFailed(format!("failed to create IUIAutomation: {e}")))?
     };
 
     // Get element from window handle
     let root_element: IUIAutomationElement = unsafe {
-        automation.ElementFromHandle(hwnd).map_err(|e| {
-            ForepawError::ActionFailed(format!("ElementFromHandle failed: {e}"))
-        })?
+        automation
+            .ElementFromHandle(hwnd)
+            .map_err(|e| ForepawError::ActionFailed(format!("ElementFromHandle failed: {e}")))?
     };
 
     // Use ControlView TreeWalker (closest to macOS pruned tree)
     let walker: IUIAutomationTreeWalker = unsafe {
-        automation.ControlViewWalker().map_err(|e| {
-            ForepawError::ActionFailed(format!("ControlViewWalker failed: {e}"))
-        })?
+        automation
+            .ControlViewWalker()
+            .map_err(|e| ForepawError::ActionFailed(format!("ControlViewWalker failed: {e}")))?
     };
 
     // Get window bounds from UIA for coordinate display
@@ -225,7 +210,7 @@ fn build_tree(
     let children = walk_children(walker, element, depth, max_depth, pruning);
 
     // Name resolution: CurrentName → CurrentHelpText → first text child
-    let computed_name = if name.as_ref().is_none_or(|s| s.is_empty()) {
+    let computed_name = if name.as_ref().is_none_or(String::is_empty) {
         resolve_name(element, &children)
     } else {
         None
@@ -254,9 +239,8 @@ fn walk_children(
 ) -> Vec<ElementNode> {
     let mut children = Vec::new();
 
-    let first_child = match unsafe { walker.GetFirstChildElement(parent) } {
-        Ok(c) => c,
-        Err(_) => return children,
+    let Ok(first_child) = (unsafe { walker.GetFirstChildElement(parent) }) else {
+        return children;
     };
 
     children.push(build_tree(
@@ -269,9 +253,8 @@ fn walk_children(
 
     let mut current = first_child;
     loop {
-        let next = match unsafe { walker.GetNextSiblingElement(&current) } {
-            Ok(n) => n,
-            Err(_) => break,
+        let Ok(next) = (unsafe { walker.GetNextSiblingElement(&current) }) else {
+            break;
         };
         children.push(build_tree(
             walker,
@@ -292,10 +275,7 @@ fn walk_children(
 
 /// Resolve element name when CurrentName is empty.
 /// Chain: HelpText → first child with text content.
-fn resolve_name(
-    element: &IUIAutomationElement,
-    children: &[ElementNode],
-) -> Option<String> {
+fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Option<String> {
     // 1. HelpText
     let help = get_bstr_property(element, |e| unsafe { e.CurrentHelpText() });
     if let Some(h) = non_empty(&help) {
@@ -322,12 +302,7 @@ fn resolve_name(
 
 /// Get the element's ControlType, mapped to an AX-style role name.
 fn get_control_type(element: &IUIAutomationElement) -> String {
-    let ct = unsafe {
-        element
-            .CurrentControlType()
-            .map(|ct| ct.0)
-            .unwrap_or(0)
-    };
+    let ct = unsafe { element.CurrentControlType().map(|ct| ct.0).unwrap_or(0) };
     control_type_to_role(ct).to_string()
 }
 
@@ -369,7 +344,7 @@ fn is_offscreen(element: &IUIAutomationElement) -> bool {
     unsafe {
         element
             .CurrentIsOffscreen()
-            .map(|b| b.as_bool())
+            .map(windows::core::BOOL::as_bool)
             .unwrap_or(false)
     }
 }

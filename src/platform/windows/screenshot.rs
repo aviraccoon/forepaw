@@ -10,12 +10,15 @@ use std::path::Path;
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
-    ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS,
-    HGDIOBJ, HDC, SRCCOPY,
+    ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS, HDC,
+    HGDIOBJ, SRCCOPY,
 };
 use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
 use windows::Win32::UI::HiDpi::{SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT};
-use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, GetWindowRect, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetSystemMetrics, GetWindowRect, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+    SM_YVIRTUALSCREEN,
+};
 
 use crate::core::errors::ForepawError;
 use crate::platform::windows::app;
@@ -37,10 +40,7 @@ pub fn init_dpi_awareness() {
 /// Capture a screenshot of a specific window or the full screen.
 ///
 /// Returns the path to the saved PNG file.
-pub fn screenshot(
-    app_name: Option<&str>,
-    window: Option<&str>,
-) -> Result<String, ForepawError> {
+pub fn screenshot(app_name: Option<&str>, window: Option<&str>) -> Result<String, ForepawError> {
     let (rgba_pixels, width, height) = capture_pixels(app_name, window)?;
     save_pixels_to_temp(&rgba_pixels, width, height)
 }
@@ -63,9 +63,8 @@ pub fn capture_pixels(
         let (hwnd, _) = app::find_app_hwnd(name)?;
         let rect = unsafe {
             let mut r = RECT::default();
-            GetWindowRect(hwnd, &mut r).map_err(|e| {
-                ForepawError::ActionFailed(format!("GetWindowRect failed: {e}"))
-            })?;
+            GetWindowRect(hwnd, &mut r)
+                .map_err(|e| ForepawError::ActionFailed(format!("GetWindowRect failed: {e}")))?;
             r
         };
 
@@ -98,7 +97,11 @@ pub fn capture_pixels(
 /// Uses `PW_RENDERFULLCONTENT` (undocumented flag, value 2) which allows
 /// capturing windows rendered via DirectComposition (Chromium, UWP, etc.).
 /// Chromium itself uses this flag internally.
-fn capture_print_window(hwnd: windows::Win32::Foundation::HWND, width: u32, height: u32) -> Result<Vec<u8>, ()> {
+fn capture_print_window(
+    hwnd: windows::Win32::Foundation::HWND,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, ()> {
     unsafe {
         let hdc = GetDC(None);
         let hdc_mem = CreateCompatibleDC(Some(hdc));
@@ -168,7 +171,10 @@ pub fn save_pixels_to_temp(
     height: u32,
 ) -> Result<String, ForepawError> {
     let tag = crate::core::temp::temp_tag();
-    let path = format!("{}\\forepaw-{tag}.png", std::env::temp_dir().to_string_lossy());
+    let path = format!(
+        "{}\\forepaw-{tag}.png",
+        std::env::temp_dir().to_string_lossy()
+    );
     save_png(rgba_pixels, width, height, &path)?;
     Ok(path)
 }
@@ -259,27 +265,18 @@ fn capture_region_rgba(
 }
 
 /// Save raw RGBA pixels as a PNG file.
-fn save_png(
-    rgba_pixels: &[u8],
-    width: u32,
-    height: u32,
-    path: &str,
-) -> Result<(), ForepawError> {
-    let img =
-        image::RgbaImage::from_raw(width, height, rgba_pixels.to_vec()).ok_or_else(|| {
-            ForepawError::ActionFailed("failed to create image from pixel data".into())
-        })?;
+fn save_png(rgba_pixels: &[u8], width: u32, height: u32, path: &str) -> Result<(), ForepawError> {
+    let img = image::RgbaImage::from_raw(width, height, rgba_pixels.to_vec()).ok_or_else(|| {
+        ForepawError::ActionFailed("failed to create image from pixel data".into())
+    })?;
 
     // Create parent directory if needed
     if let Some(parent) = Path::new(path).parent() {
         let _ = fs::create_dir_all(parent);
     }
 
-    img.save(path).map_err(|e| {
-        ForepawError::ActionFailed(format!("failed to save PNG to {path}: {e}"))
-    })?;
+    img.save(path)
+        .map_err(|e| ForepawError::ActionFailed(format!("failed to save PNG to {path}: {e}")))?;
 
     Ok(())
 }
-
-

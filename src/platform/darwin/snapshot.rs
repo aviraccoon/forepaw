@@ -350,9 +350,8 @@ impl BatchAttrs {
 
     /// Extract child AXUIElement refs from the AXChildren attribute.
     fn children(&self, idx: usize) -> Vec<AXUIElementRef> {
-        let val = match self.raw(idx) {
-            Some(v) => v,
-            None => return Vec::new(),
+        let Some(val) = self.raw(idx) else {
+            return Vec::new();
         };
         unsafe {
             if CFGetTypeID(val) != CFArrayGetTypeID() {
@@ -438,9 +437,8 @@ fn build_tree(
         return ElementNode::new("AXGroup");
     }
 
-    let attrs = match fetch_batch_attributes(element) {
-        Some(a) => a,
-        None => return ElementNode::new("AXUnknown"),
+    let Some(attrs) = fetch_batch_attributes(element) else {
+        return ElementNode::new("AXUnknown");
     };
 
     let role = attrs
@@ -593,7 +591,7 @@ fn computed_name(
 
     // 5. AXDOMClassList (index 11) -> icon class parsing
     if let Some(class_list) = attrs.string_array(ATTR_DOM_CLASS_LIST) {
-        let class_refs: Vec<&str> = class_list.iter().map(|s| s.as_str()).collect();
+        let class_refs: Vec<&str> = class_list.iter().map(std::string::String::as_str).collect();
         if let Some(icon_name) = IconClassParser::new().parse(&class_refs) {
             return Some(icon_name);
         }
@@ -820,7 +818,7 @@ fn number_to_rust_string(number: CFNumberRef) -> Option<String> {
             return Some(if fval == fval.floor() {
                 format!("{}", fval as i64)
             } else {
-                format!("{}", fval)
+                format!("{fval}")
             });
         }
         None

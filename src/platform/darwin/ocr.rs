@@ -167,9 +167,8 @@ fn recognize_text(
     let mut results = Vec::new();
     for observation in &observations {
         let candidates = observation.topCandidates(1);
-        let candidate = match candidates.firstObject() {
-            Some(c) => c,
-            None => continue,
+        let Some(candidate) = candidates.firstObject() else {
+            continue;
         };
         let text = candidate.string().to_string();
 

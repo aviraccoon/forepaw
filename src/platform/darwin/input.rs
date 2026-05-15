@@ -813,8 +813,7 @@ pub fn scroll(
         "right" => (0, -(amount as i32)),
         _ => {
             return Err(ForepawError::ActionFailed(format!(
-                "Unknown direction '{}'. Use up, down, left, or right.",
-                direction
+                "Unknown direction '{direction}'. Use up, down, left, or right."
             )))
         }
     };

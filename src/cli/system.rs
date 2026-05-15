@@ -35,7 +35,7 @@ impl Permissions {
                 } else {
                     println!("Screen recording: API reports granted, but window data is redacted");
                     println!("  The binary may need to be added to System Settings manually:");
-                    println!("  {}", binary_display);
+                    println!("  {binary_display}");
                     print_add_help("Screen & System Audio Recording", &binary_display);
                     failed = true;
                 }
@@ -58,7 +58,7 @@ impl Permissions {
                     println!("Screen recording: granted");
                 } else {
                     println!("Screen recording: API reports granted, but window data is redacted");
-                    println!("  Binary: {}", binary_display);
+                    println!("  Binary: {binary_display}");
                     print_add_help("Screen & System Audio Recording", &binary_display);
                     failed = true;
                 }
@@ -81,11 +81,10 @@ fn print_add_help(section: &str, binary: &std::path::Display<'_>) {
     println!(
         "\n\
           Add this binary to System Settings:\n\
-          1. Open System Settings > Privacy & Security > {}\n\
+          1. Open System Settings > Privacy & Security > {section}\n\
           2. Click the + button\n\
           3. Navigate to and select:\n\
-             {}\n\
-          4. Ensure the toggle is enabled",
-        section, binary
+             {binary}\n\
+          4. Ensure the toggle is enabled"
     );
 }

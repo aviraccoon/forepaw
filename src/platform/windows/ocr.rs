@@ -5,9 +5,7 @@
 //! UIA bounding rectangles.
 
 use windows::Foundation::Rect as WinRect;
-use windows::Graphics::Imaging::{
-    BitmapBufferAccessMode, BitmapPixelFormat, SoftwareBitmap,
-};
+use windows::Graphics::Imaging::{BitmapBufferAccessMode, BitmapPixelFormat, SoftwareBitmap};
 use windows::Media::Ocr::OcrEngine;
 use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::System::Threading::{CreateEventW, SetEvent, WaitForSingleObject};
@@ -79,9 +77,9 @@ pub fn ocr(
         let mut max_y = f32::MIN;
 
         for j in 0..word_count {
-            let word = words.GetAt(j).map_err(|e| {
-                ForepawError::ActionFailed(format!("word GetAt({j}) failed: {e}"))
-            })?;
+            let word = words
+                .GetAt(j)
+                .map_err(|e| ForepawError::ActionFailed(format!("word GetAt({j}) failed: {e}")))?;
             let wr: WinRect = word
                 .BoundingRect()
                 .map_err(|e| ForepawError::ActionFailed(format!("BoundingRect failed: {e}")))?;
@@ -118,9 +116,8 @@ pub fn ocr(
 
     // Optionally save a display screenshot
     let display_path = if screenshot_options.is_some() {
-        let path = crate::platform::windows::screenshot::save_pixels_to_temp(
-            &rgba_pixels, width, height,
-        )?;
+        let path =
+            crate::platform::windows::screenshot::save_pixels_to_temp(&rgba_pixels, width, height)?;
         Some(path)
     } else {
         None
@@ -223,12 +220,12 @@ fn block_on_async<T: windows::core::RuntimeType + 'static>(
 ///
 /// Returns (upscaled_rgba, new_width, new_height).
 fn upscale_rgba(rgba: &[u8], width: u32, height: u32, scale: u32) -> (Vec<u8>, u32, u32) {
-    let img = match image::RgbaImage::from_raw(width, height, rgba.to_vec()) {
-        Some(i) => i,
-        None => return (rgba.to_vec(), width, height), // fallback: no upscale
+    let Some(img) = image::RgbaImage::from_raw(width, height, rgba.to_vec()) else {
+        return (rgba.to_vec(), width, height); // fallback: no upscale
     };
     let new_w = width * scale;
     let new_h = height * scale;
-    let upscaled = image::imageops::resize(&img, new_w, new_h, image::imageops::FilterType::Lanczos3);
+    let upscaled =
+        image::imageops::resize(&img, new_w, new_h, image::imageops::FilterType::Lanczos3);
     (upscaled.into_raw(), new_w, new_h)
 }

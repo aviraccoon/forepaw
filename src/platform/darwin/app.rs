@@ -234,9 +234,8 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
         let window_id = unsafe { get_dict_i32(info, kCGWindowNumber) };
         let title = unsafe { get_dict_string(info, kCGWindowName) }.unwrap_or_default();
 
-        let (owner, id_num) = match (owner_name, window_id) {
-            (Some(o), Some(id)) => (o, id),
-            _ => continue,
+        let (Some(owner), Some(id_num)) = (owner_name, window_id) else {
+            continue;
         };
 
         // Filter by app name if no PID set was built (find_app failed)
@@ -301,9 +300,8 @@ pub fn validate_point_in_window(point: &Point, pid: i32) -> Result<(), ForepawEr
 /// CEF apps like Spotify are NOT included -- CEF doesn't respond to
 /// AXManualAccessibility and exposes only empty group nodes.
 pub fn is_electron_app(app: &NSRunningApplication) -> bool {
-    let bundle_url = match app.bundleURL() {
-        Some(url) => url,
-        None => return false,
+    let Some(bundle_url) = app.bundleURL() else {
+        return false;
     };
     let path = bundle_url.path().unwrap_or_default();
     let framework_path = format!("{path}/Contents/Frameworks/Electron Framework.framework");
@@ -798,7 +796,7 @@ mod tests {
         let err = match_window(&windows, "w-999").unwrap_err();
         match err {
             ForepawError::WindowNotFound(q) => assert_eq!(q, "w-999"),
-            other => panic!("expected WindowNotFound, got {:?}", other),
+            other => panic!("expected WindowNotFound, got {other:?}"),
         }
     }
 
@@ -830,7 +828,7 @@ mod tests {
             ForepawError::AmbiguousWindow { query, matches: _ } => {
                 assert_eq!(query, "Document");
             }
-            other => panic!("expected AmbiguousWindow, got {:?}", other),
+            other => panic!("expected AmbiguousWindow, got {other:?}"),
         }
     }
 
@@ -840,7 +838,7 @@ mod tests {
         let err = match_window(&windows, "nonexistent").unwrap_err();
         match err {
             ForepawError::WindowNotFound(q) => assert_eq!(q, "nonexistent"),
-            other => panic!("expected WindowNotFound, got {:?}", other),
+            other => panic!("expected WindowNotFound, got {other:?}"),
         }
     }
 

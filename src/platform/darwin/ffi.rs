@@ -245,10 +245,10 @@ pub const K_CG_MOUSE_EVENT_PRESSURE: u32 = 2;
 
 // CGEventFlags
 pub type CGEventFlags = u64;
-pub const K_CG_EVENT_FLAG_CMD: CGEventFlags = 0x00100000;
+pub const K_CG_EVENT_FLAG_CMD: CGEventFlags = 0x0010_0000;
 pub const K_CG_EVENT_FLAG_SHIFT: CGEventFlags = 0x00200;
-pub const K_CG_EVENT_FLAG_ALT: CGEventFlags = 0x00080000;
-pub const K_CG_EVENT_FLAG_CTRL: CGEventFlags = 0x00040000;
+pub const K_CG_EVENT_FLAG_ALT: CGEventFlags = 0x0008_0000;
+pub const K_CG_EVENT_FLAG_CTRL: CGEventFlags = 0x0004_0000;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -527,7 +527,7 @@ extern "C" {
 // CFNumber type constants
 pub const K_CF_NUMBER_SINT32_TYPE: u32 = 3;
 pub const K_CF_NUMBER_DOUBLE_TYPE: u32 = 6;
-pub const K_CF_STRING_ENCODING_UTF8: u32 = 0x08000100;
+pub const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 
 // Null singleton
 #[link(name = "CoreFoundation", kind = "framework")]

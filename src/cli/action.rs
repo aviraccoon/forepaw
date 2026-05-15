@@ -448,7 +448,7 @@ impl Scroll {
             .as_deref()
             .map(|s| {
                 ElementRef::parse(s)
-                    .ok_or_else(|| anyhow::anyhow!("Invalid ref: {}. Expected format: @e1", s))
+                    .ok_or_else(|| anyhow::anyhow!("Invalid ref: {s}. Expected format: @e1"))
             })
             .transpose()?;
 
@@ -457,7 +457,7 @@ impl Scroll {
             .as_deref()
             .map(|s| {
                 parse_coordinate(s)
-                    .ok_or_else(|| anyhow::anyhow!("Invalid coordinates: {}. Expected x,y", s))
+                    .ok_or_else(|| anyhow::anyhow!("Invalid coordinates: {s}. Expected x,y"))
             })
             .transpose()?;
 
@@ -603,10 +603,7 @@ fn resolve_drag_target(
     }
     // Ref-based resolution needs the provider, but we'd need app context
     // For now, just fail
-    anyhow::bail!(
-        "Invalid target: {}. Expected coordinates (500,300).",
-        target
-    )
+    anyhow::bail!("Invalid target: {target}. Expected coordinates (500,300).")
 }
 
 fn read_coords_from_stdin() -> anyhow::Result<Vec<crate::core::types::Point>> {
@@ -661,7 +658,7 @@ impl Batch {
         let joined = self.args.join(" ");
         let actions: Vec<&str> = joined
             .split(";;")
-            .map(|s| s.trim())
+            .map(str::trim)
             .filter(|s| !s.is_empty())
             .collect();
 
@@ -747,8 +744,7 @@ fn execute_action(
                     .map_err(Into::into)
             } else {
                 anyhow::bail!(
-                    "Invalid click target: {}. Use ref (@e3), coords (500,300), or region (400,280,80,80)",
-                    target
+                    "Invalid click target: {target}. Use ref (@e3), coords (500,300), or region (400,280,80,80)"
                 );
             }
         }
@@ -789,7 +785,7 @@ fn execute_action(
                 .first()
                 .ok_or_else(|| anyhow::anyhow!("type requires ref and text"))?;
             let r#ref = ElementRef::parse(ref_str)
-                .ok_or_else(|| anyhow::anyhow!("Invalid ref: {}", ref_str))?;
+                .ok_or_else(|| anyhow::anyhow!("Invalid ref: {ref_str}"))?;
             let text = parse_option("--text", args)
                 .map(String::from)
                 .or_else(|| collect_positional_text(args, 1));
@@ -972,8 +968,7 @@ fn execute_action(
         }
         _ => {
             anyhow::bail!(
-                "Unknown action '{}'. Supported: click, hover, drag, type, keyboard-type, press, scroll, ocr-click, wait",
-                command
+                "Unknown action '{command}'. Supported: click, hover, drag, type, keyboard-type, press, scroll, ocr-click, wait"
             );
         }
     }
@@ -1015,20 +1010,26 @@ mod tests {
     fn parse_option_found() {
         let args: Vec<String> = ["click", "@e3", "--app", "Finder"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
         assert_eq!(parse_option("--app", &args), Some("Finder"));
     }
 
     #[test]
     fn parse_option_missing() {
-        let args: Vec<String> = ["click", "@e3"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["click", "@e3"]
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         assert_eq!(parse_option("--app", &args), None);
     }
 
     #[test]
     fn parse_option_last_arg_no_value() {
-        let args: Vec<String> = ["click", "--app"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["click", "--app"]
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         assert_eq!(parse_option("--app", &args), None);
     }
 
@@ -1036,7 +1037,7 @@ mod tests {
     fn parse_option_first_match() {
         let args: Vec<String> = ["--amount", "5", "--amount", "10"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
         assert_eq!(parse_option("--amount", &args), Some("5"));
     }
@@ -1047,7 +1048,7 @@ mod tests {
     fn collect_positional_simple() {
         let args: Vec<String> = ["@e3", "hello", "world"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
         assert_eq!(
             collect_positional_text(&args, 1),
@@ -1059,7 +1060,7 @@ mod tests {
     fn collect_positional_skips_flags() {
         let args: Vec<String> = ["@e3", "--text", "ignored", "actual", "text"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
         assert_eq!(
             collect_positional_text(&args, 1),
@@ -1069,7 +1070,10 @@ mod tests {
 
     #[test]
     fn collect_positional_no_positional_after_skip() {
-        let args: Vec<String> = ["@e3"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["@e3"]
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         assert_eq!(collect_positional_text(&args, 1), None);
     }
 
@@ -1080,7 +1084,10 @@ mod tests {
 
     #[test]
     fn collect_positional_zero_skip() {
-        let args: Vec<String> = ["hello", "world"].iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = ["hello", "world"]
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         assert_eq!(
             collect_positional_text(&args, 0),
             Some("hello world".to_string())
@@ -1091,7 +1098,7 @@ mod tests {
     fn collect_positional_only_flags() {
         let args: Vec<String> = ["--text", "val", "--app", "Finder"]
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
         assert_eq!(collect_positional_text(&args, 0), None);
     }

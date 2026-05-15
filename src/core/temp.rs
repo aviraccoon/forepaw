@@ -32,7 +32,7 @@ fn rand_u16() -> u16 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos() as usize;
-    (pid.wrapping_mul(2654435761)
+    (pid.wrapping_mul(2_654_435_761)
         .wrapping_add(tid)
         .wrapping_add(stack)
         .wrapping_add(count)
