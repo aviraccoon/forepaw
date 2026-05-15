@@ -227,6 +227,9 @@ rustup target add aarch64-pc-windows-msvc x86_64-pc-windows-msvc
 # Build (requires cargo-xwin and lld)
 cargo xwin build --target aarch64-pc-windows-msvc
 cargo xwin build --target x86_64-pc-windows-msvc
+
+# Lint Windows target (clippy only, no xwin needed)
+cargo clippy --target x86_64-pc-windows-msvc -- -D warnings
 ```
 
 Install `cargo-xwin` and `lld` however you prefer:
@@ -257,4 +260,5 @@ TestApps/             # SwiftUI test apps for manual testing
 - `src/core/` must stay free of platform imports. All macOS code goes in `src/platform/darwin/`.
 - New public APIs need a `DesktopProvider` trait method using platform-agnostic types (`Point`, `Rect`).
 - Every new type or function in `src/core/` needs unit tests.
-- `cargo clippy -- -D warnings` and `cargo test` must pass before committing.
+- `mise run check` (lint + test) must pass before committing.
+- If you changed code behind a `cfg` gate for a platform you're not running on, run `mise run lint-all` to catch cross-target warnings.

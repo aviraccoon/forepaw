@@ -48,7 +48,7 @@ pub fn ocr(
         .RecognizeAsync(&bitmap)
         .map_err(|e| ForepawError::ActionFailed(format!("RecognizeAsync start failed: {e}")))?;
 
-    let ocr_result = block_on_async(async_op)?;
+    let ocr_result = block_on_async(&async_op)?;
 
     // Extract results
     let lines = ocr_result
@@ -189,7 +189,7 @@ fn create_software_bitmap(
 /// Sets up a Completed callback that signals a Win32 event when the
 /// operation finishes, then waits and calls GetResults.
 fn block_on_async<T: windows::core::RuntimeType + 'static>(
-    op: windows_future::IAsyncOperation<T>,
+    op: &windows_future::IAsyncOperation<T>,
 ) -> Result<T, ForepawError> {
     let event = unsafe {
         CreateEventW(None, true, false, windows::core::PCWSTR::null())

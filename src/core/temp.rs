@@ -16,10 +16,15 @@ pub fn temp_tag() -> String {
 
 /// Cheap random u16 without external dependencies.
 ///
-/// Mixes process ID, thread ID, ASLR-randomized stack address, and
-/// subsecond nanoseconds. Any three of these changing is sufficient
-/// for uniqueness across CLI invocations.
+/// Mixes process ID, thread ID, ASLR-randomized stack address,
+/// subsecond nanoseconds, and a per-process counter. The counter
+/// guarantees uniqueness even when two calls land in the same
+/// millisecond on the same thread (e.g. rapid tests).
 fn rand_u16() -> u16 {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let count = COUNTER.fetch_add(1, Ordering::Relaxed);
+
     let pid = std::process::id() as usize;
     let tid = thread_id();
     let stack = &temp_tag as *const _ as usize;
@@ -30,6 +35,7 @@ fn rand_u16() -> u16 {
     (pid.wrapping_mul(2654435761)
         .wrapping_add(tid)
         .wrapping_add(stack)
+        .wrapping_add(count)
         ^ nanos) as u16
 }
 

@@ -22,8 +22,15 @@ run = [
 ]
 
 [tasks.lint]
-description = "Lint (clippy)"
+description = "Lint current platform (clippy)"
 run = "cargo clippy -- -D warnings"
+
+[tasks.lint-all]
+description = "Lint all platform targets (needs rustup targets installed)"
+run = [
+    "cargo clippy -- -D warnings",
+    "cargo clippy --target x86_64-pc-windows-msvc -- -D warnings",
+]
 
 [tasks.lint-strict]
 description = "Discover new lints (full pedantic + restriction as warnings, not blocking)"

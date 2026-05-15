@@ -8,7 +8,8 @@ Desktop automation CLI for AI agents. Rust, macOS-first with cross-platform inte
 mise run check              # Lint + test (use before committing)
 mise run dev <command>      # Build + run (e.g. mise run dev snapshot --app Finder -i)
 mise run fmt                # Auto-format (Rust + Swift test apps)
-mise run lint               # Lint only (clippy)
+mise run lint               # Lint current platform (clippy)
+mise run lint-all           # Lint all platform targets (needs rustup targets)
 mise run build              # Build only
 mise run test               # Test only
 ```
@@ -48,7 +49,7 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 
 - **rustfmt** (ships with Rust toolchain). Default settings.
 - Run `cargo fmt` before committing.
-- Zero clippy warnings: `cargo clippy` must pass clean.
+- Zero clippy warnings: `cargo clippy` must pass clean on all platform targets you changed. Use `mise run lint-all` to check all targets.
 - Swift test apps use `swift-format` (via `mise run fmt`).
 
 ## Guidelines
