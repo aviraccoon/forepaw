@@ -166,6 +166,10 @@ impl SnapshotDiffer {
 
     /// Compare two rendered snapshot texts.
     /// The first line of each text (the "app:" header) is skipped.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "LCS algorithm uses validated indices from diff ops"
+    )]
     #[must_use]
     pub fn diff(&self, old: &str, new: &str) -> SnapshotDiff {
         let old_lines: Vec<&str> = old.split('\n').collect();
@@ -232,6 +236,10 @@ enum DiffOp {
 }
 
 /// Simple LCS-based diff. O(nm) space and time -- fine for snapshots (<1000 lines).
+#[expect(
+    clippy::indexing_slicing,
+    reason = "LCS table indexed by loop-bounded i,j"
+)]
 fn lcs(old: &[String], new: &[String]) -> Vec<DiffOp> {
     let m = old.len();
     let n = new.len();

@@ -256,7 +256,7 @@ impl ElementRef {
         if !trimmed.starts_with("@e") {
             return None;
         }
-        let id: i32 = trimmed[2..].parse().ok()?;
+        let id: i32 = trimmed.strip_prefix("@e")?.parse().ok()?;
         Some(ElementRef::new(id))
     }
 }

@@ -15,6 +15,10 @@ use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI, CGSizeFFI};
 /// or `None` if no salient pixels are found.
 #[expect(clippy::too_many_lines, reason = "saliency algorithm")]
 #[must_use]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "pixel buffer access with row-aligned offsets"
+)]
 pub fn find_target(image_path: &str, region: &Rect, scale_factor: f64) -> Option<Point> {
     let c_path = CString::new(image_path).ok()?;
     #[expect(

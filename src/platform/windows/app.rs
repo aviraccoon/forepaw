@@ -288,7 +288,7 @@ fn get_window_text(hwnd: HWND) -> String {
         if written == 0 {
             return String::new();
         }
-        String::from_utf16_lossy(&buf[..written as usize])
+        String::from_utf16_lossy(buf.get(..written as usize).unwrap_or_default())
     }
 }
 
@@ -313,7 +313,7 @@ fn get_process_name(pid: u32) -> Option<String> {
             &raw mut size,
         )
         .ok()?;
-        let full_path = String::from_utf16_lossy(&buf[..size as usize]);
+        let full_path = String::from_utf16_lossy(buf.get(..size as usize).unwrap_or_default());
 
         // Extract filename without extension
         let filename = full_path.rsplit('\\').next().unwrap_or(&full_path);

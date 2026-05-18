@@ -891,7 +891,9 @@ fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
             K_CF_STRING_ENCODING_UTF8,
         ) {
             let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-            std::str::from_utf8(&buf[..end]).ok().map(String::from)
+            buf.get(..end)
+                .and_then(|slice| std::str::from_utf8(slice).ok())
+                .map(String::from)
         } else {
             None
         }

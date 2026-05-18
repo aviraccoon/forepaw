@@ -588,12 +588,16 @@ unsafe fn post_drag_event(
     Ok(())
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "path indexing after len >= 2 validation"
+)]
 fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), ForepawError> {
     if path.len() < 2 {
         return Ok(());
     }
     let first = path[0];
-    let last = *path.last().unwrap();
+    let last = *path.last().expect("path has >= 2 elements (checked above)");
     let flags = modifier_flags(&options.modifiers);
 
     let (down_type, drag_type, up_type, cg_button) = if options.right_button {
@@ -994,15 +998,10 @@ pub fn drag_path(
     perform_mouse_drag(&path, options)?;
 
     // Report using the original input coordinates
-    let msg = if path.len() == 2 {
+    let msg = if let [from, to] = path.as_slice() {
         format!(
             "dragged from {},{} to {},{} ({} steps, {:.1}s)",
-            path[0].x as i32,
-            path[0].y as i32,
-            path[1].x as i32,
-            path[1].y as i32,
-            options.steps,
-            options.duration,
+            from.x as i32, from.y as i32, to.x as i32, to.y as i32, options.steps, options.duration,
         )
     } else {
         format!(

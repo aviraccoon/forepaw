@@ -74,9 +74,9 @@ cast_sign_loss             = "allow"  # FFI: i64 -> usize for counts
 # All start as allow. Toggle to warn as code is cleaned up.
 
 # Don't Panic
-string_slice              = "allow"
-indexing_slicing          = "allow"
-unwrap_used               = "allow"
+string_slice              = "warn"
+indexing_slicing          = "warn"
+unwrap_used               = "warn"
 panic                     = "warn"
 todo                      = "warn"
 unimplemented             = "warn"
@@ -89,6 +89,7 @@ unnecessary_safety_comment     = "warn"
 mem_forget                     = "warn"
 
 # Tripwires (zero warnings currently)
-dbg_macro   = "warn"
+allow_attributes          = "warn"
+dbg_macro                 = "warn"
 let_underscore_must_use   = "warn"
-rc_mutex    = "warn"
+rc_mutex                  = "warn"

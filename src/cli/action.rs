@@ -613,9 +613,9 @@ impl Drag {
                 .collect();
             if coords.len() == self.targets.len() {
                 provider.drag_path(&coords, &options, self.app.as_deref())?
-            } else if self.targets.len() == 2 {
-                let from_ref = ElementRef::parse(&self.targets[0]);
-                let to_ref = ElementRef::parse(&self.targets[1]);
+            } else if let [from_target, to_target] = self.targets.as_slice() {
+                let from_ref = ElementRef::parse(from_target);
+                let to_ref = ElementRef::parse(to_target);
                 if let (Some(from), Some(to)) = (from_ref, to_ref) {
                     let app = self
                         .app
@@ -624,8 +624,8 @@ impl Drag {
                     provider.drag_refs(from, to, app, &options)?
                 } else {
                     // Mixed targets: resolve each
-                    let from = resolve_drag_target(&self.targets[0], provider)?;
-                    let to = resolve_drag_target(&self.targets[1], provider)?;
+                    let from = resolve_drag_target(from_target, provider)?;
+                    let to = resolve_drag_target(to_target, provider)?;
                     provider.drag_path(&[from, to], &options, self.app.as_deref())?
                 }
             } else {
@@ -770,7 +770,7 @@ fn execute_action(
     let command = parts
         .first()
         .ok_or_else(|| anyhow::anyhow!("Empty action"))?;
-    let args = &parts[1..];
+    let args = parts.get(1..).unwrap_or_default();
 
     match command.as_str() {
         "click" => {
@@ -994,9 +994,9 @@ fn execute_action(
                 provider
                     .drag_path(&coords, &drag_options, app_name.as_deref())
                     .map_err(Into::into)
-            } else if drag_targets.len() == 2 {
-                let from_ref = ElementRef::parse(drag_targets[0]);
-                let to_ref = ElementRef::parse(drag_targets[1]);
+            } else if let [from_target, to_target] = drag_targets.as_slice() {
+                let from_ref = ElementRef::parse(from_target);
+                let to_ref = ElementRef::parse(to_target);
                 if let (Some(from), Some(to)) = (from_ref, to_ref) {
                     let app = app_name.ok_or_else(|| anyhow::anyhow!("drag requires --app"))?;
                     provider
@@ -1049,12 +1049,12 @@ fn parse_option<'a>(name: &str, args: &'a [String]) -> Option<&'a str> {
 fn collect_positional_text(args: &[String], skip: usize) -> Option<String> {
     let mut positional: Vec<&str> = Vec::new();
     let mut i = 0;
-    while i < args.len() {
-        if args[i].starts_with("--") {
+    while let Some(arg) = args.get(i) {
+        if arg.starts_with("--") {
             i += 2; // skip flag + value
             continue;
         }
-        positional.push(&args[i]);
+        positional.push(arg);
         i += 1;
     }
     let remaining: Vec<&str> = positional.into_iter().skip(skip).collect();

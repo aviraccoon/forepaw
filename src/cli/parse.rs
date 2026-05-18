@@ -8,8 +8,8 @@ pub fn parse_coordinate(s: &str) -> Option<Point> {
     if parts.len() != 2 {
         return None;
     }
-    let x: f64 = parts[0].trim().parse().ok()?;
-    let y: f64 = parts[1].trim().parse().ok()?;
+    let x: f64 = parts.first()?.trim().parse().ok()?;
+    let y: f64 = parts.get(1)?.trim().parse().ok()?;
     Some(Point::new(x, y))
 }
 
@@ -21,10 +21,10 @@ pub fn parse_region(s: &str) -> Option<Rect> {
     if parts.len() != 4 {
         return None;
     }
-    let x: f64 = parts[0].trim().parse().ok()?;
-    let y: f64 = parts[1].trim().parse().ok()?;
-    let w: f64 = parts[2].trim().parse().ok()?;
-    let h: f64 = parts[3].trim().parse().ok()?;
+    let x: f64 = parts.first()?.trim().parse().ok()?;
+    let y: f64 = parts.get(1)?.trim().parse().ok()?;
+    let w: f64 = parts.get(2)?.trim().parse().ok()?;
+    let h: f64 = parts.get(3)?.trim().parse().ok()?;
     Some(Rect::new(x, y, w, h))
 }
 

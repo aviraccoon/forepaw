@@ -137,6 +137,10 @@ pub fn ocr(
 /// Create a `SoftwareBitmap` from RGBA pixel data.
 ///
 /// The `OcrEngine` expects BGRA, so we convert RGBA -> BGRA during copy.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "pixel buffer RGBA->BGRA swap with loop-bounded indices"
+)]
 fn create_software_bitmap(
     rgba_pixels: &[u8],
     width: u32,

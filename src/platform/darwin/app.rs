@@ -507,7 +507,7 @@ fn match_window(windows: &[WindowEntry], pattern: &str) -> Result<ResolvedWindow
 
     match matches.len() {
         1 => {
-            let m = matches[0];
+            let m = matches.into_iter().next().expect("len == 1 checked");
             Ok(ResolvedWindow {
                 window_id: m.id,
                 title: m.title.clone(),
@@ -547,7 +547,7 @@ fn select_best_window(windows: &[WindowEntry]) -> ResolvedWindow {
                 .partial_cmp(&area_b)
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
-        .unwrap(); // safe: windows is non-empty
+        .expect("candidates non-empty (windows is non-empty)");
 
     ResolvedWindow {
         window_id: best.id,
@@ -627,7 +627,9 @@ pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option
             K_CF_STRING_ENCODING_UTF8,
         ) {
             let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-            std::str::from_utf8(&buf[..len]).ok().map(String::from)
+            buf.get(..len)
+                .and_then(|slice| std::str::from_utf8(slice).ok())
+                .map(String::from)
         } else {
             None
         }

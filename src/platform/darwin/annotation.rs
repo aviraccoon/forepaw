@@ -192,15 +192,28 @@ fn truncate_text(text: &str, font: CTFontRef, max_width: f64) -> String {
     let mut hi = text.len();
     while lo < hi {
         let mid = (lo + hi).div_ceil(2);
+        // Snap to valid char boundary to avoid splitting a UTF-8 character
+        let mid = text.floor_char_boundary(mid);
+        #[expect(
+            clippy::string_slice,
+            reason = "floor_char_boundary guarantees valid char boundary"
+        )]
         let truncated = format!("{}...", &text[..mid]);
         let (tw, _) = measure_text(&truncated, font);
         if tw <= max_width {
             lo = mid;
         } else {
-            hi = mid - 1;
+            hi = mid.saturating_sub(1);
         }
     }
-    format!("{}...", &text[..lo])
+    let lo = text.floor_char_boundary(lo);
+    #[expect(
+        clippy::string_slice,
+        reason = "floor_char_boundary guarantees valid char boundary"
+    )]
+    {
+        format!("{}...", &text[..lo])
+    }
 }
 
 // ---------------------------------------------------------------------------

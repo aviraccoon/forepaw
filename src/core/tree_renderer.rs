@@ -28,8 +28,8 @@ impl TreeRenderer {
         let mut parts: Vec<String> = Vec::new();
 
         // Role (strip AX prefix, lowercase)
-        let role = if node.role.starts_with("AX") {
-            node.role[2..].to_lowercase()
+        let role = if let Some(stripped) = node.role.strip_prefix("AX") {
+            stripped.to_lowercase()
         } else {
             node.role.clone()
         };
@@ -51,7 +51,8 @@ impl TreeRenderer {
         if let Some(value) = &node.value {
             if !value.is_empty() {
                 let display = if value.len() > 80 {
-                    format!("{}...", &value[..value.ceil_char_boundary(77)])
+                    let truncated: String = value.chars().take(77).collect();
+                    format!("{truncated}...")
                 } else {
                     value.clone()
                 };

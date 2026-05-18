@@ -272,7 +272,13 @@ pub fn resolve_ocr_text(
         )));
     }
 
-    let match_result = &matches[resolved_index];
+    let Some(match_result) = matches.get(resolved_index) else {
+        // Should be unreachable due to bounds check above, but handle defensively
+        return Err(ForepawError::ActionFailed(format!(
+            "OCR index {resolved_index} out of range ({} results)",
+            matches.len()
+        )));
+    };
     Ok((
         match_result.text.clone(),
         crate::core::types::Point::new(match_result.center().0, match_result.center().1),
@@ -364,7 +370,9 @@ pub fn wait(
     loop {
         match ocr(Some(app_name), window, Some(text), None) {
             Ok(output) if !output.results.is_empty() => {
-                let matched = &output.results[0];
+                let Some(matched) = output.results.first() else {
+                    continue;
+                };
                 return Ok(crate::platform::ActionResult::ok_msg(format!(
                     "found '{}' after waiting",
                     matched.text
