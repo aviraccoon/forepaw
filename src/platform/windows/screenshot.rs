@@ -63,7 +63,7 @@ pub fn capture_pixels(
         let (hwnd, _) = app::find_app_hwnd(name)?;
         let rect = unsafe {
             let mut r = RECT::default();
-            GetWindowRect(hwnd, &mut r)
+            GetWindowRect(hwnd, &raw mut r)
                 .map_err(|e| ForepawError::ActionFailed(format!("GetWindowRect failed: {e}")))?;
             r
         };
@@ -141,8 +141,8 @@ fn capture_print_window(
             h_bitmap,
             0,
             height,
-            Some(pixels.as_mut_ptr() as *mut _),
-            &mut bmi,
+            Some(pixels.as_mut_ptr().cast()),
+            &raw mut bmi,
             DIB_RGB_COLORS,
         );
 
@@ -241,8 +241,8 @@ fn capture_region_rgba(
             h_bitmap,
             0,
             height,
-            Some(pixels.as_mut_ptr() as *mut _),
-            &mut bmi,
+            Some(pixels.as_mut_ptr().cast()),
+            &raw mut bmi,
             DIB_RGB_COLORS,
         );
 

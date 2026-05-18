@@ -486,6 +486,7 @@ impl Scroll {
 
 /// Drag from one point to another.
 #[derive(clap::Args)]
+#[allow(clippy::struct_excessive_bools)]
 #[command(about = "Drag from one point to another (for drawing, moving, resizing)")]
 pub struct Drag {
     #[arg(
@@ -693,6 +694,7 @@ impl Batch {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn execute_action(
     action: &str,
     provider: &dyn DesktopProvider,

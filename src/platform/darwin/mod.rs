@@ -307,16 +307,16 @@ impl DesktopProvider for DarwinProvider {
             let prompt_key = app::cf_string_from_str("AXTrustedCheckOptionPrompt");
             let prompt_val = ffi::kCFBooleanTrue;
 
-            let keys = [prompt_key as *const std::ffi::c_void];
-            let values = [prompt_val as *const std::ffi::c_void];
+            let keys = [prompt_key.cast::<std::ffi::c_void>()];
+            let values = [prompt_val.cast::<std::ffi::c_void>()];
 
             let dict = ffi::CFDictionaryCreate(
                 std::ptr::null(),
                 keys.as_ptr(),
                 values.as_ptr(),
                 1,
-                &ffi::kCFTypeDictionaryKeyCallBacks,
-                &ffi::kCFTypeDictionaryValueCallBacks,
+                &raw const ffi::kCFTypeDictionaryKeyCallBacks,
+                &raw const ffi::kCFTypeDictionaryValueCallBacks,
             );
             let result = ffi::AXIsProcessTrustedWithOptions(dict) != 0;
             ffi::CFRelease(dict as ffi::CFTypeRef);

@@ -15,8 +15,17 @@ use objc2_foundation::NSString;
 use crate::core::element_tree::is_interactive_role;
 use crate::core::errors::ForepawError;
 use crate::core::types::{Point, Rect};
-use crate::platform::darwin::ffi;
-use crate::platform::darwin::ffi::*;
+use crate::platform::darwin::ffi::{
+    kCGWindowBounds, kCGWindowName, kCGWindowNumber, kCGWindowOwnerName, kCGWindowOwnerPID,
+    AXError, AXIsProcessTrusted, AXUIElementCopyAttributeValue, AXUIElementCreateApplication,
+    AXUIElementRef, AXUIElementSetAttributeValue, CFArrayGetCount, CFArrayGetTypeID,
+    CFArrayGetValueAtIndex, CFArrayRef, CFDictionaryGetTypeID, CFDictionaryGetValue,
+    CFDictionaryRef, CFGetTypeID, CFIndex, CFNumberGetTypeID, CFNumberGetValue, CFNumberRef,
+    CFRelease, CFStringGetCString, CFStringGetCStringPtr, CFStringGetTypeID, CFStringRef,
+    CFTypeRef, CGWindowListCopyWindowInfo, CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY,
+    K_CF_NUMBER_DOUBLE_TYPE, K_CF_NUMBER_SINT32_TYPE, K_CF_STRING_ENCODING_UTF8,
+    K_CG_NULL_WINDOW_ID,
+};
 use crate::platform::{AppInfo, WindowInfo};
 
 // ---------------------------------------------------------------------------
@@ -25,7 +34,7 @@ use crate::platform::{AppInfo, WindowInfo};
 
 /// Check accessibility permission. Returns error if not granted.
 fn require_accessibility() -> Result<(), ForepawError> {
-    if unsafe { ffi::AXIsProcessTrusted() } == 0 {
+    if unsafe { AXIsProcessTrusted() } == 0 {
         Err(ForepawError::PermissionDenied)
     } else {
         Ok(())
@@ -525,7 +534,7 @@ fn collect_helper_pids(bundle_id: &str, main_pid: i32) -> HashSet<i32> {
 /// Both must remain valid for the duration of this call.
 pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option<String> {
     unsafe {
-        let val = CFDictionaryGetValue(dict, key as *const std::ffi::c_void);
+        let val = CFDictionaryGetValue(dict, key.cast::<std::ffi::c_void>());
         if val.is_null() {
             return None;
         }
@@ -547,7 +556,7 @@ pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option
         let mut buf = [0_u8; 1024];
         if CFStringGetCString(
             val as CFStringRef,
-            buf.as_mut_ptr() as *mut std::ffi::c_char,
+            buf.as_mut_ptr().cast::<std::ffi::c_char>(),
             buf.len() as CFIndex,
             K_CF_STRING_ENCODING_UTF8,
         ) {
@@ -561,7 +570,7 @@ pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option
 
 unsafe fn get_dict_i32(dict: CFDictionaryRef, key: CFStringRef) -> Option<i32> {
     unsafe {
-        let val = CFDictionaryGetValue(dict, key as *const std::ffi::c_void);
+        let val = CFDictionaryGetValue(dict, key.cast::<std::ffi::c_void>());
         if val.is_null() {
             return None;
         }
@@ -572,7 +581,7 @@ unsafe fn get_dict_i32(dict: CFDictionaryRef, key: CFStringRef) -> Option<i32> {
         if CFNumberGetValue(
             val as CFNumberRef,
             K_CF_NUMBER_SINT32_TYPE,
-            &mut result as *mut i32 as *mut std::ffi::c_void,
+            (&raw mut result).cast::<std::ffi::c_void>(),
         ) != 0
         {
             Some(result)
@@ -584,7 +593,7 @@ unsafe fn get_dict_i32(dict: CFDictionaryRef, key: CFStringRef) -> Option<i32> {
 
 unsafe fn get_dict_bounds(dict: CFDictionaryRef, key: CFStringRef) -> Option<Rect> {
     unsafe {
-        let val = CFDictionaryGetValue(dict, key as *const std::ffi::c_void);
+        let val = CFDictionaryGetValue(dict, key.cast::<std::ffi::c_void>());
         if val.is_null() {
             return None;
         }
@@ -610,7 +619,7 @@ unsafe fn get_dict_bounds(dict: CFDictionaryRef, key: CFStringRef) -> Option<Rec
 unsafe fn get_dict_f64_local(dict: CFDictionaryRef, key: &str) -> Option<f64> {
     unsafe {
         let cf_key = cf_string_from_str(key);
-        let val = CFDictionaryGetValue(dict, cf_key as *const std::ffi::c_void);
+        let val = CFDictionaryGetValue(dict, cf_key.cast::<std::ffi::c_void>());
         CFRelease(cf_key as CFTypeRef);
         if val.is_null() {
             return None;
@@ -622,7 +631,7 @@ unsafe fn get_dict_f64_local(dict: CFDictionaryRef, key: &str) -> Option<f64> {
         if CFNumberGetValue(
             val as CFNumberRef,
             K_CF_NUMBER_DOUBLE_TYPE,
-            &mut result as *mut f64 as *mut std::ffi::c_void,
+            (&raw mut result).cast::<std::ffi::c_void>(),
         ) != 0
         {
             Some(result)
@@ -693,7 +702,7 @@ fn get_ax_string(element: AXUIElementRef, attribute: &str) -> Option<String> {
     unsafe {
         let attr_cf = cf_string_from_str(attribute);
         let mut value: CFTypeRef = std::ptr::null();
-        let result = AXUIElementCopyAttributeValue(element, attr_cf, &mut value);
+        let result = AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value);
         CFRelease(attr_cf as CFTypeRef);
         if result != AXError::Success || value.is_null() {
             return None;
@@ -721,7 +730,7 @@ fn get_ax_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
     unsafe {
         let attr_cf = cf_string_from_str("AXChildren");
         let mut value: CFTypeRef = std::ptr::null();
-        let result = AXUIElementCopyAttributeValue(element, attr_cf, &mut value);
+        let result = AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value);
         CFRelease(attr_cf as CFTypeRef);
         if result != AXError::Success || value.is_null() {
             return Vec::new();

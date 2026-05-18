@@ -13,6 +13,7 @@ pub fn parse_coordinate(s: &str) -> Option<Point> {
 }
 
 /// Parse "x,y,w,h" into a Rect (4 components = region).
+#[allow(clippy::many_single_char_names)]
 pub fn parse_region(s: &str) -> Option<Rect> {
     let parts: Vec<&str> = s.split(',').collect();
     if parts.len() != 4 {

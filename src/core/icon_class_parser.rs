@@ -15,14 +15,14 @@ impl IconClassParser {
     /// Extract a semantic icon name from a list of CSS classes.
     pub fn parse(&self, classes: &[&str]) -> Option<String> {
         for cls in classes {
-            if let Some(name) = self.extract_icon_name(cls) {
+            if let Some(name) = Self::extract_icon_name(cls) {
                 return Some(name);
             }
         }
         None
     }
 
-    fn extract_icon_name(&self, cls: &str) -> Option<String> {
+    fn extract_icon_name(cls: &str) -> Option<String> {
         // Skip generic/non-semantic classes
         if GENERIC_CLASSES.contains(&cls) {
             return None;
@@ -32,7 +32,7 @@ impl IconClassParser {
         for prefix in PREFIXES {
             if let Some(stripped) = cls.strip_prefix(prefix) {
                 if !stripped.is_empty() && stripped != cls {
-                    return self.sanitize(stripped);
+                    return Self::sanitize(stripped);
                 }
             }
         }
@@ -40,7 +40,7 @@ impl IconClassParser {
         None
     }
 
-    fn sanitize(&self, name: &str) -> Option<String> {
+    fn sanitize(name: &str) -> Option<String> {
         let cleaned: String = name.replace('-', " ").trim().to_string();
         if cleaned.is_empty() {
             None

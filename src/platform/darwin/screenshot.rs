@@ -111,8 +111,8 @@ fn crop_image(
         let png_type = objc2_foundation::NSString::from_str("public.png");
         let dest = {
             ffi::CGImageDestinationCreateWithURL(
-                objc2::rc::Retained::as_ptr(&output_url) as *const std::ffi::c_void,
-                objc2::rc::Retained::as_ptr(&png_type) as *const std::ffi::c_void,
+                objc2::rc::Retained::as_ptr(&output_url).cast::<std::ffi::c_void>(),
+                objc2::rc::Retained::as_ptr(&png_type).cast::<std::ffi::c_void>(),
                 1,
                 std::ptr::null(),
             )
@@ -320,6 +320,7 @@ pub fn backing_scale_factor() -> f64 {
 /// Take a screenshot of an app window (or full screen), with optional annotations.
 ///
 /// This is the main entry point called from the DesktopProvider trait impl.
+#[allow(clippy::too_many_lines)]
 pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, ForepawError> {
     // Check screen recording permission
     if unsafe { ffi::CGPreflightScreenCaptureAccess() == 0 } {

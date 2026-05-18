@@ -13,6 +13,7 @@ use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI, CGSizeFFI};
 ///
 /// Returns window-relative coordinates (accounting for region offset),
 /// or `None` if no salient pixels are found.
+#[allow(clippy::too_many_lines)]
 pub fn find_target(image_path: &str, region: &Rect, scale_factor: f64) -> Option<Point> {
     let c_path = CString::new(image_path).ok()?;
     unsafe {
@@ -54,7 +55,7 @@ pub fn find_target(image_path: &str, region: &Rect, scale_factor: f64) -> Option
         let mut pixel_data = vec![0_u8; height * bytes_per_row];
 
         let ctx = ffi::CGBitmapContextCreate(
-            pixel_data.as_mut_ptr() as *mut std::ffi::c_void,
+            pixel_data.as_mut_ptr().cast::<std::ffi::c_void>(),
             width,
             height,
             8,

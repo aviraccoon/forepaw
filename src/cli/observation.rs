@@ -25,6 +25,7 @@ pub struct GlobalOptions {
 
 /// Accessibility tree with element refs.
 #[derive(clap::Args)]
+#[allow(clippy::struct_excessive_bools)]
 #[command(about = "Accessibility tree with element refs")]
 pub struct Snapshot {
     #[command(flatten)]
@@ -89,8 +90,8 @@ impl Snapshot {
         };
 
         let tree = provider.snapshot(app, &options)?;
-        let renderer = TreeRenderer::new();
-        let rendered = renderer.render(&tree);
+        let tree_renderer = TreeRenderer::new();
+        let rendered = tree_renderer.render(&tree);
 
         let cache = SnapshotCache::new();
 

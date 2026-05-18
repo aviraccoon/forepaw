@@ -159,7 +159,7 @@ fn create_software_bitmap(
     let mut capacity: u32 = 0;
     unsafe {
         byte_access
-            .GetBuffer(&mut ptr, &mut capacity)
+            .GetBuffer(&raw mut ptr, &raw mut capacity)
             .map_err(|e| ForepawError::ActionFailed(format!("GetBuffer failed: {e}")))?;
     }
 

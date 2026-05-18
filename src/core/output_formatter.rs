@@ -2,6 +2,7 @@
 ///
 /// Error with code, message, and optional suggestion.
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct OutputError {
     pub code: &'static str,
     pub message: String,
@@ -47,7 +48,7 @@ impl OutputFormatter {
         error: Option<&OutputError>,
     ) -> String {
         if self.json {
-            return self.format_json(success, command, data, error);
+            return Self::format_json(success, command, data, error);
         }
         if let Some(err) = error {
             let mut out = format!("error: {}", err.message);
@@ -68,7 +69,6 @@ impl OutputFormatter {
     }
 
     fn format_json(
-        &self,
         success: bool,
         command: &str,
         data: &[(&str, &str)],

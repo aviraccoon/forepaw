@@ -135,6 +135,7 @@ pub struct ScreenshotResult {
 
 /// Options for snapshot (AX tree walk).
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SnapshotOptions {
     pub interactive_only: bool,
     pub max_depth: usize,

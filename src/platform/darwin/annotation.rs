@@ -115,11 +115,11 @@ fn create_attributed_string(
 
     unsafe {
         let mut keys: Vec<*const std::ffi::c_void> =
-            vec![ffi::kCTFontAttributeName as *const std::ffi::c_void];
-        let mut values: Vec<*const std::ffi::c_void> = vec![font as *const std::ffi::c_void];
+            vec![ffi::kCTFontAttributeName.cast::<std::ffi::c_void>()];
+        let mut values: Vec<*const std::ffi::c_void> = vec![font.cast::<std::ffi::c_void>()];
 
         if let Some(c) = color {
-            keys.push(ffi::kCTForegroundColorAttributeName as *const std::ffi::c_void);
+            keys.push(ffi::kCTForegroundColorAttributeName.cast::<std::ffi::c_void>());
             values.push(c as *const std::ffi::c_void);
         }
 
@@ -128,8 +128,8 @@ fn create_attributed_string(
             keys.as_ptr(),
             values.as_ptr(),
             keys.len() as ffi::CFIndex,
-            &ffi::kCFTypeDictionaryKeyCallBacks,
-            &ffi::kCFTypeDictionaryValueCallBacks,
+            &raw const ffi::kCFTypeDictionaryKeyCallBacks,
+            &raw const ffi::kCFTypeDictionaryValueCallBacks,
         );
 
         let attr_str =
@@ -425,7 +425,7 @@ fn render_spotlight(
         unsafe { ffi::CGColorCreate(color_space, [0.0_f64, 0.0, 0.0, 0.6].as_ptr()) };
     unsafe {
         ffi::CGContextSetFillColorWithColor(ctx, overlay_color);
-        ffi::CGContextAddPath(ctx, overlay_path as ffi::CGPathRef);
+        ffi::CGContextAddPath(ctx, overlay_path.cast_const());
         ffi::CGContextEOFillPath(ctx);
         ffi::CFRelease(overlay_path as ffi::CFTypeRef);
         ffi::CFRelease(overlay_color as ffi::CFTypeRef);
@@ -439,6 +439,7 @@ fn render_spotlight(
 ///
 /// Grid lines and axis labels use window-relative coordinates (logical pixels).
 /// Tick marks appear every `spacing` points along each edge.
+#[allow(clippy::too_many_lines)]
 pub fn render_grid(
     image_path: &str,
     spacing: u32,
@@ -688,8 +689,8 @@ fn write_context_to_file(
         );
         let png_type = objc2_foundation::NSString::from_str("public.png");
         let dest = ffi::CGImageDestinationCreateWithURL(
-            objc2::rc::Retained::as_ptr(&output_url) as *const std::ffi::c_void,
-            objc2::rc::Retained::as_ptr(&png_type) as *const std::ffi::c_void,
+            objc2::rc::Retained::as_ptr(&output_url).cast::<std::ffi::c_void>(),
+            objc2::rc::Retained::as_ptr(&png_type).cast::<std::ffi::c_void>(),
             1,
             ptr::null(),
         );

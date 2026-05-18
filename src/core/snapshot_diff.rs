@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 /// Snapshot diffing via LCS algorithm.
 ///
 /// Refs (@eN) are stripped for comparison so positional ref shifts
@@ -137,10 +139,12 @@ impl SnapshotDiff {
     }
 }
 
+static REF_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"@e\d+\s?").expect("valid static regex"));
+
 /// Removes @eN refs from a line for comparison purposes.
 pub fn strip_refs(line: &str) -> String {
-    let re = regex::Regex::new(r"@e\d+\s?").unwrap();
-    let result = re.replace_all(line, "").to_string();
+    let result = REF_RE.replace_all(line, "").to_string();
     result.trim_end().to_string()
 }
 

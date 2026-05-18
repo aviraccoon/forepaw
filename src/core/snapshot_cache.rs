@@ -11,23 +11,23 @@ impl SnapshotCache {
 
     /// Save rendered snapshot text for an app.
     pub fn save(&self, app: &str, text: &str) -> std::io::Result<()> {
-        let path = self.cache_path(app);
+        let path = Self::cache_path(app);
         fs::write(&path, text)
     }
 
     /// Load the last cached snapshot text for an app, if any.
     pub fn load(&self, app: &str) -> Option<String> {
-        let path = self.cache_path(app);
+        let path = Self::cache_path(app);
         fs::read_to_string(path).ok()
     }
 
     /// Remove cached snapshot for an app.
     pub fn clear(&self, app: &str) {
-        let path = self.cache_path(app);
+        let path = Self::cache_path(app);
         let _ = fs::remove_file(path);
     }
 
-    fn cache_path(&self, app: &str) -> PathBuf {
+    fn cache_path(app: &str) -> PathBuf {
         let sanitized = app.to_lowercase().replace(' ', "-");
         std::env::temp_dir().join(format!("forepaw-snapshot-{sanitized}.txt"))
     }

@@ -441,7 +441,7 @@ fn capture_scroll_fingerprint(window_id: u32) -> Option<Vec<u8>> {
         let mut data = vec![0_u8; bytes_per_row * strip_h];
 
         let ctx = ffi::CGBitmapContextCreate(
-            data.as_mut_ptr() as *mut std::ffi::c_void,
+            data.as_mut_ptr().cast::<std::ffi::c_void>(),
             strip_w,
             strip_h,
             8,

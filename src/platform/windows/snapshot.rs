@@ -182,7 +182,7 @@ fn build_tree(
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
                 return ElementNode {
                     role,
-                    name: non_empty(&name),
+                    name: non_empty(name.as_ref()),
                     value: None,
                     r#ref: None,
                     bounds,
@@ -197,7 +197,7 @@ fn build_tree(
     if pruning.skip_offscreen && depth > 1 && is_offscreen(element) {
         return ElementNode {
             role,
-            name: non_empty(&name),
+            name: non_empty(name.as_ref()),
             value: None,
             r#ref: None,
             bounds,
@@ -216,7 +216,7 @@ fn build_tree(
         None
     };
 
-    let final_name = non_empty(&name).or(computed_name);
+    let final_name = non_empty(name.as_ref()).or(computed_name);
 
     ElementNode {
         role,
@@ -278,7 +278,7 @@ fn walk_children(
 fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Option<String> {
     // 1. HelpText
     let help = get_bstr_property(element, |e| unsafe { e.CurrentHelpText() });
-    if let Some(h) = non_empty(&help) {
+    if let Some(h) = non_empty(help.as_ref()) {
         return Some(h);
     }
 
@@ -349,9 +349,8 @@ fn is_offscreen(element: &IUIAutomationElement) -> bool {
 }
 
 /// Return None for empty strings.
-fn non_empty(s: &Option<String>) -> Option<String> {
-    s.as_ref()
-        .and_then(|v| if v.is_empty() { None } else { Some(v.clone()) })
+fn non_empty(s: Option<&String>) -> Option<String> {
+    s.and_then(|v| if v.is_empty() { None } else { Some(v.clone()) })
 }
 
 #[cfg(test)]
@@ -382,10 +381,10 @@ mod tests {
 
     #[test]
     fn non_empty_returns_none_for_empty() {
-        assert_eq!(non_empty(&None), None);
-        assert_eq!(non_empty(&Some("".to_string())), None);
+        assert_eq!(non_empty(None::<&String>), None);
+        assert_eq!(non_empty(Some(&"".to_string())), None);
         assert_eq!(
-            non_empty(&Some("hello".to_string())),
+            non_empty(Some(&"hello".to_string())),
             Some("hello".to_string())
         );
     }

@@ -32,6 +32,7 @@ pub fn is_interactive_role(role: &str) -> bool {
 
 /// A node in the accessibility element tree.
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct ElementNode {
     pub role: String,
     pub name: Option<String>,
@@ -97,6 +98,7 @@ impl ElementNode {
 
 /// The full accessibility tree for a window/app.
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct ElementTree {
     pub app: String,
     pub root: ElementNode,

@@ -136,7 +136,7 @@ fn collect_visible_windows() -> Vec<WindowEntry> {
     unsafe {
         let _ = EnumWindows(
             Some(enum_window_callback),
-            LPARAM(&mut entries as *mut Vec<WindowEntry> as isize),
+            LPARAM(&raw mut entries as isize),
         );
     }
 
@@ -156,13 +156,13 @@ unsafe extern "system" fn enum_window_callback(hwnd: HWND, lparam: LPARAM) -> BO
 
     // Get owning process
     let mut pid: u32 = 0;
-    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&raw mut pid)) };
 
     let process_name = get_process_name(pid).unwrap_or_else(|| format!("pid-{pid}"));
 
     // Get window bounds
     let mut rect = RECT::default();
-    let bounds = if unsafe { GetWindowRect(hwnd, &mut rect) }.is_ok() {
+    let bounds = if unsafe { GetWindowRect(hwnd, &raw mut rect) }.is_ok() {
         let r = Rect::new(
             f64::from(rect.left),
             f64::from(rect.top),
@@ -221,19 +221,18 @@ pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
     }
 
     // Score each candidate: prefer title match > non-desktop > titled > largest area
-    let best = matching
-        .iter()
-        .max_by_key(|e| {
-            let title_match = e.title.to_lowercase().contains(&filter_lower);
-            let is_desktop = e.title == "Program Manager";
-            let has_title = !e.title.is_empty();
-            let area = e.bounds.as_ref().map_or(0, |b| (b.width * b.height) as u64);
+    let Some(best) = matching.iter().max_by_key(|e| {
+        let title_match = e.title.to_lowercase().contains(&filter_lower);
+        let is_desktop = e.title == "Program Manager";
+        let has_title = !e.title.is_empty();
+        let area = e.bounds.as_ref().map_or(0, |b| (b.width * b.height) as u64);
 
-            // Pack into a tuple for lexicographic comparison:
-            // (title_matches_query, not_desktop, has_title, area)
-            (title_match, !is_desktop, has_title, area)
-        })
-        .unwrap();
+        // Pack into a tuple for lexicographic comparison:
+        // (title_matches_query, not_desktop, has_title, area)
+        (title_match, !is_desktop, has_title, area)
+    }) else {
+        return Err(ForepawError::AppNotFound(app_name.to_string()));
+    };
 
     let bounds = best
         .bounds
@@ -283,7 +282,7 @@ fn get_process_name(pid: u32) -> Option<String> {
             process,
             flags,
             windows::core::PWSTR::from_raw(buf.as_mut_ptr()),
-            &mut size,
+            &raw mut size,
         )
         .ok()?;
         let full_path = String::from_utf16_lossy(&buf[..size as usize]);

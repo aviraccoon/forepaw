@@ -27,7 +27,7 @@ fn rand_u16() -> u16 {
 
     let pid = std::process::id() as usize;
     let tid = thread_id();
-    let stack = &temp_tag as *const _ as usize;
+    let stack = std::ptr::from_ref(&temp_tag) as usize;
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()

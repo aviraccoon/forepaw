@@ -19,8 +19,15 @@ use super::app::{
     cf_string_from_str, electron_tree_is_populated, enable_electron_accessibility, find_app,
     find_window, is_electron_app,
 };
-use super::ffi;
-use super::ffi::*;
+use super::ffi::{
+    kCFNull, kCFTypeArrayCallBacks, AXError, AXUIElementCopyAttributeValue,
+    AXUIElementCopyMultipleAttributeValues, AXUIElementCreateApplication, AXUIElementRef,
+    AXValueGetValue, AXValueRef, AXValueType, CFArrayCreate, CFArrayGetCount, CFArrayGetTypeID,
+    CFArrayGetValueAtIndex, CFArrayRef, CFGetTypeID, CFIndex, CFNumberGetTypeID, CFNumberGetValue,
+    CFNumberRef, CFRelease, CFRetain, CFStringGetCString, CFStringGetCStringPtr, CFStringGetLength,
+    CFStringGetTypeID, CFStringRef, CFTypeRef, CGPointFFI, CGSizeFFI, K_CF_NUMBER_DOUBLE_TYPE,
+    K_CF_STRING_ENCODING_UTF8,
+};
 
 const DEFAULT_DEPTH: usize = 15;
 const ELECTRON_DEPTH: usize = 25;
@@ -75,13 +82,13 @@ fn get_batch_attr_array() -> CFArrayRef {
                 .map(|s| cf_string_from_str(s))
                 .collect();
             let ptrs: Vec<*const std::ffi::c_void> =
-                cf_strings.iter().map(|s| *s as *const _).collect();
+                cf_strings.iter().map(|s| (*s).cast()).collect();
             let array = unsafe {
                 CFArrayCreate(
                     std::ptr::null(),
                     ptrs.as_ptr(),
                     ptrs.len() as CFIndex,
-                    &ffi::kCFTypeArrayCallBacks,
+                    &raw const kCFTypeArrayCallBacks,
                 )
             };
             for s in &cf_strings {
@@ -308,9 +315,9 @@ impl BatchAttrs {
         unsafe {
             let mut pt = CGPointFFI { x: 0.0, y: 0.0 };
             if AXValueGetValue(
-                AXValueRef(val as *const _),
+                AXValueRef(val.cast()),
                 AXValueType::CGPoint,
-                &mut pt as *mut _ as *mut std::ffi::c_void,
+                (&raw mut pt).cast::<std::ffi::c_void>(),
             ) != 0
             {
                 Some(Point::new(pt.x, pt.y))
@@ -329,9 +336,9 @@ impl BatchAttrs {
                 height: 0.0,
             };
             if AXValueGetValue(
-                AXValueRef(val as *const _),
+                AXValueRef(val.cast()),
                 AXValueType::CGSize,
-                &mut sz as *mut _ as *mut std::ffi::c_void,
+                (&raw mut sz).cast::<std::ffi::c_void>(),
             ) != 0
             {
                 Some((sz.width, sz.height))
@@ -372,7 +379,7 @@ impl BatchAttrs {
     /// Extract a single AXUIElement ref (e.g. for AXTitleUIElement).
     fn element(&self, idx: usize) -> Option<AXUIElementRef> {
         let val = self.raw(idx)?;
-        unsafe { Some(AXUIElementRef::from_raw(val as *const std::ffi::c_void)) }
+        unsafe { Some(AXUIElementRef::from_raw(val.cast::<std::ffi::c_void>())) }
     }
 
     /// Extract a CFArray of CFStrings (e.g. for AXDOMClassList).
@@ -415,7 +422,7 @@ fn fetch_batch_attributes(element: AXUIElementRef) -> Option<BatchAttrs> {
     let attr_array = get_batch_attr_array();
     let mut values: CFArrayRef = std::ptr::null();
     let result =
-        unsafe { AXUIElementCopyMultipleAttributeValues(element, attr_array, 0, &mut values) };
+        unsafe { AXUIElementCopyMultipleAttributeValues(element, attr_array, 0, &raw mut values) };
     if result != AXError::Success || values.is_null() {
         None
     } else {
@@ -465,8 +472,8 @@ fn build_tree(
     if pruning.skip_zero_size {
         if let Some(b) = &bounds {
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
-                let name = non_empty(&attrs.string(ATTR_TITLE))
-                    .or_else(|| non_empty(&attrs.string(ATTR_DESCRIPTION)))
+                let name = non_empty(attrs.string(ATTR_TITLE).as_ref())
+                    .or_else(|| non_empty(attrs.string(ATTR_DESCRIPTION).as_ref()))
                     .or_else(|| computed_name(&attrs, &[], element));
                 return ElementNode {
                     role,
@@ -487,7 +494,7 @@ fn build_tree(
             let no_horizontal = b.x + b.width <= wb.x || b.x >= wb.x + wb.width;
             let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
             if no_horizontal || no_vertical {
-                let name = non_empty(&attrs.string(ATTR_TITLE));
+                let name = non_empty(attrs.string(ATTR_TITLE).as_ref());
                 return ElementNode {
                     role,
                     name,
@@ -510,8 +517,8 @@ fn build_tree(
         .map(|child| build_tree(*child, depth + 1, max_depth, pruning))
         .collect();
 
-    let name = non_empty(&attrs.string(ATTR_TITLE))
-        .or_else(|| non_empty(&attrs.string(ATTR_DESCRIPTION)))
+    let name = non_empty(attrs.string(ATTR_TITLE).as_ref())
+        .or_else(|| non_empty(attrs.string(ATTR_DESCRIPTION).as_ref()))
         .or_else(|| computed_name(&attrs, &children, element));
 
     ElementNode {
@@ -669,7 +676,7 @@ fn collect_ax_elements(
 pub fn get_ax_string_attr(element: AXUIElementRef, attribute: &str) -> Option<String> {
     let attr_cf = cf_string_from_str(attribute);
     let mut value: CFTypeRef = std::ptr::null();
-    let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &mut value) };
+    let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value) };
     unsafe { CFRelease(attr_cf as CFTypeRef) };
     if result != AXError::Success || value.is_null() {
         return None;
@@ -689,7 +696,7 @@ pub fn get_ax_string_attr(element: AXUIElementRef, attribute: &str) -> Option<St
 fn get_ax_element_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
     let attr_cf = cf_string_from_str("AXChildren");
     let mut value: CFTypeRef = std::ptr::null();
-    let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &mut value) };
+    let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value) };
     unsafe { CFRelease(attr_cf as CFTypeRef) };
     if result != AXError::Success || value.is_null() {
         return Vec::new();
@@ -716,7 +723,7 @@ fn get_ax_element_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
 pub fn get_element_position(element: AXUIElementRef) -> Option<Point> {
     let attr_cf = cf_string_from_str("AXPosition");
     let mut value: CFTypeRef = std::ptr::null();
-    let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &mut value) };
+    let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value) };
     unsafe { CFRelease(attr_cf as CFTypeRef) };
     if result != AXError::Success || value.is_null() {
         return None;
@@ -724,9 +731,9 @@ pub fn get_element_position(element: AXUIElementRef) -> Option<Point> {
     unsafe {
         let mut pt = CGPointFFI { x: 0.0, y: 0.0 };
         let ok = AXValueGetValue(
-            AXValueRef(value as *const _),
+            AXValueRef(value.cast()),
             AXValueType::CGPoint,
-            &mut pt as *mut _ as *mut std::ffi::c_void,
+            (&raw mut pt).cast::<std::ffi::c_void>(),
         );
         CFRelease(value);
         if ok != 0 {
@@ -741,7 +748,7 @@ pub fn get_element_position(element: AXUIElementRef) -> Option<Point> {
 pub fn get_element_size(element: AXUIElementRef) -> Option<(f64, f64)> {
     let attr_cf = cf_string_from_str("AXSize");
     let mut value: CFTypeRef = std::ptr::null();
-    let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &mut value) };
+    let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value) };
     unsafe { CFRelease(attr_cf as CFTypeRef) };
     if result != AXError::Success || value.is_null() {
         return None;
@@ -752,9 +759,9 @@ pub fn get_element_size(element: AXUIElementRef) -> Option<(f64, f64)> {
             height: 0.0,
         };
         let ok = AXValueGetValue(
-            AXValueRef(value as *const _),
+            AXValueRef(value.cast()),
             AXValueType::CGSize,
-            &mut sz as *mut _ as *mut std::ffi::c_void,
+            (&raw mut sz).cast::<std::ffi::c_void>(),
         );
         CFRelease(value);
         if ok != 0 {
@@ -786,7 +793,7 @@ fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
         let mut buf = vec![0_u8; (len as usize + 1) * 4]; // worst case: 4 bytes per char
         if CFStringGetCString(
             cf_str,
-            buf.as_mut_ptr() as *mut std::ffi::c_char,
+            buf.as_mut_ptr().cast::<std::ffi::c_char>(),
             buf.len() as CFIndex,
             K_CF_STRING_ENCODING_UTF8,
         ) {
@@ -804,7 +811,7 @@ fn number_to_rust_string(number: CFNumberRef) -> Option<String> {
         // Try as i64 first (most AX values are integers)
         let mut val: i64 = 0;
         // K_CF_NUMBER_SINT64_TYPE = 4 (not in our FFI, use raw value)
-        if CFNumberGetValue(number, 4, &mut val as *mut i64 as *mut std::ffi::c_void) != 0 {
+        if CFNumberGetValue(number, 4, (&raw mut val).cast::<std::ffi::c_void>()) != 0 {
             return Some(val.to_string());
         }
         // Fallback: f64
@@ -812,10 +819,10 @@ fn number_to_rust_string(number: CFNumberRef) -> Option<String> {
         if CFNumberGetValue(
             number,
             K_CF_NUMBER_DOUBLE_TYPE,
-            &mut fval as *mut f64 as *mut std::ffi::c_void,
+            (&raw mut fval).cast::<std::ffi::c_void>(),
         ) != 0
         {
-            return Some(if fval == fval.floor() {
+            return Some(if (fval - fval.floor()).abs() < f64::EPSILON {
                 format!("{}", fval as i64)
             } else {
                 format!("{fval}")
@@ -826,9 +833,8 @@ fn number_to_rust_string(number: CFNumberRef) -> Option<String> {
 }
 
 /// Return None for empty strings -- AX APIs often return "" rather than nil.
-fn non_empty(s: &Option<String>) -> Option<String> {
-    s.as_ref()
-        .and_then(|v| if v.is_empty() { None } else { Some(v.clone()) })
+fn non_empty(s: Option<&String>) -> Option<String> {
+    s.and_then(|v| if v.is_empty() { None } else { Some(v.clone()) })
 }
 
 #[cfg(test)]
@@ -838,19 +844,19 @@ mod tests {
     #[test]
     fn non_empty_returns_some_for_nonempty() {
         assert_eq!(
-            non_empty(&Some("hello".to_string())),
+            non_empty(Some(&"hello".to_string())),
             Some("hello".to_string())
         );
     }
 
     #[test]
     fn non_empty_returns_none_for_empty() {
-        assert_eq!(non_empty(&Some(String::new())), None);
+        assert_eq!(non_empty(Some(&String::new())), None);
     }
 
     #[test]
     fn non_empty_returns_none_for_none() {
-        assert_eq!(non_empty(&None), None);
+        assert_eq!(non_empty(None::<&String>), None);
     }
 
     // --- Generic role descriptions ---
