@@ -1,6 +1,6 @@
 /// Platform-agnostic geometric types.
 ///
-/// These replace platform-specific types (CGPoint, CGRect) so the core
+/// These replace platform-specific types (`CGPoint`, `CGRect`) so the core
 /// crate stays dependency-free. Platform backends convert to/from their
 /// native types at the boundary.
 
@@ -11,6 +11,7 @@ pub struct Point {
 }
 
 impl Point {
+    #[must_use]
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
@@ -25,6 +26,7 @@ pub struct Rect {
 }
 
 impl Rect {
+    #[must_use]
     pub fn new(x: f64, y: f64, width: f64, height: f64) -> Self {
         Self {
             x,

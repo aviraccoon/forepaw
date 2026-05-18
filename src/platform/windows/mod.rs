@@ -1,11 +1,11 @@
 //! Windows backend using Win32 APIs and UI Automation.
 //!
 //! Implements the `DesktopProvider` trait using:
-//! - EnumWindows / GetWindowThreadProcessId for app and window enumeration
-//! - IUIAutomation + ControlView TreeWalker for accessibility tree walking
-//! - GDI BitBlt for screenshots (physical pixels, DPI-aware)
-//! - Windows.Media.Ocr (WinRT) for OCR
-//! - SendInput for keyboard/mouse input (future)
+//! - `EnumWindows` / `GetWindowThreadProcessId` for app and window enumeration
+//! - `IUIAutomation` + `ControlView` `TreeWalker` for accessibility tree walking
+//! - GDI `BitBlt` for screenshots (physical pixels, DPI-aware)
+//! - Windows.Media.Ocr (`WinRT`) for OCR
+//! - `SendInput` for keyboard/mouse input (future)
 
 pub mod app;
 pub mod ocr;
@@ -19,6 +19,7 @@ use crate::platform::DesktopProvider;
 pub struct WindowsProvider;
 
 impl WindowsProvider {
+    #[must_use]
     pub fn new() -> Self {
         screenshot::init_dpi_awareness();
         snapshot::init_com();

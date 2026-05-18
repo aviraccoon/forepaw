@@ -1,4 +1,4 @@
-//! AX tree snapshot: walk the accessibility tree and build an ElementTree.
+//! AX tree snapshot: walk the accessibility tree and build an `ElementTree`.
 //!
 //! Uses batched attribute fetching (`AXUIElementCopyMultipleAttributeValues`)
 //! to fetch 13 attributes per element in a single IPC call. This is the key
@@ -65,11 +65,11 @@ const BATCH_ATTR_NAMES: [&str; ATTR_COUNT] = [
     "AXRoleDescription",  // 12
 ];
 
-/// Cached CFArray of attribute name strings for batch fetching.
+/// Cached `CFArray` of attribute name strings for batch fetching.
 /// Created once on first use, never freed.
 static BATCH_ATTR_ARRAY: std::sync::OnceLock<SendableCFArray> = std::sync::OnceLock::new();
 
-/// Wrapper to make CFArrayRef Send+Sync (immutable after creation).
+/// Wrapper to make `CFArrayRef` Send+Sync (immutable after creation).
 struct SendableCFArray(CFArrayRef);
 unsafe impl Send for SendableCFArray {}
 unsafe impl Sync for SendableCFArray {}
@@ -254,8 +254,8 @@ struct TreePruning {
 // Batch attribute fetching
 // ---------------------------------------------------------------------------
 
-/// Wrapper around the CFArray returned by `AXUIElementCopyMultipleAttributeValues`.
-/// Provides typed accessors for each attribute by index. Releases the CFArray on drop.
+/// Wrapper around the `CFArray` returned by `AXUIElementCopyMultipleAttributeValues`.
+/// Provides typed accessors for each attribute by index. Releases the `CFArray` on drop.
 struct BatchAttrs {
     array: CFArrayRef,
 }
@@ -265,7 +265,7 @@ impl BatchAttrs {
         Self { array }
     }
 
-    /// Get the raw CFTypeRef at the given index, or None if missing/kCFNull.
+    /// Get the raw `CFTypeRef` at the given index, or None if missing/kCFNull.
     fn raw(&self, idx: usize) -> Option<CFTypeRef> {
         if idx >= ATTR_COUNT {
             return None;
@@ -294,7 +294,7 @@ impl BatchAttrs {
         }
     }
 
-    /// Extract the value attribute (index 3), which can be CFString or CFNumber.
+    /// Extract the value attribute (index 3), which can be `CFString` or `CFNumber`.
     fn value_string(&self, idx: usize) -> Option<String> {
         let val = self.raw(idx)?;
         unsafe {
@@ -309,7 +309,7 @@ impl BatchAttrs {
         }
     }
 
-    /// Extract a CGPoint from an AXValue attribute.
+    /// Extract a `CGPoint` from an `AXValue` attribute.
     fn point(&self, idx: usize) -> Option<Point> {
         let val = self.raw(idx)?;
         unsafe {
@@ -327,7 +327,7 @@ impl BatchAttrs {
         }
     }
 
-    /// Extract a CGSize from an AXValue attribute.
+    /// Extract a `CGSize` from an `AXValue` attribute.
     fn size_val(&self, idx: usize) -> Option<(f64, f64)> {
         let val = self.raw(idx)?;
         unsafe {
@@ -348,14 +348,14 @@ impl BatchAttrs {
         }
     }
 
-    /// Build a Rect from position (pos_idx) and size (size_idx) attributes.
+    /// Build a Rect from position (`pos_idx`) and size (`size_idx`) attributes.
     fn bounds(&self, pos_idx: usize, size_idx: usize) -> Option<Rect> {
         let pt = self.point(pos_idx)?;
         let (w, h) = self.size_val(size_idx)?;
         Some(Rect::new(pt.x, pt.y, w, h))
     }
 
-    /// Extract child AXUIElement refs from the AXChildren attribute.
+    /// Extract child `AXUIElement` refs from the `AXChildren` attribute.
     fn children(&self, idx: usize) -> Vec<AXUIElementRef> {
         let Some(val) = self.raw(idx) else {
             return Vec::new();
@@ -376,13 +376,13 @@ impl BatchAttrs {
         }
     }
 
-    /// Extract a single AXUIElement ref (e.g. for AXTitleUIElement).
+    /// Extract a single `AXUIElement` ref (e.g. for `AXTitleUIElement`).
     fn element(&self, idx: usize) -> Option<AXUIElementRef> {
         let val = self.raw(idx)?;
         unsafe { Some(AXUIElementRef::from_raw(val.cast::<std::ffi::c_void>())) }
     }
 
-    /// Extract a CFArray of CFStrings (e.g. for AXDOMClassList).
+    /// Extract a `CFArray` of `CFStrings` (e.g. for `AXDOMClassList`).
     fn string_array(&self, idx: usize) -> Option<Vec<String>> {
         let val = self.raw(idx)?;
         unsafe {
@@ -539,12 +539,12 @@ fn build_tree(
 /// Derive a name from batch attributes and already-built child nodes.
 ///
 /// The chain (in priority order):
-/// 1. AXTitleUIElement -> its value or title
-/// 2. First AXStaticText child's value, or AXImage child with a name
-/// 3. AXHelp
-/// 4. AXPlaceholderValue
-/// 5. AXDOMClassList -> icon class parsing
-/// 6. AXRoleDescription (when not generic)
+/// 1. `AXTitleUIElement` -> its value or title
+/// 2. First `AXStaticText` child's value, or `AXImage` child with a name
+/// 3. `AXHelp`
+/// 4. `AXPlaceholderValue`
+/// 5. `AXDOMClassList` -> icon class parsing
+/// 6. `AXRoleDescription` (when not generic)
 fn computed_name(
     attrs: &BatchAttrs,
     children: &[ElementNode],
@@ -618,7 +618,7 @@ fn computed_name(
 // Ref resolution (for action dispatch)
 // ---------------------------------------------------------------------------
 
-/// Re-walk the AX tree to find the AXUIElement at the given ref position.
+/// Re-walk the AX tree to find the `AXUIElement` at the given ref position.
 pub fn resolve_ref_element(ref_id: i32, app_name: &str) -> Result<AXUIElementRef, ForepawError> {
     let running_app = find_app(app_name)?;
     let is_electron = is_electron_app(&running_app);
@@ -642,7 +642,7 @@ pub fn resolve_ref_element(ref_id: i32, app_name: &str) -> Result<AXUIElementRef
         .ok_or_else(|| ForepawError::StaleRef(ElementRef::new(ref_id)))
 }
 
-/// Walk the AX tree, collecting AXUIElement handles for interactive elements
+/// Walk the AX tree, collecting `AXUIElement` handles for interactive elements
 /// in depth-first order. Must mirror the order used by `RefAssigner`.
 fn collect_ax_elements(
     element: AXUIElementRef,
@@ -672,7 +672,8 @@ fn collect_ax_elements(
 // AXUIElement helpers
 // ---------------------------------------------------------------------------
 
-/// Get a single string attribute from an AXUIElement.
+/// Get a single string attribute from an `AXUIElement`.
+#[must_use]
 pub fn get_ax_string_attr(element: AXUIElementRef, attribute: &str) -> Option<String> {
     let attr_cf = cf_string_from_str(attribute);
     let mut value: CFTypeRef = std::ptr::null();
@@ -692,7 +693,7 @@ pub fn get_ax_string_attr(element: AXUIElementRef, attribute: &str) -> Option<St
     }
 }
 
-/// Get the AXChildren attribute as a Vec of AXUIElementRef.
+/// Get the `AXChildren` attribute as a Vec of `AXUIElementRef`.
 fn get_ax_element_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
     let attr_cf = cf_string_from_str("AXChildren");
     let mut value: CFTypeRef = std::ptr::null();
@@ -719,7 +720,8 @@ fn get_ax_element_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
     }
 }
 
-/// Get the position (AXPosition) of an AXUIElement as a Point.
+/// Get the position (`AXPosition`) of an `AXUIElement` as a Point.
+#[must_use]
 pub fn get_element_position(element: AXUIElementRef) -> Option<Point> {
     let attr_cf = cf_string_from_str("AXPosition");
     let mut value: CFTypeRef = std::ptr::null();
@@ -744,7 +746,8 @@ pub fn get_element_position(element: AXUIElementRef) -> Option<Point> {
     }
 }
 
-/// Get the size (AXSize) of an AXUIElement as (width, height).
+/// Get the size (`AXSize`) of an `AXUIElement` as (width, height).
+#[must_use]
 pub fn get_element_size(element: AXUIElementRef) -> Option<(f64, f64)> {
     let attr_cf = cf_string_from_str("AXSize");
     let mut value: CFTypeRef = std::ptr::null();
@@ -776,7 +779,7 @@ pub fn get_element_size(element: AXUIElementRef) -> Option<(f64, f64)> {
 // CFType conversion helpers
 // ---------------------------------------------------------------------------
 
-/// Convert a CFStringRef to a Rust String. Handles both ASCII (fast path)
+/// Convert a `CFStringRef` to a Rust String. Handles both ASCII (fast path)
 /// and non-ASCII (buffer copy) strings.
 fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
     unsafe {
@@ -805,7 +808,7 @@ fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
     }
 }
 
-/// Convert a CFNumber to a Rust String. Tries integer first, then float.
+/// Convert a `CFNumber` to a Rust String. Tries integer first, then float.
 fn number_to_rust_string(number: CFNumberRef) -> Option<String> {
     unsafe {
         // Try as i64 first (most AX values are integers)

@@ -69,8 +69,6 @@ cast_possible_truncation   = "allow"  # FFI: i64 counts from AX API
 cast_possible_wrap         = "allow"  # FFI: usize -> i64 for CFIndex
 cast_precision_loss        = "allow"  # FFI: usize -> f64 for coordinates
 cast_sign_loss             = "allow"  # FFI: i64 -> usize for counts
-must_use_candidate         = "allow"
-doc_markdown               = "allow"
 missing_errors_doc         = "allow"
 
 # -- Cherry-picked restriction lints --------------------------------------

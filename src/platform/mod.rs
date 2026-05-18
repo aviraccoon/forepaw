@@ -40,6 +40,7 @@ pub struct ActionResult {
 }
 
 impl ActionResult {
+    #[must_use]
     pub fn ok() -> Self {
         Self {
             success: true,
@@ -105,6 +106,7 @@ impl std::str::FromStr for ImageFormat {
 }
 
 impl ImageFormat {
+    #[must_use]
     pub fn file_extension(&self) -> &str {
         match self {
             Self::Png => "png",

@@ -1,11 +1,11 @@
 //! Raw FFI bindings to macOS Accessibility, CoreGraphics, and CoreFoundation APIs.
 //!
 //! These are used directly instead of the `accessibility` crate because:
-//! 1. The crate's AXUIElement is !Send + !Sync (conflicts with DesktopProvider)
-//! 2. We need AXUIElementCopyMultipleAttributeValues (not wrapped by the crate)
-//! 3. We need arbitrary attribute setting (AXManualAccessibility, AXFocused)
+//! 1. The crate's `AXUIElement` is !Send + !Sync (conflicts with `DesktopProvider`)
+//! 2. We need `AXUIElementCopyMultipleAttributeValues` (not wrapped by the crate)
+//! 3. We need arbitrary attribute setting (`AXManualAccessibility`, `AXFocused`)
 //!
-//! All functions are linked against the ApplicationServices framework.
+//! All functions are linked against the `ApplicationServices` framework.
 
 use std::ffi::c_void;
 
@@ -112,7 +112,7 @@ unsafe impl Send for AXUIElementRef {}
 unsafe impl Sync for AXUIElementRef {}
 
 impl AXUIElementRef {
-    /// Create an AXUIElementRef from a raw pointer (e.g. from CFArrayGetValueAtIndex).
+    /// Create an `AXUIElementRef` from a raw pointer (e.g. from `CFArrayGetValueAtIndex`).
     pub unsafe fn from_raw(ptr: *const std::ffi::c_void) -> Self {
         Self(ptr)
     }
@@ -474,7 +474,7 @@ extern "C" {
     ) -> CFArrayRef;
     pub fn CFArrayGetCount(array: CFArrayRef) -> CFIndex;
     /// Returns a non-retained pointer to the value at the given index.
-    /// Callers must CFRetain the returned pointer if they need to keep it
+    /// Callers must `CFRetain` the returned pointer if they need to keep it
     /// beyond the lifetime of the array.
     pub fn CFArrayGetValueAtIndex(array: CFArrayRef, idx: CFIndex) -> *const c_void;
     pub fn CFDictionaryGetValue(dict: CFDictionaryRef, key: *const c_void) -> *const c_void;

@@ -17,6 +17,7 @@ impl OCRResult {
     }
 
     /// Center point of the recognized text region.
+    #[must_use]
     pub fn center(&self) -> (f64, f64) {
         (
             self.bounds.x + self.bounds.width / 2.0,
@@ -33,6 +34,7 @@ pub struct OCROutput {
 }
 
 impl OCROutput {
+    #[must_use]
     pub fn new(results: Vec<OCRResult>, screenshot_path: Option<String>) -> Self {
         Self {
             results,

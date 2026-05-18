@@ -1,8 +1,8 @@
 //! Screenshot capture via Win32 GDI.
 //!
-//! Uses BitBlt for screen capture with per-monitor DPI awareness.
+//! Uses `BitBlt` for screen capture with per-monitor DPI awareness.
 //! Physical pixels everywhere -- consistent with UIA bounding rectangles
-//! and SendInput coordinates.
+//! and `SendInput` coordinates.
 
 use std::fs;
 use std::path::Path;
@@ -26,7 +26,7 @@ use crate::platform::windows::app;
 /// Initialize DPI awareness for the process.
 ///
 /// Must be called before any GDI capture calls. Per-monitor V2 gives us
-/// physical pixel coordinates from all APIs (GetWindowRect, BitBlt, UIA).
+/// physical pixel coordinates from all APIs (`GetWindowRect`, `BitBlt`, UIA).
 pub fn init_dpi_awareness() {
     unsafe {
         // PER_MONITOR_AWARE_V2 = -4
@@ -47,14 +47,14 @@ pub fn screenshot(app_name: Option<&str>, window: Option<&str>) -> Result<String
 
 /// Capture screen/window pixels as RGBA.
 ///
-/// Returns (rgba_bytes, width, height). Used by both screenshot and OCR.
+/// Returns (`rgba_bytes`, width, height). Used by both screenshot and OCR.
 ///
 /// For per-app capture: tries `PrintWindow` with `PW_RENDERFULLCONTENT` first.
 /// This captures the window's own content directly, even when occluded by other
-/// windows, and works for DWM-composed windows (UWP, Chromium, WinUI 3).
-/// Falls back to desktop DC capture if PrintWindow fails.
+/// windows, and works for DWM-composed windows (UWP, Chromium, `WinUI` 3).
+/// Falls back to desktop DC capture if `PrintWindow` fails.
 ///
-/// For full-screen capture: uses desktop DC + BitBlt.
+/// For full-screen capture: uses desktop DC + `BitBlt`.
 pub fn capture_pixels(
     app_name: Option<&str>,
     _window: Option<&str>,
@@ -92,10 +92,10 @@ pub fn capture_pixels(
     }
 }
 
-/// Capture a window via PrintWindow.
+/// Capture a window via `PrintWindow`.
 ///
 /// Uses `PW_RENDERFULLCONTENT` (undocumented flag, value 2) which allows
-/// capturing windows rendered via DirectComposition (Chromium, UWP, etc.).
+/// capturing windows rendered via `DirectComposition` (Chromium, UWP, etc.).
 /// Chromium itself uses this flag internally.
 fn capture_print_window(
     hwnd: windows::Win32::Foundation::HWND,
@@ -193,7 +193,7 @@ fn capture_rect_fullscreen() -> RECT {
     }
 }
 
-/// Capture a screen region as RGBA pixels using GDI BitBlt.
+/// Capture a screen region as RGBA pixels using GDI `BitBlt`.
 ///
 /// Captures at physical pixel resolution (requires DPI awareness to be set).
 fn capture_region_rgba(

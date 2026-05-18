@@ -20,6 +20,7 @@ use crate::platform::ScreenshotResult;
 use crate::platform::{ScreenshotOptions, ScreenshotParams, SnapshotOptions};
 
 /// Generate a unique temp file tag for screenshot filenames.
+#[must_use]
 pub fn temp_tag() -> String {
     crate::core::temp::temp_tag()
 }
@@ -306,6 +307,7 @@ pub fn apply_crop(
 }
 
 /// Get the main screen's Retina backing scale factor.
+#[must_use]
 pub fn backing_scale_factor() -> f64 {
     // Access NSScreen.mainScreen via objc2
     use objc2_app_kit::NSScreen;
@@ -319,7 +321,7 @@ pub fn backing_scale_factor() -> f64 {
 
 /// Take a screenshot of an app window (or full screen), with optional annotations.
 ///
-/// This is the main entry point called from the DesktopProvider trait impl.
+/// This is the main entry point called from the `DesktopProvider` trait impl.
 #[allow(clippy::too_many_lines)]
 pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, ForepawError> {
     // Check screen recording permission

@@ -1,7 +1,7 @@
-//! OCR via Windows.Media.Ocr (WinRT).
+//! OCR via Windows.Media.Ocr (`WinRT`).
 //!
-//! Captures a screenshot via GDI, creates a SoftwareBitmap from the raw pixels,
-//! and runs OcrEngine on it. All coordinates are in physical pixels, matching
+//! Captures a screenshot via GDI, creates a `SoftwareBitmap` from the raw pixels,
+//! and runs `OcrEngine` on it. All coordinates are in physical pixels, matching
 //! UIA bounding rectangles.
 
 use windows::Foundation::Rect as WinRect;
@@ -129,9 +129,9 @@ pub fn ocr(
     })
 }
 
-/// Create a SoftwareBitmap from RGBA pixel data.
+/// Create a `SoftwareBitmap` from RGBA pixel data.
 ///
-/// The OcrEngine expects BGRA, so we convert RGBA -> BGRA during copy.
+/// The `OcrEngine` expects BGRA, so we convert RGBA -> BGRA during copy.
 fn create_software_bitmap(
     rgba_pixels: &[u8],
     width: u32,
@@ -181,10 +181,10 @@ fn create_software_bitmap(
     Ok(bitmap)
 }
 
-/// Block on a WinRT async operation using a Win32 event.
+/// Block on a `WinRT` async operation using a Win32 event.
 ///
 /// Sets up a Completed callback that signals a Win32 event when the
-/// operation finishes, then waits and calls GetResults.
+/// operation finishes, then waits and calls `GetResults`.
 fn block_on_async<T: windows::core::RuntimeType + 'static>(
     op: &windows_future::IAsyncOperation<T>,
 ) -> Result<T, ForepawError> {
@@ -218,7 +218,7 @@ fn block_on_async<T: windows::core::RuntimeType + 'static>(
 
 /// Upscale RGBA pixels by an integer factor using Lanczos3 resampling.
 ///
-/// Returns (upscaled_rgba, new_width, new_height).
+/// Returns (`upscaled_rgba`, `new_width`, `new_height`).
 fn upscale_rgba(rgba: &[u8], width: u32, height: u32, scale: u32) -> (Vec<u8>, u32, u32) {
     let Some(img) = image::RgbaImage::from_raw(width, height, rgba.to_vec()) else {
         return (rgba.to_vec(), width, height); // fallback: no upscale

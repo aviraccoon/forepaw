@@ -1,4 +1,4 @@
-/// Key combo parsing: "cmd+shift+s" -> KeyCombo { key, modifiers }.
+/// Key combo parsing: "cmd+shift+s" -> `KeyCombo` { key, modifiers }.
 ///
 /// Keyboard modifier keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -11,6 +11,7 @@ pub enum Modifier {
 
 impl Modifier {
     /// Parse a single modifier string (case-insensitive).
+    #[must_use]
     pub fn parse_name(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "cmd" | "command" | "meta" | "super" => Some(Self::Command),
@@ -23,6 +24,7 @@ impl Modifier {
 
     /// Parse a "+"-separated modifier string like "shift+alt".
     /// Returns an empty array for empty input.
+    #[must_use]
     pub fn parse_modifiers(s: Option<&str>) -> Vec<Self> {
         let s = match s {
             Some(s) if !s.is_empty() => s,
@@ -51,6 +53,7 @@ impl KeyCombo {
     }
 
     /// Parse a combo string like "cmd+shift+s" or "return".
+    #[must_use]
     pub fn parse(s: &str) -> Self {
         let lower = s.to_lowercase();
         let parts: Vec<&str> = lower.split('+').collect();
@@ -90,6 +93,7 @@ pub struct ClickOptions {
 }
 
 impl ClickOptions {
+    #[must_use]
     pub fn new(button: MouseButton, click_count: u32) -> Self {
         Self {
             button,
@@ -97,6 +101,7 @@ impl ClickOptions {
         }
     }
 
+    #[must_use]
     pub fn normal() -> Self {
         Self {
             button: MouseButton::Left,
@@ -104,6 +109,7 @@ impl ClickOptions {
         }
     }
 
+    #[must_use]
     pub fn right_click() -> Self {
         Self {
             button: MouseButton::Right,
@@ -111,6 +117,7 @@ impl ClickOptions {
         }
     }
 
+    #[must_use]
     pub fn double_click() -> Self {
         Self {
             button: MouseButton::Left,

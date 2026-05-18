@@ -27,6 +27,7 @@ use crate::platform::DesktopProvider;
 pub struct DarwinProvider;
 
 impl DarwinProvider {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }

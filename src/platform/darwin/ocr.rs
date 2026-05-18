@@ -1,4 +1,4 @@
-//! OCR via macOS Vision framework (VNRecognizeTextRequest).
+//! OCR via macOS Vision framework (`VNRecognizeTextRequest`).
 //!
 //! Uses objc2-vision bindings. Screenshots are captured via the screenshot
 //! module, then Vision processes the image. Coordinates are converted from
@@ -127,7 +127,7 @@ pub fn ocr(
     })
 }
 
-/// Run VNRecognizeTextRequest on a CGImage.
+/// Run `VNRecognizeTextRequest` on a `CGImage`.
 /// Returns results in image-pixel coordinates (top-left origin).
 fn recognize_text(
     cg_image: ffi::CGImageRef,

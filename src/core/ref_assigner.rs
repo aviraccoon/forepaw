@@ -13,12 +13,14 @@ pub struct RefAssignment {
 pub struct RefAssigner;
 
 impl RefAssigner {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
 
     /// Walk the tree, assigning refs to interactive elements.
     /// Returns a new tree with refs populated and a ref lookup table.
+    #[must_use]
     pub fn assign(&self, root: &ElementNode, interactive_only: bool) -> RefAssignment {
         let mut counter: i32 = 1;
         let mut refs = HashMap::new();

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 pub struct SnapshotCache;
 
 impl SnapshotCache {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
@@ -16,6 +17,7 @@ impl SnapshotCache {
     }
 
     /// Load the last cached snapshot text for an app, if any.
+    #[must_use]
     pub fn load(&self, app: &str) -> Option<String> {
         let path = Self::cache_path(app);
         fs::read_to_string(path).ok()

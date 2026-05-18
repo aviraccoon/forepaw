@@ -1,4 +1,4 @@
-//! Application and window lookup via NSWorkspace and CGWindowList.
+//! Application and window lookup via `NSWorkspace` and `CGWindowList`.
 //!
 //! Provides the foundational lookup functions used by snapshot, input, and
 //! screenshot modules. All functions return platform-agnostic types from
@@ -117,7 +117,7 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
 }
 // ---------------------------------------------------------------------------
 
-/// A resolved window with its CGWindowID, title, and bounds.
+/// A resolved window with its `CGWindowID`, title, and bounds.
 #[derive(Debug)]
 pub struct ResolvedWindow {
     pub window_id: u32,
@@ -126,6 +126,7 @@ pub struct ResolvedWindow {
 }
 
 impl ResolvedWindow {
+    #[must_use]
     pub fn origin(&self) -> Point {
         Point {
             x: self.bounds.x,
@@ -133,6 +134,7 @@ impl ResolvedWindow {
         }
     }
 
+    #[must_use]
     pub fn center(&self) -> Point {
         Point {
             x: self.bounds.x + self.bounds.width / 2.0,
@@ -307,7 +309,7 @@ pub fn validate_point_in_window(point: &Point, pid: i32) -> Result<(), ForepawEr
 
 /// Check if an app bundle contains the Electron Framework.
 /// CEF apps like Spotify are NOT included -- CEF doesn't respond to
-/// AXManualAccessibility and exposes only empty group nodes.
+/// `AXManualAccessibility` and exposes only empty group nodes.
 pub fn is_electron_app(app: &NSRunningApplication) -> bool {
     let Some(bundle_url) = app.bundleURL() else {
         return false;
@@ -334,7 +336,8 @@ pub fn enable_electron_accessibility(pid: i32) {
 }
 
 /// Check if an Electron app's web content tree is populated.
-/// Looks for an AXWebArea with interactive children.
+/// Looks for an `AXWebArea` with interactive children.
+#[must_use]
 pub fn electron_tree_is_populated(pid: i32) -> bool {
     let app_element = unsafe { AXUIElementCreateApplication(pid) };
     has_populated_web_area(app_element, 0, 10)
@@ -530,7 +533,7 @@ fn collect_helper_pids(bundle_id: &str, main_pid: i32) -> HashSet<i32> {
 
 /// # Safety
 ///
-/// `dict` must be a valid CFDictionaryRef. `key` must be a valid CFStringRef.
+/// `dict` must be a valid `CFDictionaryRef`. `key` must be a valid `CFStringRef`.
 /// Both must remain valid for the duration of this call.
 pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option<String> {
     unsafe {
@@ -615,7 +618,7 @@ unsafe fn get_dict_bounds(dict: CFDictionaryRef, key: CFStringRef) -> Option<Rec
     }
 }
 
-/// Local helper to get an f64 from a CFDictionary with a string key.
+/// Local helper to get an f64 from a `CFDictionary` with a string key.
 unsafe fn get_dict_f64_local(dict: CFDictionaryRef, key: &str) -> Option<f64> {
     unsafe {
         let cf_key = cf_string_from_str(key);
@@ -641,11 +644,12 @@ unsafe fn get_dict_f64_local(dict: CFDictionaryRef, key: &str) -> Option<f64> {
     }
 }
 
-/// Create a CFString from a Rust &str.
+/// Create a `CFString` from a Rust &str.
 ///
-/// The returned CFStringRef is a new reference that the caller must
-/// release with CFRelease. NSString is toll-free bridged with CFString,
-/// so we can create an NSString and cast its pointer.
+/// The returned `CFStringRef` is a new reference that the caller must
+/// release with `CFRelease`. `NSString` is toll-free bridged with `CFString`,
+/// so we can create an `NSString` and cast its pointer.
+#[must_use]
 pub fn cf_string_from_str(s: &str) -> CFStringRef {
     // NSString::from_str creates an autoreleased string.
     // We retain it manually so the caller owns it.
@@ -697,7 +701,7 @@ fn has_populated_web_area(element: AXUIElementRef, depth: usize, max_depth: usiz
     false
 }
 
-/// Get a string attribute from an AXUIElement.
+/// Get a string attribute from an `AXUIElement`.
 fn get_ax_string(element: AXUIElementRef, attribute: &str) -> Option<String> {
     unsafe {
         let attr_cf = cf_string_from_str(attribute);
@@ -725,7 +729,7 @@ fn get_ax_string(element: AXUIElementRef, attribute: &str) -> Option<String> {
     }
 }
 
-/// Get the AXChildren attribute as a Vec of AXUIElementRef.
+/// Get the `AXChildren` attribute as a Vec of `AXUIElementRef`.
 fn get_ax_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
     unsafe {
         let attr_cf = cf_string_from_str("AXChildren");

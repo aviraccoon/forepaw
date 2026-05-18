@@ -2,6 +2,7 @@
 use crate::core::types::{Point, Rect};
 
 /// Parse "x,y" coordinate string into a Point.
+#[must_use]
 pub fn parse_coordinate(s: &str) -> Option<Point> {
     let parts: Vec<&str> = s.split(',').collect();
     if parts.len() != 2 {
@@ -14,6 +15,7 @@ pub fn parse_coordinate(s: &str) -> Option<Point> {
 
 /// Parse "x,y,w,h" into a Rect (4 components = region).
 #[allow(clippy::many_single_char_names)]
+#[must_use]
 pub fn parse_region(s: &str) -> Option<Rect> {
     let parts: Vec<&str> = s.split(',').collect();
     if parts.len() != 4 {
@@ -47,6 +49,7 @@ pub fn resolve_text<'a>(
 }
 
 /// Split a string into shell-like tokens, respecting double quotes.
+#[must_use]
 pub fn shell_split(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();

@@ -3,6 +3,7 @@ use crate::core::types::Point;
 
 /// Check if a window-relative point is inside the window.
 /// Returns None if valid, or an error message if outside.
+#[must_use]
 pub fn validate(point: &Point, window_size: &Point) -> Option<String> {
     if point.x < 0.0 || point.x > window_size.x || point.y < 0.0 || point.y > window_size.y {
         let bounds_str = format!("{}x{}", window_size.x as i64, window_size.y as i64);

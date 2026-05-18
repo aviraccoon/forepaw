@@ -1,14 +1,16 @@
-/// Renders an ElementNode tree as indented text.
+/// Renders an `ElementNode` tree as indented text.
 use crate::core::element_tree::ElementTree;
 use crate::core::types::Rect;
 
 pub struct TreeRenderer;
 
 impl TreeRenderer {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
 
+    #[must_use]
     pub fn render(&self, tree: &ElementTree) -> String {
         let mut lines: Vec<String> = Vec::new();
         lines.push(format!("app: {}", tree.app));

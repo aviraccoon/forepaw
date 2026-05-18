@@ -9,6 +9,7 @@
 /// delete, forwarddelete, arrow keys (up/down/left/right), function keys
 /// (f1-f12), navigation keys (home, end, pageup, pagedown), letters (a-z),
 /// and digits (0-9).
+#[must_use]
 pub fn virtual_key_code(key: &str) -> Option<u16> {
     // Match on lowercase. The key names are short enough that allocation-free
     // ASCII lowering isn't worth the complexity -- just use to_ascii_lowercase.

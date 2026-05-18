@@ -7,6 +7,7 @@ pub struct CropRegion {
 }
 
 impl CropRegion {
+    #[must_use]
     pub fn new(rect: Rect, padding: f64) -> Self {
         Self { rect, padding }
     }
@@ -15,6 +16,7 @@ impl CropRegion {
     ///
     /// Returns (x, y, width, height) in pixels, or None if the region
     /// doesn't overlap the window.
+    #[must_use]
     pub fn image_crop_rect(
         &self,
         window_size: &Point,

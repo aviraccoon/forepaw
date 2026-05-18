@@ -26,11 +26,13 @@ pub struct SnapshotDiff {
 }
 
 impl SnapshotDiff {
+    #[must_use]
     pub fn new(lines: Vec<DiffLine>) -> Self {
         Self { lines }
     }
 
     /// Lines that were added (present only in the new snapshot).
+    #[must_use]
     pub fn added(&self) -> Vec<&DiffLine> {
         self.lines
             .iter()
@@ -39,6 +41,7 @@ impl SnapshotDiff {
     }
 
     /// Lines that were removed (present only in the old snapshot).
+    #[must_use]
     pub fn removed(&self) -> Vec<&DiffLine> {
         self.lines
             .iter()
@@ -47,6 +50,7 @@ impl SnapshotDiff {
     }
 
     /// Lines present in both.
+    #[must_use]
     pub fn unchanged(&self) -> Vec<&DiffLine> {
         self.lines
             .iter()
@@ -54,10 +58,12 @@ impl SnapshotDiff {
             .collect()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.added().is_empty() && self.removed().is_empty()
     }
 
+    #[must_use]
     pub fn summary(&self) -> String {
         let a = self.added().len();
         let r = self.removed().len();
@@ -78,6 +84,7 @@ impl SnapshotDiff {
 
     /// Render the diff as text with +/- markers.
     /// Context lines around changes can be included with `context` parameter.
+    #[must_use]
     pub fn render(&self, context: usize) -> String {
         let mut output: Vec<String> = Vec::new();
 
@@ -152,12 +159,14 @@ pub fn strip_refs(line: &str) -> String {
 pub struct SnapshotDiffer;
 
 impl SnapshotDiffer {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
 
     /// Compare two rendered snapshot texts.
     /// The first line of each text (the "app:" header) is skipped.
+    #[must_use]
     pub fn diff(&self, old: &str, new: &str) -> SnapshotDiff {
         let old_lines: Vec<&str> = old.split('\n').collect();
         let new_lines: Vec<&str> = new.split('\n').collect();

@@ -1,11 +1,11 @@
-//! UI Automation tree snapshot: walk the UIA tree and build an ElementTree.
+//! UI Automation tree snapshot: walk the UIA tree and build an `ElementTree`.
 //!
-//! Uses IUIAutomation + ControlView TreeWalker for tree navigation.
-//! Maps UIA ControlType IDs to AX-prefixed role names so the core
+//! Uses `IUIAutomation` + `ControlView` `TreeWalker` for tree navigation.
+//! Maps UIA `ControlType` IDs to AX-prefixed role names so the core
 //! ref assigner and tree renderer work unchanged across platforms.
 //!
 //! Control type IDs from:
-//! https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controltype-ids
+//! <https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controltype-ids>
 
 use windows::Win32::Foundation::RECT;
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, COINIT_MULTITHREADED};
@@ -21,13 +21,13 @@ use crate::platform::SnapshotOptions;
 
 use super::app;
 
-/// UIA ControlType IDs mapped to AX-style role names.
+/// UIA `ControlType` IDs mapped to AX-style role names.
 ///
 /// Names follow macOS convention so `is_interactive_role()` and the
 /// tree renderer work cross-platform. UIA types without a close AX
-/// equivalent map to the nearest structural equivalent or AXUnknown.
+/// equivalent map to the nearest structural equivalent or `AXUnknown`.
 ///
-/// Source: https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controltype-ids
+/// Source: <https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controltype-ids>
 fn control_type_to_role(control_type: i32) -> &'static str {
     match control_type {
         50000 => "AXButton",                             // Button
@@ -66,8 +66,8 @@ fn control_type_to_role(control_type: i32) -> &'static str {
 
 /// Initialize COM for UIA calls.
 ///
-/// Called once during WindowsProvider construction. Ok to call multiple times
-/// (subsequent calls return S_FALSE but are harmless).
+/// Called once during `WindowsProvider` construction. Ok to call multiple times
+/// (subsequent calls return `S_FALSE` but are harmless).
 pub fn init_com() {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -87,7 +87,7 @@ struct TreePruning {
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Walk the UIA tree for the given app and return an ElementTree.
+/// Walk the UIA tree for the given app and return an `ElementTree`.
 pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree, ForepawError> {
     // Find the target window
     let (hwnd, _) = app::find_app_hwnd(app_name)?;
@@ -229,7 +229,7 @@ fn build_tree(
     }
 }
 
-/// Walk children using TreeWalker GetFirstChild/GetNextSibling.
+/// Walk children using `TreeWalker` GetFirstChild/GetNextSibling.
 fn walk_children(
     walker: &IUIAutomationTreeWalker,
     parent: &IUIAutomationElement,
@@ -273,8 +273,8 @@ fn walk_children(
 // Name resolution
 // ---------------------------------------------------------------------------
 
-/// Resolve element name when CurrentName is empty.
-/// Chain: HelpText → first child with text content.
+/// Resolve element name when `CurrentName` is empty.
+/// Chain: `HelpText` → first child with text content.
 fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Option<String> {
     // 1. HelpText
     let help = get_bstr_property(element, |e| unsafe { e.CurrentHelpText() });
@@ -300,7 +300,7 @@ fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Opt
 // Property accessors
 // ---------------------------------------------------------------------------
 
-/// Get the element's ControlType, mapped to an AX-style role name.
+/// Get the element's `ControlType`, mapped to an AX-style role name.
 fn get_control_type(element: &IUIAutomationElement) -> String {
     let ct = unsafe { element.CurrentControlType().map_or(0, |ct| ct.0) };
     control_type_to_role(ct).to_string()
@@ -321,7 +321,7 @@ fn get_bstr_property(
 }
 
 /// Get the bounding rectangle from a UIA element.
-/// Uses CurrentBoundingRectangle which returns a RECT directly.
+/// Uses `CurrentBoundingRectangle` which returns a RECT directly.
 fn get_element_bounds(element: &IUIAutomationElement) -> Option<Rect> {
     let rect: RECT = unsafe { element.CurrentBoundingRectangle().ok() }?;
 

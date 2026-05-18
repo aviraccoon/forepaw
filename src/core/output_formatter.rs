@@ -36,10 +36,12 @@ pub struct OutputFormatter {
 }
 
 impl OutputFormatter {
+    #[must_use]
     pub fn new(json: bool) -> Self {
         Self { json }
     }
 
+    #[must_use]
     pub fn format(
         &self,
         success: bool,

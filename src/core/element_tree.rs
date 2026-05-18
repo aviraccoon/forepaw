@@ -26,6 +26,7 @@ pub const INTERACTIVE_ROLES: &[&str] = &[
 ];
 
 /// Check if a role is interactive (should receive a ref).
+#[must_use]
 pub fn is_interactive_role(role: &str) -> bool {
     INTERACTIVE_ROLES.contains(&role)
 }
@@ -91,6 +92,7 @@ impl ElementNode {
     }
 
     /// Whether this element is interactive (should receive a ref).
+    #[must_use]
     pub fn is_interactive(&self) -> bool {
         is_interactive_role(&self.role)
     }
@@ -152,6 +154,7 @@ pub struct SnapshotTiming {
 }
 
 impl SnapshotTiming {
+    #[must_use]
     pub fn new(total_ms: f64, node_count: usize, root: ElementNode) -> Self {
         Self {
             total_ms,
@@ -166,6 +169,7 @@ impl SnapshotTiming {
     }
 
     /// Format timing as a human-readable report.
+    #[must_use]
     pub fn report(&self) -> String {
         let mut lines: Vec<String> = Vec::new();
         let avg = if self.node_count > 0 {
@@ -240,11 +244,13 @@ pub struct ElementRef {
 }
 
 impl ElementRef {
+    #[must_use]
     pub fn new(id: i32) -> Self {
         Self { id }
     }
 
-    /// Parse a ref string like "@e3" into an ElementRef.
+    /// Parse a ref string like "@e3" into an `ElementRef`.
+    #[must_use]
     pub fn parse(s: &str) -> Option<ElementRef> {
         let trimmed = s.trim();
         if !trimmed.starts_with("@e") {

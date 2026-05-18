@@ -30,6 +30,7 @@ impl Annotation {
     }
 
     /// Short role label for display (strips "AX" prefix).
+    #[must_use]
     pub fn short_role(&self) -> &str {
         if let Some(stripped) = self.role.strip_prefix("AX") {
             stripped
@@ -64,6 +65,7 @@ impl std::str::FromStr for AnnotationStyle {
 }
 
 impl AnnotationStyle {
+    #[must_use]
     pub fn all() -> &'static [AnnotationStyle] {
         &[Self::Badges, Self::Labeled, Self::Spotlight]
     }
@@ -80,6 +82,7 @@ pub enum AnnotationCategory {
 }
 
 impl AnnotationCategory {
+    #[must_use]
     pub fn from_role(role: &str) -> Self {
         match role {
             "AXButton" | "AXMenuButton" | "AXDockItem" | "AXIncrementor" => Self::Button,
@@ -96,11 +99,13 @@ impl AnnotationCategory {
 pub struct AnnotationCollector;
 
 impl AnnotationCollector {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
 
     /// Collect annotations for all interactive elements with bounds.
+    #[must_use]
     pub fn collect(&self, root: &ElementNode, window_bounds: Rect) -> Vec<Annotation> {
         let mut annotations = Vec::new();
         let mut display_number: usize = 1;
@@ -160,11 +165,13 @@ impl Default for AnnotationCollector {
 pub struct AnnotationLegend;
 
 impl AnnotationLegend {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
 
     /// Generate a compact legend mapping display numbers to refs and element info.
+    #[must_use]
     pub fn format(&self, annotations: &[Annotation]) -> String {
         annotations
             .iter()

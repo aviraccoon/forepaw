@@ -1,6 +1,6 @@
 //! Application and window enumeration on Windows.
 //!
-//! Uses EnumWindows to enumerate top-level windows, then extracts process
+//! Uses `EnumWindows` to enumerate top-level windows, then extracts process
 //! info (name, PID) and window info (title, bounds, window handle).
 
 use std::collections::HashMap;
@@ -22,12 +22,12 @@ use crate::platform::{AppInfo, WindowInfo};
 /// List running GUI applications.
 ///
 /// Enumerates all visible top-level windows, deduplicates by owning process,
-/// and returns one AppInfo per process. Process name comes from the executable
+/// and returns one `AppInfo` per process. Process name comes from the executable
 /// filename (without extension), which matches how Windows users identify apps.
 ///
 /// Exception: UWP apps run inside `ApplicationFrameHost.exe`. Multiple UWP apps
 /// can share the same host process but have separate windows with distinct titles
-/// (e.g. "Calculator", "Settings"). For these, we emit one AppInfo per window
+/// (e.g. "Calculator", "Settings"). For these, we emit one `AppInfo` per window
 /// so each app appears separately in the listing.
 pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
     let windows = collect_visible_windows();
@@ -253,7 +253,7 @@ pub fn activate_app(hwnd: HWND) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Get window title text via GetWindowTextLengthW + GetWindowTextW.
+/// Get window title text via `GetWindowTextLengthW` + `GetWindowTextW`.
 fn get_window_text(hwnd: HWND) -> String {
     unsafe {
         let len = GetWindowTextLengthW(hwnd);

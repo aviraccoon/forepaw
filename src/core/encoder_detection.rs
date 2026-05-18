@@ -9,6 +9,7 @@ pub enum ImageFormat {
 }
 
 impl ImageFormat {
+    #[must_use]
     pub fn file_extension(&self) -> &'static str {
         match self {
             Self::Png => "png",
@@ -17,11 +18,13 @@ impl ImageFormat {
         }
     }
 
+    #[must_use]
     pub fn all() -> &'static [ImageFormat] {
         &[Self::Png, Self::Jpeg, Self::Webp]
     }
 
     /// Best available format: WebP if cwebp installed, else JPEG.
+    #[must_use]
     pub fn best_available() -> Self {
         if is_command_available("cwebp") {
             Self::Webp
@@ -66,6 +69,7 @@ impl Default for ScreenshotOptions {
 
 impl ScreenshotOptions {
     /// Full quality: PNG, 2x Retina, cursor visible.
+    #[must_use]
     pub fn full_quality() -> Self {
         Self {
             format: ImageFormat::Png,
@@ -77,6 +81,7 @@ impl ScreenshotOptions {
 }
 
 /// Check whether a command-line tool is available in PATH.
+#[must_use]
 pub fn is_command_available(command: &str) -> bool {
     std::process::Command::new("/usr/bin/env")
         .args(["which", command])

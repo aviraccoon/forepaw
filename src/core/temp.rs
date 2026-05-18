@@ -5,6 +5,7 @@
 /// Format: `{millis}-{rand4hex}`. Unique enough to avoid stale file
 /// collisions across CLI invocations. forepaw is a single-capture-per-call
 /// CLI, so no counter is needed.
+#[must_use]
 pub fn temp_tag() -> String {
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

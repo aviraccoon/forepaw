@@ -97,7 +97,7 @@ fn category_color(color_space: CGColorSpaceRef, category: &AnnotationCategory) -
 // CoreText helpers
 // ---------------------------------------------------------------------------
 
-/// Create a CTFont by name and size.
+/// Create a `CTFont` by name and size.
 fn create_font(name: &str, size: f64) -> CTFontRef {
     let cf_name = app::cf_string_from_str(name);
     let font = unsafe { ffi::CTFontCreateWithName(cf_name as ffi::CFStringRef, size, ptr::null()) };
@@ -105,7 +105,7 @@ fn create_font(name: &str, size: f64) -> CTFontRef {
     font
 }
 
-/// Create a CFAttributedString with font and optional color attributes.
+/// Create a `CFAttributedString` with font and optional color attributes.
 fn create_attributed_string(
     text: &str,
     font: CTFontRef,
@@ -152,7 +152,7 @@ fn measure_text(text: &str, font: CTFontRef) -> (f64, f64) {
     (bounds.size.width.ceil(), bounds.size.height.ceil())
 }
 
-/// Draw text at a specific position in a CGContext.
+/// Draw text at a specific position in a `CGContext`.
 fn draw_text(text: &str, ctx: CGContextRef, x: f64, y: f64, font: CTFontRef, color: CGColorRef) {
     let attr_str = create_attributed_string(text, font, Some(color));
     let line = unsafe { ffi::CTLineCreateWithAttributedString(attr_str) };
@@ -626,7 +626,7 @@ pub fn render(
 // ---------------------------------------------------------------------------
 
 /// Load a PNG image and create a bitmap context for rendering.
-/// Returns (width, height, context, color_space, image) -- caller must release all.
+/// Returns (width, height, context, `color_space`, image) -- caller must release all.
 fn load_image_and_create_context(
     image_path: &str,
 ) -> Result<(usize, usize, CGContextRef, CGColorSpaceRef, ffi::CGImageRef), AnnotationError> {

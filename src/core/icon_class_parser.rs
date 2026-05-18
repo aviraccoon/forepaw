@@ -1,6 +1,6 @@
 /// Extracts semantic icon names from CSS class lists.
 ///
-/// Electron apps use icon libraries (Lucide, Tabler, FontAwesome, etc.)
+/// Electron apps use icon libraries (Lucide, Tabler, `FontAwesome`, etc.)
 /// whose class names encode the icon identity. This parser strips known
 /// prefixes to extract the semantic name.
 ///
@@ -8,11 +8,13 @@
 pub struct IconClassParser;
 
 impl IconClassParser {
+    #[must_use]
     pub fn new() -> Self {
         Self
     }
 
     /// Extract a semantic icon name from a list of CSS classes.
+    #[must_use]
     pub fn parse(&self, classes: &[&str]) -> Option<String> {
         for cls in classes {
             if let Some(name) = Self::extract_icon_name(cls) {

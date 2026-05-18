@@ -1,4 +1,4 @@
-//! Input simulation via CGEvent (mouse, keyboard, scroll, drag, hover).
+//! Input simulation via `CGEvent` (mouse, keyboard, scroll, drag, hover).
 //!
 //! All input is synthesized through CoreGraphics events posted at the HID event tap.
 
@@ -152,7 +152,7 @@ pub fn perform_mouse_click(
     Ok(())
 }
 
-/// Click an AXUIElement. Tries AXPress first, falls back to mouse click at center.
+/// Click an `AXUIElement`. Tries `AXPress` first, falls back to mouse click at center.
 pub fn click_element(
     element: ffi::AXUIElementRef,
     options: &ClickOptions,
@@ -234,7 +234,7 @@ pub fn click_element(
 // Keyboard
 // ---------------------------------------------------------------------------
 
-/// Type a string character-by-character via CGEvent keyboard events.
+/// Type a string character-by-character via `CGEvent` keyboard events.
 /// Inter-character delay is essential for Electron apps (Discord, Slack)
 /// which drop characters if events arrive too fast.
 pub fn type_via_keyboard(text: &str) -> Result<(), ForepawError> {
@@ -266,8 +266,8 @@ pub fn type_via_keyboard(text: &str) -> Result<(), ForepawError> {
     Ok(())
 }
 
-/// Set a value on an AX element. Tries AXValue first, falls back to
-/// AXRaise + AXFocus + keyboard type.
+/// Set a value on an AX element. Tries `AXValue` first, falls back to
+/// `AXRaise` + `AXFocus` + keyboard type.
 pub fn set_value_on_element(
     element: ffi::AXUIElementRef,
     value: &str,
@@ -307,7 +307,7 @@ pub fn set_value_on_element(
     Ok(ActionResult::ok_msg("typed via keyboard simulation"))
 }
 
-/// Press a key combo (modifiers + key) via CGEvent.
+/// Press a key combo (modifiers + key) via `CGEvent`.
 pub fn press_via_keyboard(combo: &KeyCombo) -> Result<(), ForepawError> {
     let key_code = key_code::virtual_key_code(&combo.key).unwrap_or(0);
     let flags = modifier_flags(&combo.modifiers);
@@ -330,7 +330,7 @@ pub fn press_via_keyboard(combo: &KeyCombo) -> Result<(), ForepawError> {
     Ok(())
 }
 
-/// Convert modifiers to CGEventFlags bitmask.
+/// Convert modifiers to `CGEventFlags` bitmask.
 fn modifier_flags(modifiers: &[Modifier]) -> u64 {
     let mut flags: u64 = 0;
     for m in modifiers {
@@ -385,7 +385,7 @@ fn move_mouse_to_scroll_target(point: CGPointFFI) {
 }
 
 /// Capture a pixel fingerprint of a window for scroll boundary detection.
-/// Uses CGWindowListCreateImage to grab a thin horizontal strip from the
+/// Uses `CGWindowListCreateImage` to grab a thin horizontal strip from the
 /// window center -- fast, no file I/O.
 fn capture_scroll_fingerprint(window_id: u32) -> Option<Vec<u8>> {
     unsafe {
