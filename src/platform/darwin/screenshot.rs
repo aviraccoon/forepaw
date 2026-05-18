@@ -143,6 +143,10 @@ fn crop_image(
 
 /// Post-process a screenshot: downscale (1x) and/or convert format.
 /// Returns the final output path.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if image decoding, scaling, or encoding fails.
 pub fn post_process_screenshot(
     raw_path: &str,
     tag: &str,
@@ -287,6 +291,10 @@ fn image_pixel_width(path: &str) -> Result<usize, ForepawError> {
 
 /// Apply a crop region to an image file.
 /// Returns the path to the cropped image (or the original if crop doesn't overlap).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if image decoding or cropping fails.
 pub fn apply_crop(
     crop: &CropRegion,
     window_size: &Point,
@@ -330,6 +338,12 @@ pub fn backing_scale_factor() -> f64 {
 /// Take a screenshot of an app window (or full screen), with optional annotations.
 ///
 /// This is the main entry point called from the `DesktopProvider` trait impl.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the target application is not running,
+/// [`ForepawError::ScreenRecordingDenied`] if screen recording permission is missing,
+/// or [`ForepawError::StaleRef`] if a ref filter targets a non-existent element.
 #[expect(clippy::too_many_lines, reason = "screenshot pipeline")]
 pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, ForepawError> {
     // Check screen recording permission

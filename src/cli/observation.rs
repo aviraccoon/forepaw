@@ -70,6 +70,12 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    /// Walks the accessibility tree and prints it, optionally diffing against a cached snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `--app` is missing, the application is not running,
+    /// or accessibility permission is denied.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let app = self
             .global
@@ -171,6 +177,12 @@ pub struct Screenshot {
 }
 
 impl Screenshot {
+    /// Captures a screenshot, optionally annotated with element labels.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `--ref` is given without `--app`, the ref is invalid,
+    /// or the provider fails to capture (permission denied, app not found).
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let annotation_style = self.resolve_annotation_style();
         let ref_filter: Option<Vec<ElementRef>> = if self.only.is_empty() {
@@ -269,6 +281,11 @@ pub struct ListApps {
 }
 
 impl ListApps {
+    /// Lists running GUI applications.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if accessibility permission is denied.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let apps = provider.list_apps()?;
         if self.json {
@@ -311,6 +328,11 @@ pub struct ListWindows {
 }
 
 impl ListWindows {
+    /// Lists visible windows, optionally filtered by application.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the specified application is not found.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let windows = provider.list_windows(self.global.app.as_deref())?;
         for w in windows {
@@ -350,6 +372,12 @@ pub struct Ocr {
 }
 
 impl Ocr {
+    /// Runs OCR on a screenshot and prints recognized text with coordinates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if screen recording permission is denied,
+    /// or the target app/window is not found.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let ss_options: Option<ScreenshotOptions> = if self.no_screenshot {
             None

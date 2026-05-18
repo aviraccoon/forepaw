@@ -20,6 +20,11 @@ use crate::platform::ScreenshotOptions;
 ///
 /// Captures a screenshot, runs OCR on it, returns recognized text with
 /// bounding boxes in physical pixel coordinates.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ScreenRecordingDenied`] if screen capture fails,
+/// or [`ForepawError::AppNotFound`] if the target application is not found.
 pub fn ocr(
     app_name: Option<&str>,
     window: Option<&str>,

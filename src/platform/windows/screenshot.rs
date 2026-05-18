@@ -41,6 +41,11 @@ pub fn init_dpi_awareness() {
 /// Capture a screenshot of a specific window or the full screen.
 ///
 /// Returns the path to the saved PNG file.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the target application is not found,
+/// or [`ForepawError::ActionFailed`] if screen capture or file save fails.
 pub fn screenshot(app_name: Option<&str>, window: Option<&str>) -> Result<String, ForepawError> {
     let (rgba_pixels, width, height) = capture_pixels(app_name, window)?;
     save_pixels_to_temp(&rgba_pixels, width, height)
@@ -56,6 +61,11 @@ pub fn screenshot(app_name: Option<&str>, window: Option<&str>) -> Result<String
 /// Falls back to desktop DC capture if `PrintWindow` fails.
 ///
 /// For full-screen capture: uses desktop DC + `BitBlt`.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the target application is not found,
+/// or [`ForepawError::ActionFailed`] if both `PrintWindow` and desktop DC capture fail.
 pub fn capture_pixels(
     app_name: Option<&str>,
     _window: Option<&str>,
@@ -180,6 +190,10 @@ fn capture_print_window(
 }
 
 /// Save RGBA pixels to a temp PNG file. Returns the file path.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if PNG encoding or file writing fails.
 pub fn save_pixels_to_temp(
     rgba_pixels: &[u8],
     width: u32,

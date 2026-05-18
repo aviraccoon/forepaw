@@ -30,6 +30,10 @@ pub fn parse_region(s: &str) -> Option<Rect> {
 
 /// Resolve text from either positional argument or --text option.
 /// Errors if neither is provided or both are provided.
+///
+/// # Errors
+///
+/// Returns an error if neither source provides text, or both are provided.
 pub fn resolve_text<'a>(
     positional: Option<&'a str>,
     option: Option<&'a str>,

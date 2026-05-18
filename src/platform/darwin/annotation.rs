@@ -476,6 +476,10 @@ fn render_spotlight(
 ///
 /// Grid lines and axis labels use window-relative coordinates (logical pixels).
 /// Tick marks appear every `spacing` points along each edge.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the image cannot be loaded or saved.
 #[expect(clippy::too_many_lines, reason = "grid rendering")]
 pub fn render_grid(
     image_path: &str,
@@ -633,6 +637,11 @@ pub fn render_grid(
 // ---------------------------------------------------------------------------
 
 /// Render annotations onto a screenshot image.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the image cannot be loaded, drawn to,
+/// or saved to disk.
 pub fn render(
     image_path: &str,
     annotations: &[Annotation],

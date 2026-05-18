@@ -151,6 +151,11 @@ const GENERIC_ROLE_DESCRIPTIONS: &[&str] = &[
 // ---------------------------------------------------------------------------
 
 /// Walk the AX tree for the given app and return an `ElementTree`.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
 pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree, ForepawError> {
     let running_app = find_app(app_name)?;
 
@@ -230,6 +235,11 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
 }
 
 /// Re-walk the tree to resolve a ref's center position (for coordinate-based actions).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
+/// or [`ForepawError::ActionFailed`] if the element has no position or size.
 pub fn resolve_ref_position(ref_id: i32, app_name: &str) -> Result<Point, ForepawError> {
     let bounds = resolve_ref_bounds(ref_id, app_name)?;
     Ok(Point::new(
@@ -239,6 +249,11 @@ pub fn resolve_ref_position(ref_id: i32, app_name: &str) -> Result<Point, Forepa
 }
 
 /// Re-walk the tree to resolve a ref's bounding rect.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
+/// or [`ForepawError::ActionFailed`] if the element has no position or size.
 pub fn resolve_ref_bounds(ref_id: i32, app_name: &str) -> Result<Rect, ForepawError> {
     let element = resolve_ref_element(ref_id, app_name)?;
     let pos = get_element_position(element)
@@ -656,6 +671,10 @@ fn computed_name(
 // ---------------------------------------------------------------------------
 
 /// Re-walk the AX tree to find the `AXUIElement` at the given ref position.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree.
 pub fn resolve_ref_element(ref_id: i32, app_name: &str) -> Result<AXUIElementRef, ForepawError> {
     let running_app = find_app(app_name)?;
     let is_electron = is_electron_app(&running_app);

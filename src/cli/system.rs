@@ -10,6 +10,11 @@ pub struct Permissions {
 }
 
 impl Permissions {
+    /// Checks and reports accessibility and screen recording permissions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the current executable path cannot be determined.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let mut failed = false;
 

@@ -22,6 +22,12 @@ use crate::platform::ScreenshotOptions;
 ///
 /// Captures a 2x PNG screenshot for accuracy, runs Vision OCR,
 /// converts coordinates to window-relative logical pixels.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ScreenRecordingDenied`] if screen recording permission is missing,
+/// [`ForepawError::AppNotFound`] if the target application is not running,
+/// or [`ForepawError::WindowNotFound`] if the window filter doesn't match.
 pub fn ocr(
     app_name: Option<&str>,
     window: Option<&str>,
@@ -220,6 +226,11 @@ fn recognize_text(
 }
 
 /// Resolve OCR text to a window-relative center point.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the text is not found,
+/// or multiple matches exist without an explicit index.
 pub fn resolve_ocr_text(
     text: &str,
     app_name: &str,
@@ -269,6 +280,11 @@ pub fn resolve_ocr_text(
 }
 
 /// OCR-click: find text on screen and click it.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the text is not found in OCR results,
+/// or the underlying click fails.
 pub fn ocr_click(
     text: &str,
     app_name: &str,
@@ -300,6 +316,11 @@ pub fn ocr_click(
 }
 
 /// OCR-hover: find text on screen and hover at its position.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the text is not found in OCR results,
+/// or the underlying hover fails.
 pub fn ocr_hover(
     text: &str,
     app_name: &str,
@@ -324,6 +345,11 @@ pub fn ocr_hover(
 }
 
 /// Wait for text to appear on screen via OCR polling.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the text is not found before the timeout,
+/// or [`ForepawError::ScreenRecordingDenied`] if screen recording permission is missing.
 pub fn wait(
     text: &str,
     app_name: &str,

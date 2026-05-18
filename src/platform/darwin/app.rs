@@ -48,6 +48,11 @@ fn require_accessibility() -> Result<(), ForepawError> {
 
 /// Find a running application by exact name, bundle ID, or case-insensitive
 /// partial match (in that priority order).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if no matching process is found,
+/// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
 pub fn find_app(name: &str) -> Result<Retained<NSRunningApplication>, ForepawError> {
     require_accessibility()?;
     let workspace = objc2_app_kit::NSWorkspace::sharedWorkspace();
@@ -90,6 +95,10 @@ pub fn find_app(name: &str) -> Result<Retained<NSRunningApplication>, ForepawErr
 }
 
 /// List all running applications with regular activation policy.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::PermissionDenied`] if accessibility access is not granted.
 pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
     require_accessibility()?;
     let workspace = objc2_app_kit::NSWorkspace::sharedWorkspace();
@@ -154,6 +163,11 @@ impl ResolvedWindow {
 ///    - Match by window ID ("w-1234")
 ///    - Substring match on title (case-insensitive)
 /// 4. Default: prefer titled windows, then largest by area
+///
+/// # Errors
+///
+/// Returns [`ForepawError::WindowNotFound`] if no window matches the filter,
+/// or [`ForepawError::AmbiguousWindow`] if multiple windows match and none is preferred.
 pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, ForepawError> {
     require_accessibility()?;
     // SAFETY: CGWindowListCopyWindowInfo returns a CFArray the caller owns.
@@ -202,6 +216,11 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
 ///
 /// Returns an error if accessibility permission is not granted, since
 /// the window list would be incomplete without it.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::PermissionDenied`] if accessibility access is not granted,
+/// or [`ForepawError::AppNotFound`] if `app_name` is provided but no matching process is found.
 pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawError> {
     // SAFETY: FFI call with valid arguments.
     let window_list = unsafe {
@@ -295,6 +314,10 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
 // ---------------------------------------------------------------------------
 
 /// Convert window-relative coordinates to screen-absolute coordinates.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the process has no accessible windows.
 pub fn to_screen_point(point: &Point, pid: i32) -> Result<Point, ForepawError> {
     let resolved = find_window(pid, None)?;
     Ok(Point {
@@ -304,6 +327,10 @@ pub fn to_screen_point(point: &Point, pid: i32) -> Result<Point, ForepawError> {
 }
 
 /// Validate that a point is within the window bounds.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the point falls outside the window.
 pub fn validate_point_in_window(point: &Point, pid: i32) -> Result<(), ForepawError> {
     let resolved = find_window(pid, None)?;
     let w = resolved.bounds.width;

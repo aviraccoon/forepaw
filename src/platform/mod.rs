@@ -177,16 +177,50 @@ impl SnapshotOptions {
 /// implement it with their native APIs.
 pub trait DesktopProvider: Send + Sync {
     // Observation
+
+    /// Returns all running GUI applications.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::PermissionDenied`] if accessibility access is not granted.
     fn list_apps(&self) -> Result<Vec<AppInfo>, ForepawError>;
+
+    /// Returns visible windows, optionally filtered by application name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if `app` is provided but no matching
+    /// process is found.
     fn list_windows(&self, app: Option<&str>) -> Result<Vec<WindowInfo>, ForepawError>;
+
+    /// Walks the accessibility tree of the given application.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if the application is not running, or
+    /// [`ForepawError::PermissionDenied`] if accessibility access is not granted.
     fn snapshot(
         &self,
         app: &str,
         options: &SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError>;
 
+    /// Captures a screenshot, optionally annotated with element labels.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if the target application is not running,
+    /// [`ForepawError::ScreenRecordingDenied`] if screen recording permission is missing,
+    /// or [`ForepawError::StaleRef`] if a ref filter targets a non-existent element.
     fn screenshot(&self, params: &ScreenshotParams) -> Result<ScreenshotResult, ForepawError>;
 
+    /// Runs OCR on a screenshot of the target app/window.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if the target application is not running,
+    /// [`ForepawError::ScreenRecordingDenied`] if screen recording permission is missing,
+    /// or [`ForepawError::WindowNotFound`] if a window filter doesn't match.
     fn ocr(
         &self,
         app: Option<&str>,
@@ -196,18 +230,42 @@ pub trait DesktopProvider: Send + Sync {
     ) -> Result<OCROutput, ForepawError>;
 
     // Element-based actions
+
+    /// Clicks an element identified by its ref from a prior snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if the application is not running,
+    /// [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
+    /// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
     fn click_ref(
         &self,
         r#ref: ElementRef,
         app: &str,
         options: &ClickOptions,
     ) -> Result<ActionResult, ForepawError>;
+
+    /// Clicks at absolute screen coordinates within the target app's window.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if the application is not running,
+    /// [`ForepawError::WindowNotFound`] if the window cannot be resolved,
+    /// or [`ForepawError::ActionFailed`] if the point falls outside the window bounds.
     fn click_at_point(
         &self,
         point: Point,
         app: &str,
         options: &ClickOptions,
     ) -> Result<ActionResult, ForepawError>;
+
+    /// Clicks the most visually salient point within a bounding region.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if the application is not running,
+    /// [`ForepawError::WindowNotFound`] if the window cannot be resolved,
+    /// or [`ForepawError::ActionFailed`] if saliency analysis fails.
     fn click_region(
         &self,
         region: Rect,
@@ -216,13 +274,33 @@ pub trait DesktopProvider: Send + Sync {
         options: &ClickOptions,
     ) -> Result<ActionResult, ForepawError>;
 
+    /// Hovers over an element identified by its ref.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
+    /// or [`ForepawError::ActionFailed`] if the element has no position or size.
     fn hover_ref(&self, r#ref: ElementRef, app: &str) -> Result<ActionResult, ForepawError>;
+
+    /// Moves the cursor to absolute screen coordinates.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if the platform input API rejects the event.
     fn hover_at_point(
         &self,
         point: Point,
         app: Option<&str>,
         smooth: bool,
     ) -> Result<ActionResult, ForepawError>;
+
+    /// Hovers over the most visually salient point within a bounding region.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if the application is not running,
+    /// [`ForepawError::WindowNotFound`] if the window cannot be resolved,
+    /// or [`ForepawError::ActionFailed`] if saliency analysis fails.
     fn hover_region(
         &self,
         region: Rect,
@@ -230,6 +308,13 @@ pub trait DesktopProvider: Send + Sync {
         window: Option<&str>,
         smooth: bool,
     ) -> Result<ActionResult, ForepawError>;
+
+    /// Hovers at the position of OCR-recognized text.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if the text is not found in OCR results,
+    /// or if multiple matches exist but no index is specified.
     fn ocr_hover(
         &self,
         text: &str,
@@ -238,15 +323,41 @@ pub trait DesktopProvider: Send + Sync {
         index: Option<usize>,
     ) -> Result<ActionResult, ForepawError>;
 
+    /// Types text into an element identified by its ref via the accessibility API.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
+    /// or [`ForepawError::ActionFailed`] if the element does not support text input.
     fn type_ref(
         &self,
         r#ref: ElementRef,
         text: &str,
         app: &str,
     ) -> Result<ActionResult, ForepawError>;
+
+    /// Types text via simulated keyboard events into whatever has focus.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if the platform input API rejects the events.
     fn keyboard_type(&self, text: &str, app: Option<&str>) -> Result<ActionResult, ForepawError>;
+
+    /// Presses a key combination (e.g. Cmd+S) via simulated keyboard events.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if the key combination is invalid
+    /// or the platform input API rejects the events.
     fn press(&self, keys: &KeyCombo, app: Option<&str>) -> Result<ActionResult, ForepawError>;
 
+    /// Scrolls the content of the target window.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if the application is not running,
+    /// [`ForepawError::StaleRef`] if a ref is provided but no longer exists in the tree,
+    /// or [`ForepawError::ActionFailed`] if the scroll event cannot be posted.
     fn scroll(
         &self,
         direction: &str,
@@ -257,12 +368,25 @@ pub trait DesktopProvider: Send + Sync {
         at: Option<Point>,
     ) -> Result<ActionResult, ForepawError>;
 
+    /// Drags along a path of screen coordinates.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if the path is too short,
+    /// or the platform input API rejects the drag events.
     fn drag_path(
         &self,
         path: &[Point],
         options: &DragOptions,
         app: Option<&str>,
     ) -> Result<ActionResult, ForepawError>;
+
+    /// Drags from one element to another, identified by refs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::StaleRef`] if either ref no longer exists in the tree,
+    /// or [`ForepawError::ActionFailed`] if an element has no position or size.
     fn drag_refs(
         &self,
         from: ElementRef,
@@ -271,6 +395,12 @@ pub trait DesktopProvider: Send + Sync {
         options: &DragOptions,
     ) -> Result<ActionResult, ForepawError>;
 
+    /// Clicks at the position of OCR-recognized text.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if the text is not found in OCR results,
+    /// or if multiple matches exist but no index is specified.
     fn ocr_click(
         &self,
         text: &str,
@@ -280,6 +410,12 @@ pub trait DesktopProvider: Send + Sync {
         index: Option<usize>,
     ) -> Result<ActionResult, ForepawError>;
 
+    /// Polls OCR until the given text appears or the timeout elapses.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if the text is not found before the timeout,
+    /// or [`ForepawError::ScreenRecordingDenied`] if screen recording permission is missing.
     fn wait(
         &self,
         text: &str,
@@ -290,7 +426,21 @@ pub trait DesktopProvider: Send + Sync {
     ) -> Result<ActionResult, ForepawError>;
 
     // Utility
+
+    /// Resolves an element ref to its center point in screen coordinates.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
+    /// or [`ForepawError::ActionFailed`] if the element has no position or size.
     fn resolve_ref_position(&self, r#ref: ElementRef, app: &str) -> Result<Point, ForepawError>;
+
+    /// Resolves an element ref to its bounding rectangle in screen coordinates.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
+    /// or [`ForepawError::ActionFailed`] if the element has no position or size.
     fn resolve_ref_bounds(&self, r#ref: ElementRef, app: &str) -> Result<Rect, ForepawError>;
 
     // Permissions

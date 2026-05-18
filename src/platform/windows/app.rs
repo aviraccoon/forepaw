@@ -29,6 +29,10 @@ use crate::platform::{AppInfo, WindowInfo};
 /// can share the same host process but have separate windows with distinct titles
 /// (e.g. "Calculator", "Settings"). For these, we emit one `AppInfo` per window
 /// so each app appears separately in the listing.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::PermissionDenied`] if accessibility access is not granted.
 pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
     let windows = collect_visible_windows();
 
@@ -81,6 +85,10 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
 ///
 /// App name matching checks both the window title and the owning process
 /// executable name (case-insensitive substring match).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if `app_name` is provided but no matching window is found.
 pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawError> {
     let entries = collect_visible_windows();
 
@@ -209,6 +217,10 @@ unsafe extern "system" fn enum_window_callback(hwnd: HWND, lparam: LPARAM) -> BO
 /// 1. Windows whose title matches the query (user explicitly targets by name)
 /// 2. Non-desktop windows with a title (avoid "Program Manager" shell window)
 /// 3. Largest window by area as tiebreaker
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if no window matches the query.
 pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
     let entries = collect_visible_windows();
     let filter_lower = app_name.to_lowercase();

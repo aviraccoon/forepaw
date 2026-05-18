@@ -89,6 +89,10 @@ struct TreePruning {
 // ---------------------------------------------------------------------------
 
 /// Walk the UIA tree for the given app and return an `ElementTree`.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running.
 pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree, ForepawError> {
     // Find the target window
     let (hwnd, _) = app::find_app_hwnd(app_name)?;

@@ -29,6 +29,13 @@ pub struct Click {
 }
 
 impl Click {
+    /// Dispatches the click to the appropriate provider method.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `--app` is missing for ref/coordinate targets,
+    /// or if the underlying provider call fails (app not found, stale ref,
+    /// point outside window, etc.).
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let options = ClickOptions::new(
             if self.right {
@@ -102,6 +109,12 @@ pub struct Type {
 }
 
 impl Type {
+    /// Resolves the target ref and types text via the accessibility value API.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the ref format is invalid, `--app` is missing,
+    /// or the element does not support text input.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
@@ -157,6 +170,11 @@ pub struct KeyboardType {
 }
 
 impl KeyboardType {
+    /// Types text via simulated keyboard events.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no text is provided, or the platform input API fails.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
@@ -197,6 +215,11 @@ pub struct Press {
 }
 
 impl Press {
+    /// Presses a key combination (e.g. Cmd+S).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the key combination is invalid or the platform input API fails.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let key_combo = KeyCombo::parse(&self.combo);
         let result = provider.press(&key_combo, self.app.as_deref())?;
@@ -248,6 +271,12 @@ pub struct OcrClick {
 }
 
 impl OcrClick {
+    /// Finds text via OCR and clicks its position.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no text is provided, the text is not found,
+    /// or multiple matches exist without `--index`.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
@@ -307,6 +336,12 @@ pub struct Hover {
 }
 
 impl Hover {
+    /// Dispatches the hover to the appropriate provider method.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `--app` is missing for ref/region targets,
+    /// or the underlying provider call fails.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let result = if let Some(element_ref) = ElementRef::parse(&self.target) {
             let app = self
@@ -374,6 +409,12 @@ pub struct Wait {
 }
 
 impl Wait {
+    /// Polls OCR until the given text appears or the timeout elapses.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `--app` is missing, the text is not found before
+    /// the timeout, or screen recording permission is denied.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
@@ -429,6 +470,12 @@ pub struct Scroll {
 }
 
 impl Scroll {
+    /// Scrolls content in the target window.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `--app` is missing, the direction is invalid,
+    /// or a ref/coordinate target cannot be resolved.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let valid = ["up", "down", "left", "right"];
         if !valid.contains(&self.direction.as_str()) {
@@ -527,6 +574,12 @@ pub struct Drag {
 }
 
 impl Drag {
+    /// Dispatches a drag between coordinates or element refs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `--app` is missing for ref-based drag,
+    /// coordinate arguments are malformed, or the underlying provider call fails.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let options = DragOptions {
             steps: self.steps.unwrap_or(30),
@@ -656,6 +709,12 @@ pub struct Batch {
 }
 
 impl Batch {
+    /// Splits the batch string on `;;` and executes each subcommand sequentially.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error on the first subcommand that fails. Earlier subcommands'
+    /// side effects are not rolled back.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
         let joined = self.args.join(" ");
         let actions: Vec<&str> = joined

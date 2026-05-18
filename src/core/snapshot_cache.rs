@@ -11,6 +11,10 @@ impl SnapshotCache {
     }
 
     /// Save rendered snapshot text for an app.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error if the cache directory cannot be created or written.
     pub fn save(&self, app: &str, text: &str) -> std::io::Result<()> {
         let path = Self::cache_path(app);
         fs::write(&path, text)

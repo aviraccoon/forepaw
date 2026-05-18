@@ -18,6 +18,10 @@ use objc2::rc::Retained;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
 
 /// Activate an app and wait for it to come to the foreground.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running.
 pub fn activate_app(app_name: &str) -> Result<(Retained<NSRunningApplication>, i32), ForepawError> {
     let running_app = app::find_app(app_name)?;
     let pid = running_app.processIdentifier();
@@ -70,6 +74,10 @@ unsafe fn post_mouse_event(
 }
 
 /// Move the cursor to a screen point (teleport, no intermediate events).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the CG event post fails.
 pub fn move_mouse_to(point: CGPointFFI) -> Result<(), ForepawError> {
     // SAFETY: mouse moved event has no preconditions beyond valid coordinates.
     unsafe {
@@ -130,6 +138,10 @@ fn smooth_move_mouse(
 }
 
 /// Perform a mouse click at a screen point.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the CG event post fails.
 pub fn perform_mouse_click(
     point: CGPointFFI,
     button: MouseButton,
@@ -166,6 +178,10 @@ pub fn perform_mouse_click(
 }
 
 /// Click an `AXUIElement`. Tries `AXPress` first, falls back to mouse click at center.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if neither `AXPress` nor coordinate click succeeds.
 pub fn click_element(
     element: ffi::AXUIElementRef,
     options: &ClickOptions,
@@ -254,6 +270,10 @@ pub fn click_element(
 /// Type a string character-by-character via `CGEvent` keyboard events.
 /// Inter-character delay is essential for Electron apps (Discord, Slack)
 /// which drop characters if events arrive too fast.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if a CG keyboard event post fails.
 pub fn type_via_keyboard(text: &str) -> Result<(), ForepawError> {
     #[expect(
         clippy::multiple_unsafe_ops_per_block,
@@ -290,6 +310,11 @@ pub fn type_via_keyboard(text: &str) -> Result<(), ForepawError> {
 
 /// Set a value on an AX element. Tries `AXValue` first, falls back to
 /// `AXRaise` + `AXFocus` + keyboard type.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the value cannot be set and the
+/// keyboard fallback also fails.
 pub fn set_value_on_element(
     element: ffi::AXUIElementRef,
     value: &str,
@@ -341,6 +366,11 @@ pub fn set_value_on_element(
 }
 
 /// Press a key combo (modifiers + key) via `CGEvent`.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the key code cannot be resolved
+/// or the CG event post fails.
 pub fn press_via_keyboard(combo: &KeyCombo) -> Result<(), ForepawError> {
     let key_code = key_code::virtual_key_code(&combo.key).unwrap_or(0);
     let flags = modifier_flags(&combo.modifiers);
@@ -621,6 +651,12 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
 // ---------------------------------------------------------------------------
 
 /// Click a ref in a specific app.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
+/// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
 pub fn click_ref(
     r#ref: crate::core::element_tree::ElementRef,
     app_name: &str,
@@ -632,6 +668,12 @@ pub fn click_ref(
 }
 
 /// Click at a screen point (window-relative when app is specified).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// [`ForepawError::WindowNotFound`] if the window cannot be resolved,
+/// or [`ForepawError::ActionFailed`] if the point falls outside the window.
 pub fn click_at_point(
     point: Point,
     app_name: &str,
@@ -658,6 +700,12 @@ pub fn click_at_point(
 }
 
 /// Click at the center of a region (saliency-detected area).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// [`ForepawError::ActionFailed`] if saliency analysis produces no click point,
+/// or the point falls outside the window.
 pub fn click_region(
     region: crate::core::types::Rect,
     app_name: &str,
@@ -686,6 +734,11 @@ pub fn click_region(
 }
 
 /// Hover over an element ref.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
+/// or [`ForepawError::ActionFailed`] if the element has no position or size.
 pub fn hover_ref(
     r#ref: crate::core::element_tree::ElementRef,
     app_name: &str,
@@ -713,6 +766,11 @@ pub fn hover_ref(
 
 /// Hover at a point. If app is specified, coordinates are window-relative.
 /// Otherwise screen-absolute.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the app is specified but the
+/// point falls outside the window, or the mouse move fails.
 pub fn hover_at_point(
     point: Point,
     app_name: Option<&str>,
@@ -745,6 +803,11 @@ pub fn hover_at_point(
 }
 
 /// Hover at the center of a region.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if saliency analysis produces no point,
+/// or the point falls outside the window.
 pub fn hover_region(
     region: crate::core::types::Rect,
     app_name: &str,
@@ -759,6 +822,11 @@ pub fn hover_region(
 }
 
 /// Type text into an element ref (set value or keyboard fallback).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
+/// or [`ForepawError::ActionFailed`] if the value cannot be set.
 pub fn type_ref(
     r#ref: crate::core::element_tree::ElementRef,
     text: &str,
@@ -770,6 +838,10 @@ pub fn type_ref(
 }
 
 /// Type text via keyboard into whatever is focused.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the platform input API fails.
 pub fn keyboard_type(text: &str, app_name: Option<&str>) -> Result<ActionResult, ForepawError> {
     if let Some(app_name) = app_name {
         activate_app(app_name)?;
@@ -779,6 +851,11 @@ pub fn keyboard_type(text: &str, app_name: Option<&str>) -> Result<ActionResult,
 }
 
 /// Press a key combo, optionally activating an app first.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the app is specified but not running,
+/// or [`ForepawError::ActionFailed`] if the key event cannot be posted.
 pub fn press_key(keys: &KeyCombo, app_name: Option<&str>) -> Result<ActionResult, ForepawError> {
     if let Some(app_name) = app_name {
         activate_app(app_name)?;
@@ -788,6 +865,12 @@ pub fn press_key(keys: &KeyCombo, app_name: Option<&str>) -> Result<ActionResult
 }
 
 /// Scroll within an app's window.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// [`ForepawError::StaleRef`] if a ref is provided but no longer exists,
+/// or [`ForepawError::ActionFailed`] if the scroll event cannot be posted.
 pub fn scroll(
     direction: &str,
     amount: u32,
@@ -876,6 +959,11 @@ pub fn scroll(
 }
 
 /// Drag along a path of points.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the path is too short,
+/// the app is not found, or a drag event fails.
 pub fn drag_path(
     path: &[Point],
     options: &DragOptions,
@@ -928,6 +1016,11 @@ pub fn drag_path(
 }
 
 /// Drag from one element to another.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::StaleRef`] if either ref no longer exists,
+/// or [`ForepawError::ActionFailed`] if an element has no position/size.
 pub fn drag_refs(
     from_ref: crate::core::element_tree::ElementRef,
     to_ref: crate::core::element_tree::ElementRef,
