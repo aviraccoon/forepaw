@@ -145,7 +145,7 @@ pub struct AXValueRef(pub *const c_void);
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[allow(clippy::enum_variant_names)] // FFI bindings match Apple's naming
+#[expect(clippy::enum_variant_names, reason = "Apple API naming")]
 pub enum AXValueType {
     CGPoint = 1,
     CGSize = 2,

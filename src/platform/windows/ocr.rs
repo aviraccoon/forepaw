@@ -198,7 +198,9 @@ fn block_on_async<T: windows::core::RuntimeType + 'static>(
 
     let handler = windows_future::AsyncOperationCompletedHandler::new(move |_info, _status| {
         unsafe {
-            let _ = SetEvent(windows::Win32::Foundation::HANDLE(event_raw as *mut _));
+            SetEvent(windows::Win32::Foundation::HANDLE(event_raw as *mut _))
+                .ok()
+                .unwrap_or_default();
         }
         Ok(())
     });
@@ -208,8 +210,8 @@ fn block_on_async<T: windows::core::RuntimeType + 'static>(
 
     // Wait for completion (10 second timeout)
     unsafe {
-        let _ = WaitForSingleObject(event, 10000);
-        let _ = CloseHandle(event);
+        let _wait: u32 = WaitForSingleObject(event, 10000).0;
+        CloseHandle(event).ok().unwrap_or_default();
     }
 
     op.GetResults()

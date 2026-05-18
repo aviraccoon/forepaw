@@ -439,7 +439,7 @@ fn render_spotlight(
 ///
 /// Grid lines and axis labels use window-relative coordinates (logical pixels).
 /// Tick marks appear every `spacing` points along each edge.
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines, reason = "grid rendering")]
 pub fn render_grid(
     image_path: &str,
     spacing: u32,
@@ -631,7 +631,7 @@ fn load_image_and_create_context(
     image_path: &str,
 ) -> Result<(usize, usize, CGContextRef, CGColorSpaceRef, ffi::CGImageRef), AnnotationError> {
     let c_path = CString::new(image_path)
-        .map_err(|_| AnnotationError::ImageLoadFailed(image_path.to_string()))?;
+        .map_err(|_e| AnnotationError::ImageLoadFailed(image_path.to_string()))?;
 
     unsafe {
         let data_provider = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());

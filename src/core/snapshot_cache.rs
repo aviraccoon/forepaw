@@ -26,7 +26,7 @@ impl SnapshotCache {
     /// Remove cached snapshot for an app.
     pub fn clear(&self, app: &str) {
         let path = Self::cache_path(app);
-        let _ = fs::remove_file(path);
+        fs::remove_file(path).ok();
     }
 
     fn cache_path(app: &str) -> PathBuf {

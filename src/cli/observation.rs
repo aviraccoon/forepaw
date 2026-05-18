@@ -25,7 +25,10 @@ pub struct GlobalOptions {
 
 /// Accessibility tree with element refs.
 #[derive(clap::Args)]
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "CLI flags accumulate booleans"
+)]
 #[command(about = "Accessibility tree with element refs")]
 pub struct Snapshot {
     #[command(flatten)]
@@ -114,7 +117,7 @@ impl Snapshot {
         }
 
         // Always cache for future diffs
-        let _ = cache.save(app, &rendered);
+        cache.save(app, &rendered).ok();
 
         Ok(())
     }

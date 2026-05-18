@@ -70,7 +70,7 @@ fn control_type_to_role(control_type: i32) -> &'static str {
 /// (subsequent calls return `S_FALSE` but are harmless).
 pub fn init_com() {
     unsafe {
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        CoInitializeEx(None, COINIT_MULTITHREADED).ok().ok();
     }
 }
 

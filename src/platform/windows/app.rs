@@ -134,10 +134,12 @@ fn collect_visible_windows() -> Vec<WindowEntry> {
     let mut entries: Vec<WindowEntry> = Vec::new();
 
     unsafe {
-        let _ = EnumWindows(
+        EnumWindows(
             Some(enum_window_callback),
             LPARAM(&raw mut entries as isize),
-        );
+        )
+        .ok()
+        .unwrap_or_default();
     }
 
     entries
@@ -244,7 +246,7 @@ pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
 /// Bring a window to the foreground.
 pub fn activate_app(hwnd: HWND) {
     unsafe {
-        let _ = SetForegroundWindow(hwnd);
+        SetForegroundWindow(hwnd).ok().unwrap_or_default();
     }
     std::thread::sleep(std::time::Duration::from_millis(300));
 }

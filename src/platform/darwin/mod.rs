@@ -8,7 +8,10 @@
 //! - Vision framework for OCR
 //! - `screencapture` CLI for screenshots
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "FFI bindings used from other modules after cfg gate"
+)]
 mod ffi;
 
 pub mod annotation;

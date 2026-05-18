@@ -66,7 +66,7 @@ pub fn ocr(
     let image_height = rep.pixelsHigh() as f64;
 
     let c_path = std::ffi::CString::new(screenshot_result.path.clone())
-        .map_err(|_| ForepawError::ActionFailed("Invalid screenshot path".into()))?;
+        .map_err(|_e| ForepawError::ActionFailed("Invalid screenshot path".into()))?;
 
     // Get CGImage from the NSImage representation
     let cg_image = unsafe {
@@ -117,7 +117,7 @@ pub fn ocr(
             )?,
         )
     } else {
-        let _ = std::fs::remove_file(&screenshot_result.path);
+        std::fs::remove_file(&screenshot_result.path).ok();
         None
     };
 
@@ -220,14 +220,15 @@ pub fn resolve_ocr_text(
     if matches.len() > 1 && index.is_none() {
         let mut listing = format!("Multiple matches for '{text}':\n");
         for (i, m) in matches.iter().enumerate() {
-            let _ = writeln!(
+            writeln!(
                 listing,
                 "  --index {}: '{}' at {},{}",
                 i + 1,
                 m.text,
                 m.center().0 as i32,
                 m.center().1 as i32
-            );
+            )
+            .ok();
         }
         listing += "Use --index N to pick one.";
         return Err(ForepawError::ActionFailed(listing));

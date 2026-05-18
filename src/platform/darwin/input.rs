@@ -21,7 +21,10 @@ use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
 pub fn activate_app(app_name: &str) -> Result<(Retained<NSRunningApplication>, i32), ForepawError> {
     let running_app = app::find_app(app_name)?;
     let pid = running_app.processIdentifier();
-    #[allow(deprecated)]
+    #[expect(
+        deprecated,
+        reason = "activateWithOptions deprecated in macOS 14, no replacement for ignoring-other-apps behavior"
+    )]
     running_app.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
     thread::sleep(Duration::from_millis(300));
     Ok((running_app, pid))
@@ -275,6 +278,10 @@ pub fn set_value_on_element(
     let cf_value = {
         let ns_string = objc2_foundation::NSString::from_str(value);
         let cf_str = objc2::rc::Retained::as_ptr(&ns_string) as ffi::CFTypeRef;
+        #[expect(
+            clippy::mem_forget,
+            reason = "transfer ownership to AXUIElementSetAttributeValue"
+        )]
         std::mem::forget(ns_string);
         cf_str
     };
@@ -373,14 +380,15 @@ fn post_scroll_event(delta_y: i32, delta_x: i32) -> Result<(), ForepawError> {
 /// Move the mouse to the scroll target point before scrolling.
 /// This ensures hover effects are present for boundary detection.
 fn move_mouse_to_scroll_target(point: CGPointFFI) {
-    let _ = unsafe {
+    unsafe {
         post_mouse_event(
             ffi::K_CG_EVENT_MOUSE_MOVED,
             point,
             ffi::K_CG_MOUSE_BUTTON_LEFT,
             None,
         )
-    };
+        .ok();
+    }
     thread::sleep(Duration::from_millis(50));
 }
 
@@ -738,7 +746,7 @@ pub fn type_ref(
     text: &str,
     app_name: &str,
 ) -> Result<ActionResult, ForepawError> {
-    let _ = activate_app(app_name)?;
+    activate_app(app_name)?;
     let element = snapshot::resolve_ref_element(r#ref.id, app_name)?;
     set_value_on_element(element, text)
 }
@@ -746,7 +754,7 @@ pub fn type_ref(
 /// Type text via keyboard into whatever is focused.
 pub fn keyboard_type(text: &str, app_name: Option<&str>) -> Result<ActionResult, ForepawError> {
     if let Some(app_name) = app_name {
-        let _ = activate_app(app_name)?;
+        activate_app(app_name)?;
     }
     type_via_keyboard(text)?;
     Ok(ActionResult::ok_msg(format!("typed {} chars", text.len())))
@@ -755,7 +763,7 @@ pub fn keyboard_type(text: &str, app_name: Option<&str>) -> Result<ActionResult,
 /// Press a key combo, optionally activating an app first.
 pub fn press_key(keys: &KeyCombo, app_name: Option<&str>) -> Result<ActionResult, ForepawError> {
     if let Some(app_name) = app_name {
-        let _ = activate_app(app_name)?;
+        activate_app(app_name)?;
     }
     press_via_keyboard(keys)?;
     Ok(ActionResult::ok())

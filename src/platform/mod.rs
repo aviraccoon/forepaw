@@ -137,7 +137,10 @@ pub struct ScreenshotResult {
 
 /// Options for snapshot (AX tree walk).
 #[derive(Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "snapshot options accumulate flags"
+)]
 pub struct SnapshotOptions {
     pub interactive_only: bool,
     pub max_depth: usize,

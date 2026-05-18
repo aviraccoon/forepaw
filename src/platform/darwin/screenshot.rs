@@ -63,7 +63,7 @@ fn crop_image(
     rect: (i32, i32, i32, i32),
 ) -> Result<(), ForepawError> {
     let c_path = CString::new(input_path)
-        .map_err(|_| ForepawError::ActionFailed(format!("Invalid path: {input_path}")))?;
+        .map_err(|_e| ForepawError::ActionFailed(format!("Invalid path: {input_path}")))?;
     unsafe {
         let data_provider = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
         if data_provider.is_null() {
@@ -205,10 +205,10 @@ pub fn post_process_screenshot(
         }
 
         if scaled_path != raw_path {
-            let _ = fs::remove_file(&scaled_path);
+            fs::remove_file(&scaled_path).ok();
         }
         if output_path != raw_path {
-            let _ = fs::remove_file(raw_path);
+            fs::remove_file(raw_path).ok();
         }
         return Ok(output_path);
     }
@@ -252,7 +252,7 @@ pub fn post_process_screenshot(
     }
 
     if output_path != raw_path {
-        let _ = fs::remove_file(raw_path);
+        fs::remove_file(raw_path).ok();
     }
 
     Ok(output_path)
@@ -261,7 +261,7 @@ pub fn post_process_screenshot(
 /// Get the pixel width of an image file via CoreGraphics.
 fn image_pixel_width(path: &str) -> Result<usize, ForepawError> {
     let c_path = CString::new(path.to_string())
-        .map_err(|_| ForepawError::ActionFailed("Invalid path".into()))?;
+        .map_err(|_e| ForepawError::ActionFailed("Invalid path".into()))?;
     unsafe {
         let dp = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
         if dp.is_null() {
@@ -302,7 +302,7 @@ pub fn apply_crop(
             crop_rect.3 as i32,
         ),
     )?;
-    let _ = fs::remove_file(input_path);
+    fs::remove_file(input_path).ok();
     Ok(cropped_path)
 }
 
@@ -322,7 +322,7 @@ pub fn backing_scale_factor() -> f64 {
 /// Take a screenshot of an app window (or full screen), with optional annotations.
 ///
 /// This is the main entry point called from the `DesktopProvider` trait impl.
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines, reason = "screenshot pipeline")]
 pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, ForepawError> {
     // Check screen recording permission
     if unsafe { ffi::CGPreflightScreenCaptureAccess() == 0 } {
@@ -338,7 +338,10 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
         let (_running_app, pid) = {
             let running_app = app::find_app(app_name)?;
             let pid = running_app.processIdentifier();
-            #[allow(deprecated)]
+            #[expect(
+                deprecated,
+                reason = "activateWithOptions deprecated in macOS 14, no replacement for ignoring-other-apps behavior"
+            )]
             running_app.activateWithOptions(
                 objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
             );
@@ -447,7 +450,7 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     )
     .map_err(|e| ForepawError::ActionFailed(e.to_string()))?;
 
-    let _ = fs::remove_file(&raw_path);
+    fs::remove_file(&raw_path).ok();
 
     // Crop the annotated image if requested
     let mut current_annotated = annotated_path;
@@ -512,7 +515,7 @@ fn render_plain(
             origin_offset,
         )
         .map_err(|e| ForepawError::ActionFailed(e.to_string()))?;
-        let _ = fs::remove_file(&current_path);
+        fs::remove_file(&current_path).ok();
         current_path = grid_path;
     }
 

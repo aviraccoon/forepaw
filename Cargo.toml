@@ -72,31 +72,24 @@ cast_sign_loss             = "allow"  # FFI: i64 -> usize for counts
 missing_errors_doc         = "allow"
 
 # -- Cherry-picked restriction lints --------------------------------------
-# All start as allow. Toggle to warn -> deny as code is cleaned up.
+# All start as allow. Toggle to warn as code is cleaned up.
 
 # Don't Panic
 string_slice              = "allow"
 indexing_slicing          = "allow"
 unwrap_used               = "allow"
-panic                     = "allow"
-todo                      = "allow"
-unimplemented             = "allow"
-
-# Don't Fail Silently
-let_underscore_must_use   = "allow"
-map_err_ignore            = "allow"
+panic                     = "warn"
+todo                      = "warn"
+unimplemented             = "warn"
 
 # Unsafe / Memory Discipline
 undocumented_unsafe_blocks     = "allow"
 multiple_unsafe_ops_per_block  = "allow"
-unnecessary_safety_doc         = "allow"
-unnecessary_safety_comment     = "allow"
-mem_forget                     = "allow"
-
-# Lint Suppression Guardrails
-allow_attributes                 = "allow"
-allow_attributes_without_reason = "allow"
+unnecessary_safety_doc         = "warn"
+unnecessary_safety_comment     = "warn"
+mem_forget                     = "warn"
 
 # Tripwires (zero warnings currently)
 dbg_macro   = "warn"
+let_underscore_must_use   = "warn"
 rc_mutex    = "warn"

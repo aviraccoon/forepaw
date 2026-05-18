@@ -150,9 +150,11 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
     let running_app = find_app(app_name)?;
 
     // Activate the app so the AX tree matches what action commands will see.
-    // Activate the app so the AX tree matches what action commands will see.
     // Some apps (browsers) only expose web content when active.
-    #[allow(deprecated)]
+    #[expect(
+        deprecated,
+        reason = "activateWithOptions deprecated in macOS 14, no replacement for ignoring-other-apps behavior"
+    )]
     running_app.activateWithOptions(
         objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
     );

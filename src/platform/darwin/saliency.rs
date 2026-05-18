@@ -13,7 +13,7 @@ use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI, CGSizeFFI};
 ///
 /// Returns window-relative coordinates (accounting for region offset),
 /// or `None` if no salient pixels are found.
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines, reason = "saliency algorithm")]
 #[must_use]
 pub fn find_target(image_path: &str, region: &Rect, scale_factor: f64) -> Option<Point> {
     let c_path = CString::new(image_path).ok()?;

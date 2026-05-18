@@ -31,7 +31,7 @@ pub fn init_dpi_awareness() {
     unsafe {
         // PER_MONITOR_AWARE_V2 = -4
         let ctx = DPI_AWARENESS_CONTEXT(-4_isize as *mut _);
-        let _ = SetProcessDpiAwarenessContext(ctx);
+        SetProcessDpiAwarenessContext(ctx).ok().unwrap_or_default();
     }
 }
 
@@ -115,8 +115,10 @@ fn capture_print_window(
         if !ok.as_bool() {
             // PrintWindow failed -- clean up and let caller fall back
             SelectObject(hdc_mem, old_bitmap);
-            let _ = DeleteObject(HGDIOBJ::from(h_bitmap));
-            let _ = DeleteDC(hdc_mem);
+            DeleteObject(HGDIOBJ::from(h_bitmap))
+                .ok()
+                .unwrap_or_default();
+            DeleteDC(hdc_mem).ok().unwrap_or_default();
             ReleaseDC(None, hdc);
             return Err(());
         }
@@ -147,8 +149,10 @@ fn capture_print_window(
         );
 
         SelectObject(hdc_mem, old_bitmap);
-        let _ = DeleteObject(HGDIOBJ::from(h_bitmap));
-        let _ = DeleteDC(hdc_mem);
+        DeleteObject(HGDIOBJ::from(h_bitmap))
+            .ok()
+            .unwrap_or_default();
+        DeleteDC(hdc_mem).ok().unwrap_or_default();
         ReleaseDC(None, hdc);
 
         if result == 0 {
@@ -248,8 +252,10 @@ fn capture_region_rgba(
 
         // Cleanup GDI objects
         SelectObject(hdc_mem, old_bitmap);
-        let _ = DeleteObject(HGDIOBJ::from(h_bitmap));
-        let _ = DeleteDC(hdc_mem);
+        DeleteObject(HGDIOBJ::from(h_bitmap))
+            .ok()
+            .unwrap_or_default();
+        DeleteDC(hdc_mem).ok().unwrap_or_default();
 
         if result == 0 {
             return Err(ForepawError::ActionFailed("GetDIBits failed".into()));
@@ -272,7 +278,7 @@ fn save_png(rgba_pixels: &[u8], width: u32, height: u32, path: &str) -> Result<(
 
     // Create parent directory if needed
     if let Some(parent) = Path::new(path).parent() {
-        let _ = fs::create_dir_all(parent);
+        fs::create_dir_all(parent).ok();
     }
 
     img.save(path)

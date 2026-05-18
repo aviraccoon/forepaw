@@ -328,6 +328,10 @@ pub fn enable_electron_accessibility(pid: i32) {
     let cf_val = Retained::as_ptr(&val) as CFTypeRef;
     // Prevent Drop -- the AX API doesn't retain it, but we need it alive
     // through the AXUIElementSetAttributeValue call.
+    #[expect(
+        clippy::mem_forget,
+        reason = "keep NSNumber alive through AX call, Electron path unverified"
+    )]
     std::mem::forget(val);
     unsafe {
         AXUIElementSetAttributeValue(app_element, attr_name, cf_val);
@@ -656,6 +660,10 @@ pub fn cf_string_from_str(s: &str) -> CFStringRef {
     let ns = NSString::from_str(s);
     let ptr = Retained::as_ptr(&ns) as CFStringRef;
     // Prevent Drop from releasing -- caller takes ownership via CFRelease
+    #[expect(
+        clippy::mem_forget,
+        reason = "transfer ownership to caller via CFRelease"
+    )]
     std::mem::forget(ns);
     ptr
 }
