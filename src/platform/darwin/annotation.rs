@@ -51,8 +51,11 @@ struct AnnotationColor {
 impl AnnotationColor {
     fn new(color_space: CGColorSpaceRef, bg: [f64; 4], bd: [f64; 4], tx: [f64; 4]) -> Self {
         Self {
+            // SAFETY: CGColorCreate with valid color space and RGBA array.
             background: unsafe { ffi::CGColorCreate(color_space, bg.as_ptr()) },
+            // SAFETY: CGColorCreate with valid color space and RGBA array.
             border: unsafe { ffi::CGColorCreate(color_space, bd.as_ptr()) },
+            // SAFETY: CGColorCreate with valid color space and RGBA array.
             text: unsafe { ffi::CGColorCreate(color_space, tx.as_ptr()) },
         }
     }
@@ -100,7 +103,9 @@ fn category_color(color_space: CGColorSpaceRef, category: &AnnotationCategory) -
 /// Create a `CTFont` by name and size.
 fn create_font(name: &str, size: f64) -> CTFontRef {
     let cf_name = app::cf_string_from_str(name);
+    // SAFETY: CTFontCreateWithName with valid CFString name.
     let font = unsafe { ffi::CTFontCreateWithName(cf_name as ffi::CFStringRef, size, ptr::null()) };
+    // SAFETY: CFRelease on a valid CFType we own.
     unsafe { ffi::CFRelease(cf_name as ffi::CFTypeRef) };
     font
 }
@@ -113,6 +118,8 @@ fn create_attributed_string(
 ) -> CFAttributedStringRef {
     let cf_text = app::cf_string_from_str(text);
 
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let mut keys: Vec<*const std::ffi::c_void> =
             vec![ffi::kCTFontAttributeName.cast::<std::ffi::c_void>()];
@@ -143,8 +150,12 @@ fn create_attributed_string(
 /// Measure the width and height of text rendered with a given font.
 fn measure_text(text: &str, font: CTFontRef) -> (f64, f64) {
     let attr_str = create_attributed_string(text, font, None);
+    // SAFETY: CTLineCreateWithAttributedString on valid CFAttributedString.
     let line = unsafe { ffi::CTLineCreateWithAttributedString(attr_str) };
+    // SAFETY: CTLineGetBoundsWithOptions on valid CTLine.
     let bounds = unsafe { ffi::CTLineGetBoundsWithOptions(line, 0) };
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         ffi::CFRelease(line as ffi::CFTypeRef);
         ffi::CFRelease(attr_str as ffi::CFTypeRef);
@@ -155,7 +166,10 @@ fn measure_text(text: &str, font: CTFontRef) -> (f64, f64) {
 /// Draw text at a specific position in a `CGContext`.
 fn draw_text(text: &str, ctx: CGContextRef, x: f64, y: f64, font: CTFontRef, color: CGColorRef) {
     let attr_str = create_attributed_string(text, font, Some(color));
+    // SAFETY: CTLineCreateWithAttributedString on valid CFAttributedString.
     let line = unsafe { ffi::CTLineCreateWithAttributedString(attr_str) };
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         ffi::CGContextSaveGState(ctx);
         ffi::CGContextSetTextPosition(ctx, x, y);
@@ -203,6 +217,7 @@ fn render_badges(
     let font = create_font("Helvetica-Bold", 11.0 * scale_factor);
     let padding = 3.0 * scale_factor;
     let corner_radius = 4.0 * scale_factor;
+    // SAFETY: CGBitmapContextGetHeight on valid bitmap context.
     let image_height = unsafe { ffi::CGBitmapContextGetHeight(ctx) } as f64;
 
     for annotation in annotations {
@@ -230,9 +245,12 @@ fn render_badges(
         );
 
         // Background pill
+        // SAFETY: FFI call with valid arguments.
         let bg_path = unsafe {
             ffi::CGPathCreateWithRoundedRect(badge_rect, corner_radius, corner_radius, ptr::null())
         };
+        // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         unsafe {
             ffi::CGContextSetFillColorWithColor(ctx, color.background);
             ffi::CGContextAddPath(ctx, bg_path);
@@ -248,6 +266,8 @@ fn render_badges(
         // Text
         draw_text(&text, ctx, x + padding, y + padding, font, color.text);
 
+        // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         unsafe {
             ffi::CFRelease(bg_path as ffi::CFTypeRef);
             ffi::CFRelease(color.background as ffi::CFTypeRef);
@@ -256,6 +276,7 @@ fn render_badges(
         }
     }
 
+    // SAFETY: CFRelease on a valid CFType we own.
     unsafe { ffi::CFRelease(font as ffi::CFTypeRef) };
 }
 
@@ -271,6 +292,7 @@ fn render_labeled(
     let padding = 2.0 * scale_factor;
     let corner_radius = 3.0 * scale_factor;
     let border_width = 1.5 * scale_factor;
+    // SAFETY: CGBitmapContextGetHeight on valid bitmap context.
     let image_height = unsafe { ffi::CGBitmapContextGetHeight(ctx) } as f64;
 
     for annotation in annotations {
@@ -290,6 +312,8 @@ fn render_labeled(
                 height: annotation.bounds.height * scale_factor,
             },
         };
+        // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         unsafe {
             ffi::CGContextSetStrokeColorWithColor(ctx, color.border);
             ffi::CGContextSetLineWidth(ctx, border_width);
@@ -328,9 +352,12 @@ fn render_labeled(
         };
 
         // Opaque background
+        // SAFETY: FFI call with valid arguments.
         let label_path = unsafe {
             ffi::CGPathCreateWithRoundedRect(label_rect, corner_radius, corner_radius, ptr::null())
         };
+        // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         unsafe {
             ffi::CGContextSetFillColorWithColor(ctx, color.background);
             ffi::CGContextAddPath(ctx, label_path);
@@ -355,6 +382,8 @@ fn render_labeled(
             color.text,
         );
 
+        // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         unsafe {
             ffi::CFRelease(color.background as ffi::CFTypeRef);
             ffi::CFRelease(color.border as ffi::CFTypeRef);
@@ -362,6 +391,8 @@ fn render_labeled(
         }
     }
 
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         ffi::CFRelease(font as ffi::CFTypeRef);
         ffi::CFRelease(bold_font as ffi::CFTypeRef);
@@ -389,7 +420,9 @@ fn render_spotlight(
 
     // Build a single path: full-screen rect + element holes.
     // Even-odd fill rule makes the holes transparent in the overlay.
+    // SAFETY: CGPathCreateMutable creates a new mutable path.
     let overlay_path = unsafe { ffi::CGPathCreateMutable() };
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
     unsafe {
         ffi::CGPathAddRect(overlay_path, ptr::null(), full_rect);
     }
@@ -409,6 +442,7 @@ fn render_spotlight(
                 height: annotation.bounds.height * scale_factor + expansion * 2.0,
             },
         };
+        // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
         unsafe {
             ffi::CGPathAddRoundedRect(
                 overlay_path,
@@ -422,7 +456,10 @@ fn render_spotlight(
 
     // Fill with even-odd rule: overlay covers everything except the holes
     let overlay_color =
+        // SAFETY: CGColorCreate with valid color space and RGBA array.
         unsafe { ffi::CGColorCreate(color_space, [0.0_f64, 0.0, 0.0, 0.6].as_ptr()) };
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         ffi::CGContextSetFillColorWithColor(ctx, overlay_color);
         ffi::CGContextAddPath(ctx, overlay_path.cast_const());
@@ -449,6 +486,7 @@ pub fn render_grid(
 ) -> Result<(), AnnotationError> {
     let (width, height, ctx, color_space, image) = load_image_and_create_context(image_path)?;
 
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
     unsafe {
         ffi::CGContextDrawImage(
             ctx,
@@ -468,10 +506,13 @@ pub fn render_grid(
     let font = create_font("Helvetica", 9.0 * scale_factor);
 
     // Colors
+    // SAFETY: CGColorCreate with valid color space and RGBA array.
     let grid_color = unsafe { ffi::CGColorCreate(color_space, [1.0_f64, 1.0, 1.0, 0.3].as_ptr()) };
     let label_bg_color =
+        // SAFETY: CGColorCreate with valid color space and RGBA array.
         unsafe { ffi::CGColorCreate(color_space, [0.0_f64, 0.0, 0.0, 0.6].as_ptr()) };
     let label_text_color =
+        // SAFETY: CGColorCreate with valid color space and RGBA array.
         unsafe { ffi::CGColorCreate(color_space, [1.0_f64, 1.0, 1.0, 0.9].as_ptr()) };
 
     let line_width = 1.0 * scale_factor;
@@ -487,6 +528,8 @@ pub fn render_grid(
     while (window_x - offset_x) * scale_factor < image_width {
         let pixel_x = (window_x - offset_x) * scale_factor;
 
+        // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         unsafe {
             ffi::CGContextSetStrokeColorWithColor(ctx, grid_color);
             ffi::CGContextSetLineWidth(ctx, line_width);
@@ -507,6 +550,8 @@ pub fn render_grid(
                 height: th + 2.0 * scale_factor,
             },
         };
+        // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         unsafe {
             ffi::CGContextSetFillColorWithColor(ctx, label_bg_color);
             ffi::CGContextFillRect(ctx, label_rect);
@@ -531,6 +576,8 @@ pub fn render_grid(
         // CG origin is bottom-left
         let cg_y = image_height - pixel_y;
 
+        // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         unsafe {
             ffi::CGContextSetStrokeColorWithColor(ctx, grid_color);
             ffi::CGContextSetLineWidth(ctx, line_width);
@@ -551,6 +598,8 @@ pub fn render_grid(
                 height: th + 2.0 * scale_factor,
             },
         };
+        // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         unsafe {
             ffi::CGContextSetFillColorWithColor(ctx, label_bg_color);
             ffi::CGContextFillRect(ctx, label_rect);
@@ -567,6 +616,8 @@ pub fn render_grid(
         window_y += spacing_f;
     }
 
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         ffi::CFRelease(grid_color as ffi::CFTypeRef);
         ffi::CFRelease(label_bg_color as ffi::CFTypeRef);
@@ -592,6 +643,7 @@ pub fn render(
     let (width, height, ctx, color_space, image) = load_image_and_create_context(image_path)?;
 
     // Draw original image
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
     unsafe {
         ffi::CGContextDrawImage(
             ctx,
@@ -633,6 +685,8 @@ fn load_image_and_create_context(
     let c_path = CString::new(image_path)
         .map_err(|_e| AnnotationError::ImageLoadFailed(image_path.to_string()))?;
 
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let data_provider = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
         if data_provider.is_null() {
@@ -675,6 +729,8 @@ fn write_context_to_file(
     color_space: CGColorSpaceRef,
     image: ffi::CGImageRef,
 ) -> Result<(), AnnotationError> {
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let output_image = ffi::CGBitmapContextCreateImage(ctx);
         if output_image.is_null() {

@@ -239,12 +239,14 @@ impl DesktopProvider for DarwinProvider {
     }
 
     fn has_permissions(&self) -> bool {
+        // SAFETY: AXIsProcessTrusted is a read-only system call with no side effects.
         unsafe { ffi::AXIsProcessTrusted() != 0 }
     }
 
     fn has_screen_recording_permission(&self) -> bool {
         // TCC permissions are inherited by child processes (e.g. running
         // forepaw from Ghostty inherits Ghostty's Screen Recording grant).
+        // SAFETY: CGPreflightScreenCaptureAccess is a read-only system call.
         unsafe { ffi::CGPreflightScreenCaptureAccess() != 0 }
     }
 
@@ -272,6 +274,8 @@ impl DesktopProvider for DarwinProvider {
         }
 
         // Get raw window list
+        // SAFETY: CGWindowListCopyWindowInfo returns a CFArray the caller owns.
+        // No pointer dereferences of caller-controlled data.
         let window_list = unsafe {
             ffi::CGWindowListCopyWindowInfo(
                 ffi::CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY,
@@ -282,15 +286,18 @@ impl DesktopProvider for DarwinProvider {
             return false;
         }
 
+        // SAFETY: window_list is a valid CFArray from CGWindowListCopyWindowInfo.
         let count = unsafe { ffi::CFArrayGetCount(window_list) };
         let mut found_app_window = false;
 
         'outer: for i in 0..count {
             let info =
+                // SAFETY: index is in bounds (0..count).
                 unsafe { ffi::CFArrayGetValueAtIndex(window_list, i as _) as ffi::CFDictionaryRef };
             if info.is_null() {
                 continue;
             }
+            // SAFETY: info is a valid CFDictionary from the window list.
             if let Some(owner) = unsafe { app::get_dict_string(info, ffi::kCGWindowOwnerName) } {
                 if third_party.iter().any(|name| *name == owner) {
                     found_app_window = true;
@@ -299,6 +306,7 @@ impl DesktopProvider for DarwinProvider {
             }
         }
 
+        // SAFETY: window_list is a valid CFType that we own (from CopyWindowInfo).
         unsafe { ffi::CFRelease(window_list as ffi::CFTypeRef) };
 
         found_app_window
@@ -307,6 +315,13 @@ impl DesktopProvider for DarwinProvider {
     fn request_permissions(&self) -> bool {
         // Build CFDictionary {"AXTrustedCheckOptionPrompt": true}
         // to trigger the system accessibility permission dialog.
+        #[expect(
+            clippy::multiple_unsafe_ops_per_block,
+            reason = "CF create + query + 2 releases"
+        )]
+        // SAFETY: CFDictionaryCreate and AXIsProcessTrustedWithOptions are
+        // system calls. prompt_key is a CFString we own. All CF objects are
+        // released before returning.
         unsafe {
             let prompt_key = app::cf_string_from_str("AXTrustedCheckOptionPrompt");
             let prompt_val = ffi::kCFBooleanTrue;
@@ -330,6 +345,7 @@ impl DesktopProvider for DarwinProvider {
     }
 
     fn request_screen_recording_permission(&self) -> bool {
+        // SAFETY: CGRequestScreenCaptureAccess is a system call that prompts the user.
         unsafe { ffi::CGRequestScreenCaptureAccess() != 0 }
     }
 }

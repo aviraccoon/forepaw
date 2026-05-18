@@ -34,6 +34,7 @@ use crate::platform::{AppInfo, WindowInfo};
 
 /// Check accessibility permission. Returns error if not granted.
 fn require_accessibility() -> Result<(), ForepawError> {
+    // SAFETY: AXIsProcessTrusted is a read-only system call.
     if unsafe { AXIsProcessTrusted() } == 0 {
         Err(ForepawError::PermissionDenied)
     } else {
@@ -155,6 +156,7 @@ impl ResolvedWindow {
 /// 4. Default: prefer titled windows, then largest by area
 pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, ForepawError> {
     require_accessibility()?;
+    // SAFETY: CGWindowListCopyWindowInfo returns a CFArray the caller owns.
     let window_list = unsafe {
         CGWindowListCopyWindowInfo(CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY, K_CG_NULL_WINDOW_ID)
     };
@@ -164,6 +166,7 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
         ));
     }
 
+    // SAFETY: collect_windows_for_pid is an unsafe fn that iterates the CFArray.
     let mut app_windows = unsafe { collect_windows_for_pid(window_list, pid) };
 
     // Multi-process fallback: some apps (Steam) render UI in helper processes.
@@ -173,12 +176,14 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
                 let main_bundle_str = main_bundle.to_string();
                 let helper_pids = collect_helper_pids(&main_bundle_str, pid);
                 if !helper_pids.is_empty() {
+                    // SAFETY: collect_windows_for_pids iterates the CFArray.
                     app_windows = unsafe { collect_windows_for_pids(window_list, &helper_pids) };
                 }
             }
         }
     }
 
+    // SAFETY: window_list is a valid CFType we own.
     unsafe { CFRelease(window_list as CFTypeRef) };
 
     if app_windows.is_empty() {
@@ -198,6 +203,7 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
 /// Returns an error if accessibility permission is not granted, since
 /// the window list would be incomplete without it.
 pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawError> {
+    // SAFETY: FFI call with valid arguments.
     let window_list = unsafe {
         CGWindowListCopyWindowInfo(CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY, K_CG_NULL_WINDOW_ID)
     };
@@ -223,10 +229,12 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
         Err(_) => HashSet::new(),
     });
 
+    // SAFETY: CFArrayGetCount on valid window_list.
     let count = unsafe { CFArrayGetCount(window_list) };
     let mut result = Vec::new();
 
     for i in 0..count {
+        // SAFETY: index in bounds, CFArray is valid.
         let info = unsafe { CFArrayGetValueAtIndex(window_list, i as _) as CFDictionaryRef };
         if info.is_null() {
             continue;
@@ -234,6 +242,7 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
 
         // Filter by PID set if applicable
         if let Some(ref pids) = allowed_pids {
+            // SAFETY: dict accessor on valid CFDictionary.
             let owner_pid = unsafe { get_dict_i32(info, kCGWindowOwnerPID) };
             match owner_pid {
                 Some(pid) if pids.contains(&pid) => {}
@@ -241,8 +250,11 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
             }
         }
 
+        // SAFETY: dict accessor on valid CFDictionary.
         let owner_name = unsafe { get_dict_string(info, kCGWindowOwnerName) };
+        // SAFETY: dict accessor on valid CFDictionary.
         let window_id = unsafe { get_dict_i32(info, kCGWindowNumber) };
+        // SAFETY: dict accessor on valid CFDictionary.
         let title = unsafe { get_dict_string(info, kCGWindowName) }.unwrap_or_default();
 
         let (Some(owner), Some(id_num)) = (owner_name, window_id) else {
@@ -259,6 +271,7 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
         }
 
         // Skip phantom/tiny windows
+        // SAFETY: dict accessor on valid CFDictionary.
         if let Some(bounds) = unsafe { get_dict_bounds(info, kCGWindowBounds) } {
             if bounds.width < 10.0 || bounds.height < 10.0 {
                 continue;
@@ -272,6 +285,7 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
         }
     }
 
+    // SAFETY: CFRelease on a valid CFType we own.
     unsafe { CFRelease(window_list as CFTypeRef) };
     Ok(result)
 }
@@ -322,6 +336,7 @@ pub fn is_electron_app(app: &NSRunningApplication) -> bool {
 /// Tell an Electron app to build its Chromium accessibility tree.
 /// Sets the `AXManualAccessibility` attribute on the app element.
 pub fn enable_electron_accessibility(pid: i32) {
+    // SAFETY: AXUIElementCreateApplication is a system call, no preconditions.
     let app_element = unsafe { AXUIElementCreateApplication(pid) };
     let attr_name = cf_string_from_str("AXManualAccessibility");
     let val = objc2_foundation::NSNumber::numberWithBool(true);
@@ -333,6 +348,8 @@ pub fn enable_electron_accessibility(pid: i32) {
         reason = "keep NSNumber alive through AX call, Electron path unverified"
     )]
     std::mem::forget(val);
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         AXUIElementSetAttributeValue(app_element, attr_name, cf_val);
         CFRelease(attr_name as CFTypeRef);
@@ -343,6 +360,7 @@ pub fn enable_electron_accessibility(pid: i32) {
 /// Looks for an `AXWebArea` with interactive children.
 #[must_use]
 pub fn electron_tree_is_populated(pid: i32) -> bool {
+    // SAFETY: AXUIElementCreateApplication is a system call, no preconditions.
     let app_element = unsafe { AXUIElementCreateApplication(pid) };
     has_populated_web_area(app_element, 0, 10)
 }
@@ -358,26 +376,32 @@ struct WindowEntry {
 }
 
 unsafe fn collect_windows_for_pid(window_list: CFArrayRef, pid: i32) -> Vec<WindowEntry> {
+    // SAFETY: CFArrayGetCount on valid CFArray.
     let count = unsafe { CFArrayGetCount(window_list) };
     let mut entries = Vec::new();
 
     for i in 0..count {
+        // SAFETY: index in bounds, CFArray is valid.
         let info = unsafe { CFArrayGetValueAtIndex(window_list, i as _) as CFDictionaryRef };
         if info.is_null() {
             continue;
         }
+        // SAFETY: dict accessor on valid CFDictionary.
         let _owner_pid = match get_dict_i32(info, unsafe { kCGWindowOwnerPID }) {
             Some(p) if p == pid => p,
             _ => continue,
         };
+        // SAFETY: accessing a global CFStringRef constant.
         let bounds_key = unsafe { kCGWindowBounds };
         let bounds = match get_dict_bounds(info, bounds_key) {
             Some(b) if b.width >= 10.0 && b.height >= 10.0 => b,
             _ => continue,
         };
+        // SAFETY: dict accessor on valid CFDictionary.
         let window_id = get_dict_i32(info, unsafe { kCGWindowNumber })
             .and_then(|id| if id > 0 { Some(id as u32) } else { None })
             .unwrap_or(0);
+        // SAFETY: dict accessor on valid CFDictionary.
         let title = get_dict_string(info, unsafe { kCGWindowName }).unwrap_or_default();
 
         entries.push(WindowEntry {
@@ -394,26 +418,32 @@ unsafe fn collect_windows_for_pids(
     window_list: CFArrayRef,
     pids: &HashSet<i32>,
 ) -> Vec<WindowEntry> {
+    // SAFETY: CFArrayGetCount on valid CFArray.
     let count = unsafe { CFArrayGetCount(window_list) };
     let mut entries = Vec::new();
 
     for i in 0..count {
+        // SAFETY: index in bounds, CFArray is valid.
         let info = unsafe { CFArrayGetValueAtIndex(window_list, i as _) as CFDictionaryRef };
         if info.is_null() {
             continue;
         }
+        // SAFETY: dict accessor on valid CFDictionary.
         let _owner_pid = match get_dict_i32(info, unsafe { kCGWindowOwnerPID }) {
             Some(p) if pids.contains(&p) => p,
             _ => continue,
         };
+        // SAFETY: accessing a global CFStringRef constant.
         let bounds_key = unsafe { kCGWindowBounds };
         let bounds = match get_dict_bounds(info, bounds_key) {
             Some(b) if b.width >= 10.0 && b.height >= 10.0 => b,
             _ => continue,
         };
+        // SAFETY: dict accessor on valid CFDictionary.
         let window_id = get_dict_i32(info, unsafe { kCGWindowNumber })
             .and_then(|id| if id > 0 { Some(id as u32) } else { None })
             .unwrap_or(0);
+        // SAFETY: dict accessor on valid CFDictionary.
         let title = get_dict_string(info, unsafe { kCGWindowName }).unwrap_or_default();
 
         entries.push(WindowEntry {
@@ -540,6 +570,8 @@ fn collect_helper_pids(bundle_id: &str, main_pid: i32) -> HashSet<i32> {
 /// `dict` must be a valid `CFDictionaryRef`. `key` must be a valid `CFStringRef`.
 /// Both must remain valid for the duration of this call.
 pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option<String> {
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let val = CFDictionaryGetValue(dict, key.cast::<std::ffi::c_void>());
         if val.is_null() {
@@ -576,6 +608,8 @@ pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option
 }
 
 unsafe fn get_dict_i32(dict: CFDictionaryRef, key: CFStringRef) -> Option<i32> {
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let val = CFDictionaryGetValue(dict, key.cast::<std::ffi::c_void>());
         if val.is_null() {
@@ -599,6 +633,8 @@ unsafe fn get_dict_i32(dict: CFDictionaryRef, key: CFStringRef) -> Option<i32> {
 }
 
 unsafe fn get_dict_bounds(dict: CFDictionaryRef, key: CFStringRef) -> Option<Rect> {
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let val = CFDictionaryGetValue(dict, key.cast::<std::ffi::c_void>());
         if val.is_null() {
@@ -624,6 +660,8 @@ unsafe fn get_dict_bounds(dict: CFDictionaryRef, key: CFStringRef) -> Option<Rec
 
 /// Local helper to get an f64 from a `CFDictionary` with a string key.
 unsafe fn get_dict_f64_local(dict: CFDictionaryRef, key: &str) -> Option<f64> {
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let cf_key = cf_string_from_str(key);
         let val = CFDictionaryGetValue(dict, cf_key.cast::<std::ffi::c_void>());
@@ -711,6 +749,8 @@ fn has_populated_web_area(element: AXUIElementRef, depth: usize, max_depth: usiz
 
 /// Get a string attribute from an `AXUIElement`.
 fn get_ax_string(element: AXUIElementRef, attribute: &str) -> Option<String> {
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let attr_cf = cf_string_from_str(attribute);
         let mut value: CFTypeRef = std::ptr::null();
@@ -739,6 +779,8 @@ fn get_ax_string(element: AXUIElementRef, attribute: &str) -> Option<String> {
 
 /// Get the `AXChildren` attribute as a Vec of `AXUIElementRef`.
 fn get_ax_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
+    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let attr_cf = cf_string_from_str("AXChildren");
         let mut value: CFTypeRef = std::ptr::null();

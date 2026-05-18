@@ -46,12 +46,14 @@ fn rand_u16() -> u16 {
 /// a stable numeric value, so we use platform-specific methods.
 #[cfg(unix)]
 fn thread_id() -> usize {
+    // SAFETY: pthread_self is always safe to call.
     unsafe { libc::pthread_self() as usize }
 }
 
 #[cfg(windows)]
 fn thread_id() -> usize {
     use windows::Win32::System::Threading::GetCurrentThreadId;
+    // SAFETY: GetCurrentThreadId is always safe to call.
     unsafe { GetCurrentThreadId() as usize }
 }
 

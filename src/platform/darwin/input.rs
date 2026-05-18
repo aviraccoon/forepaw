@@ -45,6 +45,10 @@ fn activate_and_resolve_window(
 // ---------------------------------------------------------------------------
 
 /// Post a mouse event at the given screen point.
+///
+/// # Safety
+///
+/// The caller must ensure `event_type` and `button` are valid `CGEvent` constants.
 unsafe fn post_mouse_event(
     event_type: u32,
     point: CGPointFFI,
@@ -67,6 +71,7 @@ unsafe fn post_mouse_event(
 
 /// Move the cursor to a screen point (teleport, no intermediate events).
 pub fn move_mouse_to(point: CGPointFFI) -> Result<(), ForepawError> {
+    // SAFETY: mouse moved event has no preconditions beyond valid coordinates.
     unsafe {
         post_mouse_event(
             ffi::K_CG_EVENT_MOUSE_MOVED,
@@ -86,6 +91,8 @@ fn smooth_move_mouse(
     steps: usize,
     duration: Duration,
 ) -> Result<(), ForepawError> {
+    // SAFETY: CGEventCreateMouseEvent returns cursor position. Locator released after read.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     let current = unsafe {
         let locator_event = ffi::CGEventCreateMouseEvent(
             std::ptr::null_mut(),
@@ -108,6 +115,7 @@ fn smooth_move_mouse(
         let x = current.x + (target.x - current.x) * t;
         let y = current.y + (target.y - current.y) * t;
         let point = CGPointFFI { x, y };
+        // SAFETY: post_mouse_event with valid coordinates.
         unsafe {
             post_mouse_event(
                 ffi::K_CG_EVENT_MOUSE_MOVED,
@@ -144,6 +152,8 @@ pub fn perform_mouse_click(
     };
 
     for i in 1..=click_count {
+        // SAFETY: down/up mouse events with valid click count.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         unsafe {
             post_mouse_event(down_type, point, cg_button, Some(i64::from(i)))?;
             post_mouse_event(up_type, point, cg_button, Some(i64::from(i)))?;
@@ -171,6 +181,8 @@ pub fn click_element(
 
     if !prefer_mouse {
         // Try AXPress first
+        // SAFETY: AXUIElementPerformAction on valid element, action_str released.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         let action = unsafe {
             let action_str = app::cf_string_from_str("AXPress");
             let result = ffi::AXUIElementPerformAction(element, action_str);
@@ -217,6 +229,8 @@ pub fn click_element(
 
     // Last resort for links: try AXPress anyway (only for regular left click)
     if !is_right_click && !is_double_click && prefer_mouse {
+        // SAFETY: AXUIElementPerformAction on valid element, action_str released.
+        #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         let action = unsafe {
             let action_str = app::cf_string_from_str("AXPress");
             let result = ffi::AXUIElementPerformAction(element, action_str);
@@ -241,9 +255,14 @@ pub fn click_element(
 /// Inter-character delay is essential for Electron apps (Discord, Slack)
 /// which drop characters if events arrive too fast.
 pub fn type_via_keyboard(text: &str) -> Result<(), ForepawError> {
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "key down + up per character"
+    )]
     for ch in text.chars() {
         let mut utf16_buf = [0_u16; 2];
         let utf16 = ch.encode_utf16(&mut utf16_buf);
+        // SAFETY: CGEvent keyboard events for unicode input. Events released after posting.
         unsafe {
             // Key down
             let key_down = ffi::CGEventCreateKeyboardEvent(
@@ -286,6 +305,8 @@ pub fn set_value_on_element(
         cf_str
     };
 
+    // SAFETY: AXUIElementSetAttributeValue on valid element. attr and cf_value released.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     let result = unsafe {
         let attr = app::cf_string_from_str("AXValue");
         let r = ffi::AXUIElementSetAttributeValue(element, attr, cf_value);
@@ -299,6 +320,11 @@ pub fn set_value_on_element(
     }
 
     // Fallback: focus and type via keyboard
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "AX raise + focus + 2 releases"
+    )]
+    // SAFETY: AXRaise + AXFocused set on valid element, attrs released.
     unsafe {
         let raise_action = app::cf_string_from_str("AXRaise");
         let _ = ffi::AXUIElementPerformAction(element, raise_action);
@@ -319,6 +345,11 @@ pub fn press_via_keyboard(combo: &KeyCombo) -> Result<(), ForepawError> {
     let key_code = key_code::virtual_key_code(&combo.key).unwrap_or(0);
     let flags = modifier_flags(&combo.modifiers);
 
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "key down + up with flags"
+    )]
+    // SAFETY: CGEvent keyboard events, released after posting.
     unsafe {
         let key_down = ffi::CGEventCreateKeyboardEvent(std::ptr::null_mut(), key_code, 1);
         let key_up = ffi::CGEventCreateKeyboardEvent(std::ptr::null_mut(), key_code, 0);
@@ -357,6 +388,8 @@ fn modifier_flags(modifiers: &[Modifier]) -> u64 {
 
 /// Post a scroll wheel event at the current mouse position.
 fn post_scroll_event(delta_y: i32, delta_x: i32) -> Result<(), ForepawError> {
+    // SAFETY: CGEventCreateScrollWheelEvent, released after posting.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let event = ffi::CGEventCreateScrollWheelEvent(
             std::ptr::null_mut(),
@@ -380,6 +413,7 @@ fn post_scroll_event(delta_y: i32, delta_x: i32) -> Result<(), ForepawError> {
 /// Move the mouse to the scroll target point before scrolling.
 /// This ensures hover effects are present for boundary detection.
 fn move_mouse_to_scroll_target(point: CGPointFFI) {
+    // SAFETY: post_mouse_event with valid coordinates, error ignored (non-critical).
     unsafe {
         post_mouse_event(
             ffi::K_CG_EVENT_MOUSE_MOVED,
@@ -396,6 +430,12 @@ fn move_mouse_to_scroll_target(point: CGPointFFI) {
 /// Uses `CGWindowListCreateImage` to grab a thin horizontal strip from the
 /// window center -- fast, no file I/O.
 fn capture_scroll_fingerprint(window_id: u32) -> Option<Vec<u8>> {
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "window capture + bitmap pipeline"
+    )]
+    // SAFETY: CGWindowListCreateImage + bitmap context for pixel fingerprinting.
+    // All CG objects null-checked and released.
     unsafe {
         let image = ffi::CGWindowListCreateImage(
             CGRectFFI {
@@ -491,12 +531,40 @@ fn capture_scroll_fingerprint(window_id: u32) -> Option<Vec<u8>> {
 // ---------------------------------------------------------------------------
 
 /// Perform a mouse drag along a path of screen points.
+/// Post a mouse event with optional modifier flags and pressure.
+///
+/// The caller must ensure `event_type` and `button` are valid `CGEvent` constants.
+unsafe fn post_drag_event(
+    event_type: u32,
+    point: CGPointFFI,
+    button: u32,
+    flags: u64,
+    pressure: Option<f64>,
+) -> Result<(), ForepawError> {
+    let event = ffi::CGEventCreateMouseEvent(std::ptr::null_mut(), event_type, point, button);
+    if event.is_null() {
+        return Err(ForepawError::ActionFailed(
+            "failed to create mouse event".into(),
+        ));
+    }
+    if flags != 0 {
+        ffi::CGEventSetFlags(event, flags);
+    }
+    if let Some(p) = pressure {
+        ffi::CGEventSetDoubleValueField(event, ffi::K_CG_MOUSE_EVENT_PRESSURE, p);
+    }
+    ffi::CGEventPost(ffi::K_CG_EVENT_TAP_CGHID, event);
+    ffi::CFRelease(event as ffi::CFTypeRef);
+    Ok(())
+}
+
 fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), ForepawError> {
     if path.len() < 2 {
         return Ok(());
     }
     let first = path[0];
     let last = *path.last().unwrap();
+    let flags = modifier_flags(&options.modifiers);
 
     let (down_type, drag_type, up_type, cg_button) = if options.right_button {
         (
@@ -514,39 +582,18 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
         )
     };
 
-    let flags = modifier_flags(&options.modifiers);
-
-    // Move to start
     move_mouse_to(first)?;
 
     // Mouse down
-    unsafe {
-        let mouse_down =
-            ffi::CGEventCreateMouseEvent(std::ptr::null_mut(), down_type, first, cg_button);
-        if mouse_down.is_null() {
-            return Err(ForepawError::ActionFailed(
-                "failed to create mouseDown event".into(),
-            ));
-        }
-        if flags != 0 {
-            ffi::CGEventSetFlags(mouse_down, flags);
-        }
-        if let Some(pressure) = options.pressure {
-            ffi::CGEventSetDoubleValueField(mouse_down, ffi::K_CG_MOUSE_EVENT_PRESSURE, pressure);
-        }
-        ffi::CGEventPost(ffi::K_CG_EVENT_TAP_CGHID, mouse_down);
-        ffi::CFRelease(mouse_down as ffi::CFTypeRef);
-    }
+    // SAFETY: post_drag_event posts a mouse-down event with valid parameters.
+    unsafe { post_drag_event(down_type, first, cg_button, flags, options.pressure)? };
     thread::sleep(Duration::from_millis(20));
 
-    // Drag through segments
     let segments = path.len() - 1;
-    let segment_duration = options.duration / segments as f64;
-    let step_delay = segment_duration / f64::from(options.steps);
+    let step_delay = options.duration / (segments as f64) / f64::from(options.steps);
 
     for seg_idx in 0..segments {
-        let seg_from = path[seg_idx];
-        let seg_to = path[seg_idx + 1];
+        let (seg_from, seg_to) = (path[seg_idx], path[seg_idx + 1]);
         for i in 1..=options.steps {
             let t = f64::from(i) / f64::from(options.steps);
             let point = CGPointFFI {
@@ -554,46 +601,17 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
                 y: seg_from.y + (seg_to.y - seg_from.y) * t,
             };
 
+            // SAFETY: post_drag_event posts a drag event with valid parameters.
             unsafe {
-                let drag_event =
-                    ffi::CGEventCreateMouseEvent(std::ptr::null_mut(), drag_type, point, cg_button);
-                if drag_event.is_null() {
-                    continue;
-                }
-                if flags != 0 {
-                    ffi::CGEventSetFlags(drag_event, flags);
-                }
-                if let Some(pressure) = options.pressure {
-                    ffi::CGEventSetDoubleValueField(
-                        drag_event,
-                        ffi::K_CG_MOUSE_EVENT_PRESSURE,
-                        pressure,
-                    );
-                }
-                ffi::CGEventPost(ffi::K_CG_EVENT_TAP_CGHID, drag_event);
-                ffi::CFRelease(drag_event as ffi::CFTypeRef);
+                post_drag_event(drag_type, point, cg_button, flags, options.pressure).ok();
             }
             thread::sleep(Duration::from_secs_f64(step_delay));
         }
     }
 
     // Mouse up
-    unsafe {
-        let mouse_up = ffi::CGEventCreateMouseEvent(std::ptr::null_mut(), up_type, last, cg_button);
-        if mouse_up.is_null() {
-            return Err(ForepawError::ActionFailed(
-                "failed to create mouseUp event".into(),
-            ));
-        }
-        if flags != 0 {
-            ffi::CGEventSetFlags(mouse_up, flags);
-        }
-        if let Some(pressure) = options.pressure {
-            ffi::CGEventSetDoubleValueField(mouse_up, ffi::K_CG_MOUSE_EVENT_PRESSURE, pressure);
-        }
-        ffi::CGEventPost(ffi::K_CG_EVENT_TAP_CGHID, mouse_up);
-        ffi::CFRelease(mouse_up as ffi::CFTypeRef);
-    }
+    // SAFETY: post_drag_event posts a mouse-up event with valid parameters.
+    unsafe { post_drag_event(up_type, last, cg_button, flags, options.pressure)? };
 
     Ok(())
 }

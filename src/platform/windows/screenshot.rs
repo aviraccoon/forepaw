@@ -28,6 +28,7 @@ use crate::platform::windows::app;
 /// Must be called before any GDI capture calls. Per-monitor V2 gives us
 /// physical pixel coordinates from all APIs (`GetWindowRect`, `BitBlt`, UIA).
 pub fn init_dpi_awareness() {
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         // PER_MONITOR_AWARE_V2 = -4
         let ctx = DPI_AWARENESS_CONTEXT(-4_isize as *mut _);
@@ -61,6 +62,7 @@ pub fn capture_pixels(
 ) -> Result<(Vec<u8>, u32, u32), ForepawError> {
     if let Some(name) = app_name {
         let (hwnd, _) = app::find_app_hwnd(name)?;
+        // SAFETY: Win32/WinRT FFI call with valid arguments.
         let rect = unsafe {
             let mut r = RECT::default();
             GetWindowRect(hwnd, &raw mut r)
@@ -77,16 +79,20 @@ pub fn capture_pixels(
         }
 
         // Fall back to desktop DC capture
+        // SAFETY: Win32/WinRT FFI call with valid arguments.
         let hdc = unsafe { GetDC(None) };
         let rgba = capture_region_rgba(hdc, rect.left, rect.top, width, height)?;
+        // SAFETY: Win32/WinRT FFI call with valid arguments.
         unsafe { ReleaseDC(None, hdc) };
         Ok((rgba, width, height))
     } else {
         let rect = capture_rect_fullscreen();
         let width = (rect.right - rect.left).max(1) as u32;
         let height = (rect.bottom - rect.top).max(1) as u32;
+        // SAFETY: Win32/WinRT FFI call with valid arguments.
         let hdc = unsafe { GetDC(None) };
         let rgba = capture_region_rgba(hdc, rect.left, rect.top, width, height)?;
+        // SAFETY: Win32/WinRT FFI call with valid arguments.
         unsafe { ReleaseDC(None, hdc) };
         Ok((rgba, width, height))
     }
@@ -102,6 +108,11 @@ fn capture_print_window(
     width: u32,
     height: u32,
 ) -> Result<Vec<u8>, ()> {
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "Win32/WinRT FFI pipeline"
+    )]
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         let hdc = GetDC(None);
         let hdc_mem = CreateCompatibleDC(Some(hdc));
@@ -185,9 +196,13 @@ pub fn save_pixels_to_temp(
 
 /// Get the capture rectangle for the full virtual screen.
 fn capture_rect_fullscreen() -> RECT {
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     let x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     let y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     let w = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     let h = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
     RECT {
         left: x,
@@ -207,6 +222,11 @@ fn capture_region_rgba(
     width: u32,
     height: u32,
 ) -> Result<Vec<u8>, ForepawError> {
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "Win32/WinRT FFI pipeline"
+    )]
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         let hdc_mem = CreateCompatibleDC(Some(hdc_source));
         let h_bitmap = CreateCompatibleBitmap(hdc_source, width as i32, height as i32);

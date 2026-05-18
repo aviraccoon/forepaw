@@ -71,7 +71,10 @@ static BATCH_ATTR_ARRAY: std::sync::OnceLock<SendableCFArray> = std::sync::OnceL
 
 /// Wrapper to make `CFArrayRef` Send+Sync (immutable after creation).
 struct SendableCFArray(CFArrayRef);
+// SAFETY: SendableCFArray wraps a CFArrayRef that is immutable after creation
+// (created once by OnceLock). CFArray is thread-safe for read-only access.
 unsafe impl Send for SendableCFArray {}
+// SAFETY: Same reasoning as Send above.
 unsafe impl Sync for SendableCFArray {}
 
 fn get_batch_attr_array() -> CFArrayRef {
@@ -83,6 +86,7 @@ fn get_batch_attr_array() -> CFArrayRef {
                 .collect();
             let ptrs: Vec<*const std::ffi::c_void> =
                 cf_strings.iter().map(|s| (*s).cast()).collect();
+            // SAFETY: CFArrayCreate produces an immutable array from valid CFStrings.
             let array = unsafe {
                 CFArrayCreate(
                     std::ptr::null(),
@@ -92,6 +96,7 @@ fn get_batch_attr_array() -> CFArrayRef {
                 )
             };
             for s in &cf_strings {
+                // SAFETY: CFRelease on CFStrings we created via cf_string_from_str.
                 unsafe { CFRelease(*s as CFTypeRef) };
             }
             SendableCFArray(array)
@@ -181,6 +186,7 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
         options.max_depth
     };
 
+    // SAFETY: AXUIElementCreateApplication is a system call, no preconditions.
     let app_element = unsafe { AXUIElementCreateApplication(pid) };
 
     // Window bounds for offscreen pruning and coordinate display.
@@ -272,6 +278,7 @@ impl BatchAttrs {
         if idx >= ATTR_COUNT {
             return None;
         }
+        // SAFETY: index is in bounds (checked above), self.array is valid CFArray.
         unsafe {
             let val = CFArrayGetValueAtIndex(self.array, idx as CFIndex);
             if val.is_null() {
@@ -288,6 +295,12 @@ impl BatchAttrs {
     /// Extract a String attribute.
     fn string(&self, idx: usize) -> Option<String> {
         let val = self.raw(idx)?;
+        #[expect(
+            clippy::multiple_unsafe_ops_per_block,
+            reason = "type check + conversion"
+        )]
+        // SAFETY: CFGetTypeID + CFStringGetTypeID are read-only type checks.
+        // cf_string_to_rust handles the CFStringRef safely.
         unsafe {
             if CFGetTypeID(val) != CFStringGetTypeID() {
                 return None;
@@ -299,6 +312,11 @@ impl BatchAttrs {
     /// Extract the value attribute (index 3), which can be `CFString` or `CFNumber`.
     fn value_string(&self, idx: usize) -> Option<String> {
         let val = self.raw(idx)?;
+        #[expect(
+            clippy::multiple_unsafe_ops_per_block,
+            reason = "type dispatch + conversion"
+        )]
+        // SAFETY: type checks + conversions on valid CFTypeRef.
         unsafe {
             let type_id = CFGetTypeID(val);
             if type_id == CFStringGetTypeID() {
@@ -314,6 +332,7 @@ impl BatchAttrs {
     /// Extract a `CGPoint` from an `AXValue` attribute.
     fn point(&self, idx: usize) -> Option<Point> {
         let val = self.raw(idx)?;
+        // SAFETY: AXValueGetValue reads a CGPoint from a valid AXValue.
         unsafe {
             let mut pt = CGPointFFI { x: 0.0, y: 0.0 };
             if AXValueGetValue(
@@ -332,6 +351,7 @@ impl BatchAttrs {
     /// Extract a `CGSize` from an `AXValue` attribute.
     fn size_val(&self, idx: usize) -> Option<(f64, f64)> {
         let val = self.raw(idx)?;
+        // SAFETY: AXValueGetValue reads a CGSize from a valid AXValue.
         unsafe {
             let mut sz = CGSizeFFI {
                 width: 0.0,
@@ -362,6 +382,12 @@ impl BatchAttrs {
         let Some(val) = self.raw(idx) else {
             return Vec::new();
         };
+        #[expect(
+            clippy::multiple_unsafe_ops_per_block,
+            reason = "CFArray iteration + retain"
+        )]
+        // SAFETY: CFArray iteration on a valid CFArray. Each child is retained
+        // before being wrapped in AXUIElementRef.
         unsafe {
             if CFGetTypeID(val) != CFArrayGetTypeID() {
                 return Vec::new();
@@ -381,12 +407,18 @@ impl BatchAttrs {
     /// Extract a single `AXUIElement` ref (e.g. for `AXTitleUIElement`).
     fn element(&self, idx: usize) -> Option<AXUIElementRef> {
         let val = self.raw(idx)?;
+        // SAFETY: AXUIElementRef::from_raw wraps the raw pointer.
         unsafe { Some(AXUIElementRef::from_raw(val.cast::<std::ffi::c_void>())) }
     }
 
     /// Extract a `CFArray` of `CFStrings` (e.g. for `AXDOMClassList`).
     fn string_array(&self, idx: usize) -> Option<Vec<String>> {
         let val = self.raw(idx)?;
+        #[expect(
+            clippy::multiple_unsafe_ops_per_block,
+            reason = "CFArray iteration + type dispatch"
+        )]
+        // SAFETY: CFArray iteration + type checks on valid CFArray.
         unsafe {
             if CFGetTypeID(val) != CFArrayGetTypeID() {
                 return None;
@@ -415,6 +447,7 @@ impl BatchAttrs {
 
 impl Drop for BatchAttrs {
     fn drop(&mut self) {
+        // SAFETY: self.array is a valid CFArrayRef we own from CopyMultipleAttributeValues.
         unsafe { CFRelease(self.array as CFTypeRef) };
     }
 }
@@ -423,6 +456,8 @@ impl Drop for BatchAttrs {
 fn fetch_batch_attributes(element: AXUIElementRef) -> Option<BatchAttrs> {
     let attr_array = get_batch_attr_array();
     let mut values: CFArrayRef = std::ptr::null();
+    // SAFETY: AXUIElementCopyMultipleAttributeValues copies attributes into
+    // a CFArray the caller owns.
     let result =
         unsafe { AXUIElementCopyMultipleAttributeValues(element, attr_array, 0, &raw mut values) };
     if result != AXError::Success || values.is_null() {
@@ -633,6 +668,7 @@ pub fn resolve_ref_element(ref_id: i32, app_name: &str) -> Result<AXUIElementRef
     } else {
         DEFAULT_DEPTH
     };
+    // SAFETY: AXUIElementCreateApplication is a system call, no preconditions.
     let app_element = unsafe { AXUIElementCreateApplication(running_app.processIdentifier()) };
 
     let mut counter: i32 = 1;
@@ -679,11 +715,18 @@ fn collect_ax_elements(
 pub fn get_ax_string_attr(element: AXUIElementRef, attribute: &str) -> Option<String> {
     let attr_cf = cf_string_from_str(attribute);
     let mut value: CFTypeRef = std::ptr::null();
+    // SAFETY: AXUIElementCopyAttributeValue on valid element, attr_cf released after.
     let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value) };
+    // SAFETY: attr_cf is a valid CFString we own.
     unsafe { CFRelease(attr_cf as CFTypeRef) };
     if result != AXError::Success || value.is_null() {
         return None;
     }
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "type check + convert + release"
+    )]
+    // SAFETY: type check + string conversion + release on valid CFTypeRef.
     unsafe {
         if CFGetTypeID(value) != CFStringGetTypeID() {
             CFRelease(value);
@@ -699,11 +742,18 @@ pub fn get_ax_string_attr(element: AXUIElementRef, attribute: &str) -> Option<St
 fn get_ax_element_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
     let attr_cf = cf_string_from_str("AXChildren");
     let mut value: CFTypeRef = std::ptr::null();
+    // SAFETY: AXUIElementCopyAttributeValue on valid element.
     let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value) };
+    // SAFETY: attr_cf is a valid CFString we own.
     unsafe { CFRelease(attr_cf as CFTypeRef) };
     if result != AXError::Success || value.is_null() {
         return Vec::new();
     }
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "CFArray iteration + retain + release"
+    )]
+    // SAFETY: CFArray iteration on valid AXChildren value, each child retained.
     unsafe {
         if CFGetTypeID(value) != CFArrayGetTypeID() {
             CFRelease(value);
@@ -727,11 +777,18 @@ fn get_ax_element_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
 pub fn get_element_position(element: AXUIElementRef) -> Option<Point> {
     let attr_cf = cf_string_from_str("AXPosition");
     let mut value: CFTypeRef = std::ptr::null();
+    // SAFETY: AXUIElementCopyAttributeValue on valid element.
     let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value) };
+    // SAFETY: attr_cf is a valid CFString we own.
     unsafe { CFRelease(attr_cf as CFTypeRef) };
     if result != AXError::Success || value.is_null() {
         return None;
     }
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "AXValue read + release"
+    )]
+    // SAFETY: AXValueGetValue reads CGPoint from valid AXValue, then released.
     unsafe {
         let mut pt = CGPointFFI { x: 0.0, y: 0.0 };
         let ok = AXValueGetValue(
@@ -753,11 +810,18 @@ pub fn get_element_position(element: AXUIElementRef) -> Option<Point> {
 pub fn get_element_size(element: AXUIElementRef) -> Option<(f64, f64)> {
     let attr_cf = cf_string_from_str("AXSize");
     let mut value: CFTypeRef = std::ptr::null();
+    // SAFETY: AXUIElementCopyAttributeValue on valid element.
     let result = unsafe { AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value) };
+    // SAFETY: attr_cf is a valid CFString we own.
     unsafe { CFRelease(attr_cf as CFTypeRef) };
     if result != AXError::Success || value.is_null() {
         return None;
     }
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "AXValue read + release"
+    )]
+    // SAFETY: AXValueGetValue reads CGSize from valid AXValue, then released.
     unsafe {
         let mut sz = CGSizeFFI {
             width: 0.0,
@@ -784,6 +848,11 @@ pub fn get_element_size(element: AXUIElementRef) -> Option<(f64, f64)> {
 /// Convert a `CFStringRef` to a Rust String. Handles both ASCII (fast path)
 /// and non-ASCII (buffer copy) strings.
 fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "CFString fast ptr + slow buffer"
+    )]
+    // SAFETY: CFString conversion on valid CFStringRef.
     unsafe {
         // Fast path: ASCII/null-fast strings
         let ptr = CFStringGetCStringPtr(cf_str, K_CF_STRING_ENCODING_UTF8);
@@ -812,6 +881,11 @@ fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
 
 /// Convert a `CFNumber` to a Rust String. Tries integer first, then float.
 fn number_to_rust_string(number: CFNumberRef) -> Option<String> {
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "CFNumber type dispatch"
+    )]
+    // SAFETY: CFNumberGetValue reads from valid CFNumber.
     unsafe {
         // Try as i64 first (most AX values are integers)
         let mut val: i64 = 0;

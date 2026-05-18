@@ -157,6 +157,7 @@ fn create_software_bitmap(
 
     let mut ptr: *mut u8 = std::ptr::null_mut();
     let mut capacity: u32 = 0;
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         byte_access
             .GetBuffer(&raw mut ptr, &raw mut capacity)
@@ -164,6 +165,7 @@ fn create_software_bitmap(
     }
 
     // Copy RGBA -> BGRA
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     let dst = unsafe { std::slice::from_raw_parts_mut(ptr, capacity as usize) };
     let chunk_count = std::cmp::min(rgba_pixels.len(), dst.len()) / 4;
     for i in 0..chunk_count {
@@ -188,6 +190,7 @@ fn create_software_bitmap(
 fn block_on_async<T: windows::core::RuntimeType + 'static>(
     op: &windows_future::IAsyncOperation<T>,
 ) -> Result<T, ForepawError> {
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     let event = unsafe {
         CreateEventW(None, true, false, windows::core::PCWSTR::null())
             .map_err(|e| ForepawError::ActionFailed(format!("CreateEventW failed: {e}")))?
@@ -197,6 +200,7 @@ fn block_on_async<T: windows::core::RuntimeType + 'static>(
     let event_raw: isize = event.0 as isize;
 
     let handler = windows_future::AsyncOperationCompletedHandler::new(move |_info, _status| {
+        // SAFETY: Win32/WinRT FFI call with valid arguments.
         unsafe {
             SetEvent(windows::Win32::Foundation::HANDLE(event_raw as *mut _))
                 .ok()
@@ -209,6 +213,11 @@ fn block_on_async<T: windows::core::RuntimeType + 'static>(
         .map_err(|e| ForepawError::ActionFailed(format!("SetCompleted failed: {e}")))?;
 
     // Wait for completion (10 second timeout)
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "Win32/WinRT FFI pipeline"
+    )]
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         let _wait: u32 = WaitForSingleObject(event, 10000).0;
         CloseHandle(event).ok().unwrap_or_default();

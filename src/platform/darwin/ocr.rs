@@ -69,6 +69,13 @@ pub fn ocr(
         .map_err(|_e| ForepawError::ActionFailed("Invalid screenshot path".into()))?;
 
     // Get CGImage from the NSImage representation
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "image load pipeline: open + decode + release"
+    )]
+    // SAFETY: CGDataProviderCreateWithFilename reads a local file and returns
+    // an owned CFDataProvider. CGImageCreateWithPNGDataProvider consumes it.
+    // CFRelease frees the provider. All pointers are checked for null before use.
     let cg_image = unsafe {
         let raw = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
         if raw.is_null() {
@@ -88,6 +95,7 @@ pub fn ocr(
     let raw_results = recognize_text(cg_image, image_height, find)?;
 
     // Release CGImage
+    // SAFETY: cg_image is a valid CGImage we own from the block above.
     unsafe { ffi::CFRelease(cg_image as ffi::CFTypeRef) };
 
     // Convert image-pixel coordinates to window-relative logical pixels
@@ -134,11 +142,20 @@ fn recognize_text(
     image_height: f64,
     find: Option<&str>,
 ) -> Result<Vec<OCRResult>, ForepawError> {
+    // SAFETY: CGImageGetWidth is a read-only accessor on a valid CGImage.
     let image_width = unsafe { ffi::CGImageGetWidth(cg_image) } as f64;
 
     // Create VNImageRequestHandler with the CGImage
     // We use objc2's wrapper which expects &CGImage from objc2-core-graphics.
     // Our raw CGImageRef is a pointer to CGImage, so we can transmute.
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "pointer cast + objc msg_send"
+    )]
+    // SAFETY: cg_image is a valid CGImageRef from CoreGraphics. The pointer
+    // transmute is sound because CGImageRef is pointer-compatible with
+    // objc2's CGImage. VNImageRequestHandler::initWithCGImage_options is an
+    // objc2 msg_send that expects a valid CGImage reference.
     let handler = unsafe {
         let objc_cg_image: &objc2_core_graphics::CGImage =
             &*(cg_image as *const objc2_core_graphics::CGImage);
@@ -176,6 +193,7 @@ fn recognize_text(
 
         // Vision returns normalized coordinates (0-1) with origin at bottom-left.
         // Convert to top-left origin in pixel coordinates.
+        // SAFETY: boundingBox() is an objc2 msg_send on a valid VNRecognizedTextObservation.
         let box_rect: CGRect = unsafe { observation.boundingBox() };
         let x = box_rect.origin.x * image_width;
         let y = image_height - (box_rect.origin.y + box_rect.size.height) * image_height;

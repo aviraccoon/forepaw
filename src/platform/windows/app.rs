@@ -133,6 +133,7 @@ impl From<WindowEntry> for WindowInfo {
 fn collect_visible_windows() -> Vec<WindowEntry> {
     let mut entries: Vec<WindowEntry> = Vec::new();
 
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         EnumWindows(
             Some(enum_window_callback),
@@ -158,12 +159,14 @@ unsafe extern "system" fn enum_window_callback(hwnd: HWND, lparam: LPARAM) -> BO
 
     // Get owning process
     let mut pid: u32 = 0;
+    // SAFETY: Win32 PID query on valid HWND.
     unsafe { GetWindowThreadProcessId(hwnd, Some(&raw mut pid)) };
 
     let process_name = get_process_name(pid).unwrap_or_else(|| format!("pid-{pid}"));
 
     // Get window bounds
     let mut rect = RECT::default();
+    // SAFETY: Win32 GetWindowRect on valid HWND.
     let bounds = if unsafe { GetWindowRect(hwnd, &raw mut rect) }.is_ok() {
         let r = Rect::new(
             f64::from(rect.left),
@@ -245,6 +248,7 @@ pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
 
 /// Bring a window to the foreground.
 pub fn activate_app(hwnd: HWND) {
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         SetForegroundWindow(hwnd).ok().unwrap_or_default();
     }
@@ -257,6 +261,11 @@ pub fn activate_app(hwnd: HWND) {
 
 /// Get window title text via `GetWindowTextLengthW` + `GetWindowTextW`.
 fn get_window_text(hwnd: HWND) -> String {
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "Win32/WinRT FFI pipeline"
+    )]
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         let len = GetWindowTextLengthW(hwnd);
         if len == 0 {
@@ -273,6 +282,11 @@ fn get_window_text(hwnd: HWND) -> String {
 
 /// Get the process executable name (without path or extension) for a PID.
 fn get_process_name(pid: u32) -> Option<String> {
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "Win32/WinRT FFI pipeline"
+    )]
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
 

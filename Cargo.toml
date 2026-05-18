@@ -83,8 +83,8 @@ todo                      = "warn"
 unimplemented             = "warn"
 
 # Unsafe / Memory Discipline
-undocumented_unsafe_blocks     = "allow"
-multiple_unsafe_ops_per_block  = "allow"
+undocumented_unsafe_blocks     = "warn"
+multiple_unsafe_ops_per_block  = "warn"
 unnecessary_safety_doc         = "warn"
 unnecessary_safety_comment     = "warn"
 mem_forget                     = "warn"

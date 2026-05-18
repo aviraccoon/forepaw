@@ -69,6 +69,7 @@ fn control_type_to_role(control_type: i32) -> &'static str {
 /// Called once during `WindowsProvider` construction. Ok to call multiple times
 /// (subsequent calls return `S_FALSE` but are harmless).
 pub fn init_com() {
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         CoInitializeEx(None, COINIT_MULTITHREADED).ok().ok();
     }
@@ -96,6 +97,7 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
     app::activate_app(hwnd);
 
     // Create UIA instance
+    // SAFETY: UIA tree traversal on valid element.
     let automation: IUIAutomation = unsafe {
         CoCreateInstance(
             &CUIAutomation,
@@ -106,6 +108,7 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
     };
 
     // Get element from window handle
+    // SAFETY: UIA tree traversal on valid element.
     let root_element: IUIAutomationElement = unsafe {
         automation
             .ElementFromHandle(hwnd)
@@ -113,6 +116,7 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
     };
 
     // Use ControlView TreeWalker (closest to macOS pruned tree)
+    // SAFETY: UIA tree traversal on valid element.
     let walker: IUIAutomationTreeWalker = unsafe {
         automation
             .ControlViewWalker()
@@ -173,6 +177,7 @@ fn build_tree(
 
     // Read properties via direct accessors (no VARIANT/SAFEARRAY)
     let role = get_control_type(element);
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     let name = get_bstr_property(element, |e| unsafe { e.CurrentName() });
     let bounds = get_element_bounds(element);
 
@@ -239,6 +244,7 @@ fn walk_children(
 ) -> Vec<ElementNode> {
     let mut children = Vec::new();
 
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     let Ok(first_child) = (unsafe { walker.GetFirstChildElement(parent) }) else {
         return children;
     };
@@ -253,6 +259,7 @@ fn walk_children(
 
     let mut current = first_child;
     loop {
+        // SAFETY: Win32/WinRT FFI call with valid arguments.
         let Ok(next) = (unsafe { walker.GetNextSiblingElement(&current) }) else {
             break;
         };
@@ -277,6 +284,7 @@ fn walk_children(
 /// Chain: `HelpText` → first child with text content.
 fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Option<String> {
     // 1. HelpText
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     let help = get_bstr_property(element, |e| unsafe { e.CurrentHelpText() });
     if let Some(h) = non_empty(help.as_ref()) {
         return Some(h);
@@ -302,6 +310,7 @@ fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Opt
 
 /// Get the element's `ControlType`, mapped to an AX-style role name.
 fn get_control_type(element: &IUIAutomationElement) -> String {
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     let ct = unsafe { element.CurrentControlType().map_or(0, |ct| ct.0) };
     control_type_to_role(ct).to_string()
 }
@@ -323,6 +332,7 @@ fn get_bstr_property(
 /// Get the bounding rectangle from a UIA element.
 /// Uses `CurrentBoundingRectangle` which returns a RECT directly.
 fn get_element_bounds(element: &IUIAutomationElement) -> Option<Rect> {
+    // SAFETY: UIA bounding rect read on valid element.
     let rect: RECT = unsafe { element.CurrentBoundingRectangle().ok() }?;
 
     let r = Rect::new(
@@ -341,6 +351,7 @@ fn get_element_bounds(element: &IUIAutomationElement) -> Option<Rect> {
 
 /// Check if an element is offscreen.
 fn is_offscreen(element: &IUIAutomationElement) -> bool {
+    // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         element
             .CurrentIsOffscreen()

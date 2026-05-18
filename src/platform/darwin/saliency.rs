@@ -17,6 +17,12 @@ use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI, CGSizeFFI};
 #[must_use]
 pub fn find_target(image_path: &str, region: &Rect, scale_factor: f64) -> Option<Point> {
     let c_path = CString::new(image_path).ok()?;
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "saliency pixel pipeline"
+    )]
+    // SAFETY: CoreGraphics image load + crop + pixel read pipeline. All CG
+    // objects are checked for null and released before return or on error.
     unsafe {
         let data_provider = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
         if data_provider.is_null() {

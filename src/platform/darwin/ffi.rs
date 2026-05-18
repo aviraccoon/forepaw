@@ -108,7 +108,10 @@ pub struct AXUIElementRef(pub *const c_void);
 
 // SAFETY: AXUIElementRef is a CF object pointer. It's safe to send between
 // threads as long as we don't share mutable references.
+// SAFETY: AXUIElementRef is a thread-safe opaque reference to an accessibility
+// object. Apple's AX APIs are safe to call from any thread.
 unsafe impl Send for AXUIElementRef {}
+// SAFETY: Same reasoning as Send above.
 unsafe impl Sync for AXUIElementRef {}
 
 impl AXUIElementRef {

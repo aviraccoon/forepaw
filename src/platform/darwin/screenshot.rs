@@ -64,6 +64,8 @@ fn crop_image(
 ) -> Result<(), ForepawError> {
     let c_path = CString::new(input_path)
         .map_err(|_e| ForepawError::ActionFailed(format!("Invalid path: {input_path}")))?;
+    // SAFETY: CG image load + crop + write. All objects null-checked and released.
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "image crop pipeline")]
     unsafe {
         let data_provider = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
         if data_provider.is_null() {
@@ -262,6 +264,11 @@ pub fn post_process_screenshot(
 fn image_pixel_width(path: &str) -> Result<usize, ForepawError> {
     let c_path = CString::new(path.to_string())
         .map_err(|_e| ForepawError::ActionFailed("Invalid path".into()))?;
+    #[expect(
+        clippy::multiple_unsafe_ops_per_block,
+        reason = "image load + width query"
+    )]
+    // SAFETY: image dimension query, all objects released.
     unsafe {
         let dp = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
         if dp.is_null() {
@@ -311,6 +318,7 @@ pub fn apply_crop(
 pub fn backing_scale_factor() -> f64 {
     // Access NSScreen.mainScreen via objc2
     use objc2_app_kit::NSScreen;
+    // SAFETY: called from CLI main thread.
     let mtm = unsafe { objc2::MainThreadMarker::new_unchecked() };
     let screen = NSScreen::mainScreen(mtm);
     match screen {
@@ -325,6 +333,7 @@ pub fn backing_scale_factor() -> f64 {
 #[expect(clippy::too_many_lines, reason = "screenshot pipeline")]
 pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, ForepawError> {
     // Check screen recording permission
+    // SAFETY: CGPreflightScreenCaptureAccess is a read-only TCC query.
     if unsafe { ffi::CGPreflightScreenCaptureAccess() == 0 } {
         return Err(ForepawError::ScreenRecordingDenied);
     }
@@ -398,6 +407,7 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
         )
     } else {
         // Full screen fallback
+        // SAFETY: called from CLI main thread.
         let screen = unsafe {
             let mtm = objc2::MainThreadMarker::new_unchecked();
             objc2_app_kit::NSScreen::mainScreen(mtm)
