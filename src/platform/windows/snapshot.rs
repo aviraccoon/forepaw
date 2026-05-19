@@ -156,7 +156,7 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
     };
 
     Ok(ElementTree {
-        app: app_name.to_string(),
+        app: app_name.to_owned(),
         root: result.root,
         refs: result.refs,
         window_bounds,
@@ -316,7 +316,7 @@ fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Opt
 fn get_control_type(element: &IUIAutomationElement) -> String {
     // SAFETY: Win32/WinRT FFI call with valid arguments.
     let ct = unsafe { element.CurrentControlType().map_or(0, |ct| ct.0) };
-    control_type_to_role(ct).to_string()
+    control_type_to_role(ct).to_owned()
 }
 
 /// Get a BSTR-returning property from a UIA element.

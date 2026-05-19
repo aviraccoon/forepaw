@@ -231,7 +231,7 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
     };
 
     Ok(ElementTree {
-        app: app_name.to_string(),
+        app: app_name.to_owned(),
         root: result.root,
         refs: result.refs,
         window_bounds,
@@ -524,7 +524,7 @@ fn build_tree(
 
     let role = attrs
         .string(ATTR_ROLE)
-        .unwrap_or_else(|| "AXUnknown".to_string());
+        .unwrap_or_else(|| "AXUnknown".to_owned());
 
     // Skip menu bar subtree if requested.
     if pruning.skip_menu_bar && role == "AXMenuBar" {
@@ -538,7 +538,7 @@ fn build_tree(
     let mut attributes: Vec<(String, String)> = Vec::new();
     if let Some(subrole) = attrs.string(ATTR_SUBROLE) {
         if !subrole.is_empty() && subrole != "AXNone" {
-            attributes.push(("subrole".to_string(), subrole));
+            attributes.push(("subrole".to_owned(), subrole));
         }
     }
 
@@ -672,7 +672,7 @@ fn computed_name(
 
     // 5. AXDOMClassList (index 11) -> icon class parsing
     if let Some(class_list) = attrs.string_array(ATTR_DOM_CLASS_LIST) {
-        let class_refs: Vec<&str> = class_list.iter().map(std::string::String::as_str).collect();
+        let class_refs: Vec<&str> = class_list.iter().map(String::as_str).collect();
         if let Some(icon_name) = IconClassParser::new().parse(&class_refs) {
             return Some(icon_name);
         }

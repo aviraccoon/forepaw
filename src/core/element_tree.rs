@@ -41,7 +41,7 @@ pub struct ElementNode {
     pub r#ref: Option<ElementRef>,
     pub bounds: Option<Rect>,
     pub attributes: Vec<(String, String)>,
-    pub children: Vec<ElementNode>,
+    pub children: Vec<Self>,
 }
 
 impl ElementNode {
@@ -82,12 +82,12 @@ impl ElementNode {
         self
     }
 
-    pub fn with_children(mut self, children: Vec<ElementNode>) -> Self {
+    pub fn with_children(mut self, children: Vec<Self>) -> Self {
         self.children = children;
         self
     }
 
-    pub fn add_child(&mut self, child: ElementNode) {
+    pub fn add_child(&mut self, child: Self) {
         self.children.push(child);
     }
 
@@ -259,13 +259,13 @@ impl ElementRef {
 
     /// Parse a ref string like "@e3" into an `ElementRef`.
     #[must_use]
-    pub fn parse(s: &str) -> Option<ElementRef> {
+    pub fn parse(s: &str) -> Option<Self> {
         let trimmed = s.trim();
         if !trimmed.starts_with("@e") {
             return None;
         }
         let id: i32 = trimmed.strip_prefix("@e")?.parse().ok()?;
-        Some(ElementRef::new(id))
+        Some(Self::new(id))
     }
 }
 

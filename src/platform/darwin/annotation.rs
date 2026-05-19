@@ -189,7 +189,7 @@ fn draw_text(text: &str, ctx: CGContextRef, x: f64, y: f64, font: CTFontRef, col
 fn truncate_text(text: &str, font: CTFontRef, max_width: f64) -> String {
     let (w, _) = measure_text(text, font);
     if w <= max_width {
-        return text.to_string();
+        return text.to_owned();
     }
 
     // Binary search for the right truncation point
@@ -750,19 +750,19 @@ fn load_image_and_create_context(
     image_path: &str,
 ) -> Result<(usize, usize, CGContextRef, CGColorSpaceRef, ffi::CGImageRef), AnnotationError> {
     let c_path = CString::new(image_path)
-        .map_err(|_e| AnnotationError::ImageLoadFailed(image_path.to_string()))?;
+        .map_err(|_e| AnnotationError::ImageLoadFailed(image_path.to_owned()))?;
 
     // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
     #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     unsafe {
         let data_provider = ffi::CGDataProviderCreateWithFilename(c_path.as_ptr());
         if data_provider.is_null() {
-            return Err(AnnotationError::ImageLoadFailed(image_path.to_string()));
+            return Err(AnnotationError::ImageLoadFailed(image_path.to_owned()));
         }
         let image = ffi::CGImageCreateWithPNGDataProvider(data_provider, ptr::null(), 0, 0);
         ffi::CFRelease(data_provider as ffi::CFTypeRef);
         if image.is_null() {
-            return Err(AnnotationError::ImageLoadFailed(image_path.to_string()));
+            return Err(AnnotationError::ImageLoadFailed(image_path.to_owned()));
         }
 
         let width = ffi::CGImageGetWidth(image);
@@ -819,11 +819,11 @@ fn write_context_to_file(
         );
 
         let result = if dest.is_null() {
-            Err(AnnotationError::SaveFailed(output_path.to_string()))
+            Err(AnnotationError::SaveFailed(output_path.to_owned()))
         } else {
             ffi::CGImageDestinationAddImage(dest, output_image, ptr::null());
             if ffi::CGImageDestinationFinalize(dest) == 0 {
-                Err(AnnotationError::SaveFailed(output_path.to_string()))
+                Err(AnnotationError::SaveFailed(output_path.to_owned()))
             } else {
                 Ok(())
             }

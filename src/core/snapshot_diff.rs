@@ -69,7 +69,7 @@ impl SnapshotDiff {
         let r = self.removed().len();
         let u = self.unchanged().len();
         if a == 0 && r == 0 {
-            return "no changes".to_string();
+            return "no changes".to_owned();
         }
         let mut parts: Vec<String> = Vec::new();
         if a > 0 {
@@ -89,7 +89,7 @@ impl SnapshotDiff {
         let mut output: Vec<String> = Vec::new();
 
         if self.is_empty() {
-            output.push("[no changes]".to_string());
+            output.push("[no changes]".to_owned());
             return output.join("\n");
         }
 
@@ -131,7 +131,7 @@ impl SnapshotDiff {
                     continue;
                 }
                 if last_printed.is_some_and(|last| i > last + 1) {
-                    output.push("  ...".to_string());
+                    output.push("  ...".to_owned());
                 }
                 match line.kind {
                     DiffLineKind::Added => output.push(format!("+ {}", line.text)),
@@ -152,7 +152,7 @@ static REF_RE: LazyLock<regex::Regex> =
 /// Removes @eN refs from a line for comparison purposes.
 pub fn strip_refs(line: &str) -> String {
     let result = REF_RE.replace_all(line, "").to_string();
-    result.trim_end().to_string()
+    result.trim_end().to_owned()
 }
 
 /// Compares two rendered snapshot texts, producing a line-level diff.
@@ -201,19 +201,19 @@ impl SnapshotDiffer {
                 DiffOp::Keep { new_idx } => {
                     result.push(DiffLine {
                         kind: DiffLineKind::Unchanged,
-                        text: new_content[new_idx].to_string(),
+                        text: new_content[new_idx].to_owned(),
                     });
                 }
                 DiffOp::Insert { new_idx } => {
                     result.push(DiffLine {
                         kind: DiffLineKind::Added,
-                        text: new_content[new_idx].to_string(),
+                        text: new_content[new_idx].to_owned(),
                     });
                 }
                 DiffOp::Delete { old_idx } => {
                     result.push(DiffLine {
                         kind: DiffLineKind::Removed,
-                        text: old_content[old_idx].to_string(),
+                        text: old_content[old_idx].to_owned(),
                     });
                 }
             }

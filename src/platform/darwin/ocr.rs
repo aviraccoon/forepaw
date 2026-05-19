@@ -56,7 +56,7 @@ pub fn ocr(
     // Load the image using NSImage to get pixel dimensions
     let ns_image = objc2_app_kit::NSImage::initWithContentsOfFile(
         objc2_app_kit::NSImage::alloc(),
-        &objc2_foundation::NSString::from_str(&screenshot_result.path),
+        &NSString::from_str(&screenshot_result.path),
     )
     .ok_or_else(|| {
         ForepawError::ActionFailed(format!(

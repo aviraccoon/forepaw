@@ -333,7 +333,7 @@ pub fn set_value_on_element(
 ) -> Result<ActionResult, ForepawError> {
     let cf_value = {
         let ns_string = objc2_foundation::NSString::from_str(value);
-        let cf_str = objc2::rc::Retained::as_ptr(&ns_string) as ffi::CFTypeRef;
+        let cf_str = Retained::as_ptr(&ns_string) as ffi::CFTypeRef;
         #[expect(
             clippy::mem_forget,
             reason = "transfer ownership to AXUIElementSetAttributeValue"

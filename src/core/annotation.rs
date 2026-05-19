@@ -66,7 +66,7 @@ impl std::str::FromStr for AnnotationStyle {
 
 impl AnnotationStyle {
     #[must_use]
-    pub fn all() -> &'static [AnnotationStyle] {
+    pub fn all() -> &'static [Self] {
         &[Self::Badges, Self::Labeled, Self::Spotlight]
     }
 }

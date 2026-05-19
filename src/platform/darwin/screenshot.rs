@@ -157,7 +157,7 @@ pub fn post_process_screenshot(
     let needs_format = options.format != crate::platform::ImageFormat::Png;
 
     if !needs_scale && !needs_format {
-        return Ok(raw_path.to_string());
+        return Ok(raw_path.to_owned());
     }
 
     let ext = options.format.file_extension();
@@ -165,7 +165,7 @@ pub fn post_process_screenshot(
 
     // WebP: scale with sips first if needed, then convert with cwebp
     if options.format == crate::platform::ImageFormat::Webp {
-        let mut scaled_path = raw_path.to_string();
+        let mut scaled_path = raw_path.to_owned();
 
         if needs_scale {
             let target_width = image_pixel_width(raw_path)? / 2;
@@ -225,26 +225,22 @@ pub fn post_process_screenshot(
     if needs_scale {
         let target_width = image_pixel_width(raw_path)? / 2;
         if target_width > 0 {
-            sips_args.extend_from_slice(&["--resampleWidth".to_string(), target_width.to_string()]);
+            sips_args.extend_from_slice(&["--resampleWidth".to_owned(), target_width.to_string()]);
         }
     }
 
     if needs_format {
         sips_args.extend_from_slice(&[
-            "-s".to_string(),
-            "format".to_string(),
-            "jpeg".to_string(),
-            "-s".to_string(),
-            "formatOptions".to_string(),
+            "-s".to_owned(),
+            "format".to_owned(),
+            "jpeg".to_owned(),
+            "-s".to_owned(),
+            "formatOptions".to_owned(),
             options.quality.to_string(),
         ]);
     }
 
-    sips_args.extend_from_slice(&[
-        raw_path.to_string(),
-        "--out".to_string(),
-        output_path.clone(),
-    ]);
+    sips_args.extend_from_slice(&[raw_path.to_owned(), "--out".to_owned(), output_path.clone()]);
 
     let status = Command::new("/usr/bin/sips")
         .args(&sips_args)
@@ -254,7 +250,7 @@ pub fn post_process_screenshot(
         .map_err(|e| ForepawError::ActionFailed(format!("sips failed: {e}")))?;
 
     if !status.success() {
-        return Ok(raw_path.to_string()); // fallback: return original
+        return Ok(raw_path.to_owned()); // fallback: return original
     }
 
     if output_path != raw_path {
@@ -266,7 +262,7 @@ pub fn post_process_screenshot(
 
 /// Get the pixel width of an image file via CoreGraphics.
 fn image_pixel_width(path: &str) -> Result<usize, ForepawError> {
-    let c_path = CString::new(path.to_string())
+    let c_path = CString::new(path.to_owned())
         .map_err(|_e| ForepawError::ActionFailed("Invalid path".into()))?;
     #[expect(
         clippy::multiple_unsafe_ops_per_block,
@@ -304,7 +300,7 @@ pub fn apply_crop(
     suffix: &str,
 ) -> Result<String, ForepawError> {
     let Some(crop_rect) = crop.image_crop_rect(window_size, scale_factor) else {
-        return Ok(input_path.to_string());
+        return Ok(input_path.to_owned());
     };
     let cropped_path = format!("/tmp/forepaw-{tag}{suffix}-cropped.png");
     crop_image(
@@ -515,7 +511,7 @@ fn render_plain(
     grid_spacing: Option<u32>,
     options: &ScreenshotOptions,
 ) -> Result<ScreenshotResult, ForepawError> {
-    let mut current_path = raw_path.to_string();
+    let mut current_path = raw_path.to_owned();
 
     if let Some(crop) = crop {
         if let Some(resolved) = resolved_window {
@@ -564,6 +560,6 @@ fn apply_crop_if_needed(
             let scale = backing_scale_factor();
             apply_crop(crop, &window_size, scale, raw_path, tag, "")
         }
-        _ => Ok(raw_path.to_string()),
+        _ => Ok(raw_path.to_owned()),
     }
 }

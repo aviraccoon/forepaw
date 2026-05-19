@@ -43,7 +43,7 @@ impl IconClassParser {
     }
 
     fn sanitize(name: &str) -> Option<String> {
-        let cleaned: String = name.replace('-', " ").trim().to_string();
+        let cleaned: String = name.replace('-', " ").trim().to_owned();
         if cleaned.is_empty() {
             None
         } else {

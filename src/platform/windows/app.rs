@@ -129,7 +129,7 @@ struct WindowEntry {
 
 impl From<WindowEntry> for WindowInfo {
     fn from(e: WindowEntry) -> Self {
-        WindowInfo {
+        Self {
             id: format!("w-{}", e.hwnd),
             title: e.title,
             app: e.process_name,
@@ -238,7 +238,7 @@ pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
         .collect();
 
     if matching.is_empty() {
-        return Err(ForepawError::AppNotFound(app_name.to_string()));
+        return Err(ForepawError::AppNotFound(app_name.to_owned()));
     }
 
     // Score each candidate: prefer title match > non-desktop > titled > largest area
@@ -260,7 +260,7 @@ pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
         // (title_matches_query, not_desktop, has_title, area)
         (title_match, !is_desktop, has_title, area)
     }) else {
-        return Err(ForepawError::AppNotFound(app_name.to_string()));
+        return Err(ForepawError::AppNotFound(app_name.to_owned()));
     };
 
     let bounds = best
@@ -340,6 +340,6 @@ fn get_process_name(pid: u32) -> Option<String> {
         // Extract filename without extension
         let filename = full_path.rsplit('\\').next().unwrap_or(&full_path);
         let name = filename.strip_suffix(".exe").unwrap_or(filename);
-        Some(name.to_string())
+        Some(name.to_owned())
     }
 }

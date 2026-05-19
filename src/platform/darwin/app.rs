@@ -91,7 +91,7 @@ pub fn find_app(name: &str) -> Result<Retained<NSRunningApplication>, ForepawErr
         }
     }
 
-    Err(ForepawError::AppNotFound(name.to_string()))
+    Err(ForepawError::AppNotFound(name.to_owned()))
 }
 
 /// List all running applications with regular activation policy.
@@ -176,7 +176,7 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
     };
     if window_list.is_null() {
         return Err(ForepawError::WindowNotFound(
-            window.unwrap_or("any").to_string(),
+            window.unwrap_or("any").to_owned(),
         ));
     }
 
@@ -200,7 +200,7 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
 
     if app_windows.is_empty() {
         return Err(ForepawError::WindowNotFound(
-            window.unwrap_or("any").to_string(),
+            window.unwrap_or("any").to_owned(),
         ));
     }
 
@@ -477,7 +477,7 @@ fn match_window(windows: &[WindowEntry], pattern: &str) -> Result<ResolvedWindow
                 });
             }
         }
-        return Err(ForepawError::WindowNotFound(pattern.to_string()));
+        return Err(ForepawError::WindowNotFound(pattern.to_owned()));
     }
 
     // Substring match on title (case-insensitive)
@@ -503,11 +503,11 @@ fn match_window(windows: &[WindowEntry], pattern: &str) -> Result<ResolvedWindow
                 .collect::<Vec<_>>()
                 .join("\n");
             Err(ForepawError::AmbiguousWindow {
-                query: pattern.to_string(),
+                query: pattern.to_owned(),
                 matches: titles,
             })
         }
-        0 => Err(ForepawError::WindowNotFound(pattern.to_string())),
+        0 => Err(ForepawError::WindowNotFound(pattern.to_owned())),
     }
 }
 

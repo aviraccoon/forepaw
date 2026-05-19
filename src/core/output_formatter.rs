@@ -64,9 +64,9 @@ impl OutputFormatter {
             return text.to_string();
         }
         if success {
-            "ok".to_string()
+            "ok".to_owned()
         } else {
-            "failed".to_string()
+            "failed".to_owned()
         }
     }
 

@@ -19,7 +19,7 @@ impl ImageFormat {
     }
 
     #[must_use]
-    pub fn all() -> &'static [ImageFormat] {
+    pub fn all() -> &'static [Self] {
         &[Self::Png, Self::Jpeg, Self::Webp]
     }
 

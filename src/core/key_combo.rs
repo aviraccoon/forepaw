@@ -64,7 +64,7 @@ impl KeyCombo {
             if let Some(modifier) = Modifier::parse_name(part) {
                 modifiers.push(modifier);
             } else {
-                key = part.to_string();
+                part.clone_into(&mut key);
             }
         }
 

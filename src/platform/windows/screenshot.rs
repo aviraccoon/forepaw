@@ -130,7 +130,7 @@ fn capture_print_window(
         clippy::cast_possible_truncation,
         reason = "BITMAPINFOHEADER is a fixed Win32 struct (~40 bytes)"
     )]
-    let bi_size = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+    let bi_size = size_of::<BITMAPINFOHEADER>() as u32;
 
     #[expect(
         clippy::multiple_unsafe_ops_per_block,
@@ -258,7 +258,7 @@ fn capture_region_rgba(
         clippy::cast_possible_truncation,
         reason = "BITMAPINFOHEADER is a fixed Win32 struct (~40 bytes)"
     )]
-    let bi_size = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+    let bi_size = size_of::<BITMAPINFOHEADER>() as u32;
 
     #[expect(
         clippy::multiple_unsafe_ops_per_block,
