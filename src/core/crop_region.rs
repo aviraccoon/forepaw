@@ -41,12 +41,28 @@ impl CropRegion {
             return None;
         }
 
-        Some((
-            (clamped_x * scale_factor).round() as i64,
-            (clamped_y * scale_factor).round() as i64,
-            (clamped_w * scale_factor).round() as i64,
-            (clamped_h * scale_factor).round() as i64,
-        ))
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "rounded pixel coordinate fits in i64"
+        )]
+        let crop_x = (clamped_x * scale_factor).round() as i64;
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "rounded pixel coordinate fits in i64"
+        )]
+        let crop_y = (clamped_y * scale_factor).round() as i64;
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "rounded pixel dimension fits in i64"
+        )]
+        let crop_w = (clamped_w * scale_factor).round() as i64;
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "rounded pixel dimension fits in i64"
+        )]
+        let crop_h = (clamped_h * scale_factor).round() as i64;
+
+        Some((crop_x, crop_y, crop_w, crop_h))
     }
 }
 

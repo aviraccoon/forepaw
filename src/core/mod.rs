@@ -1,4 +1,5 @@
 pub mod annotation;
+pub mod cast;
 pub mod coordinate_validation;
 pub mod crop_region;
 pub mod element_tree;

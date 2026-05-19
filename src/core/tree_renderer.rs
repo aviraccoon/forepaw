@@ -62,19 +62,15 @@ impl TreeRenderer {
 
         // Bounds (window-relative when window bounds are available)
         if let Some(b) = &node.bounds {
-            let display_x: i64;
-            let display_y: i64;
-            if let Some(w) = window_origin {
-                display_x = (b.x - w.x).round() as i64;
-                display_y = (b.y - w.y).round() as i64;
+            let (display_x, display_y) = if let Some(w) = window_origin {
+                ((b.x - w.x).round(), (b.y - w.y).round())
             } else {
-                display_x = b.x.round() as i64;
-                display_y = b.y.round() as i64;
-            }
+                (b.x.round(), b.y.round())
+            };
             parts.push(format!(
-                "({display_x},{display_y} {}x{})",
-                b.width.round() as i64,
-                b.height.round() as i64
+                "({display_x:.0},{display_y:.0} {:.0}x{:.0})",
+                b.width.round(),
+                b.height.round()
             ));
         }
 

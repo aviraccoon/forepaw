@@ -130,11 +130,16 @@ fn create_attributed_string(
             values.push(c as *const std::ffi::c_void);
         }
 
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "dictionary key count fits in CFIndex (i64)"
+        )]
+        let key_count = keys.len() as ffi::CFIndex;
         let attrs = ffi::CFDictionaryCreate(
             ptr::null(),
             keys.as_ptr(),
             values.as_ptr(),
-            keys.len() as ffi::CFIndex,
+            key_count,
             &raw const ffi::kCFTypeDictionaryKeyCallBacks,
             &raw const ffi::kCFTypeDictionaryValueCallBacks,
         );
@@ -230,6 +235,10 @@ fn render_badges(
     let font = create_font("Helvetica-Bold", 11.0 * scale_factor);
     let padding = 3.0 * scale_factor;
     let corner_radius = 4.0 * scale_factor;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "bitmap height fits in f64 mantissa"
+    )]
     // SAFETY: CGBitmapContextGetHeight on valid bitmap context.
     let image_height = unsafe { ffi::CGBitmapContextGetHeight(ctx) } as f64;
 
@@ -305,6 +314,10 @@ fn render_labeled(
     let padding = 2.0 * scale_factor;
     let corner_radius = 3.0 * scale_factor;
     let border_width = 1.5 * scale_factor;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "bitmap height fits in f64 mantissa"
+    )]
     // SAFETY: CGBitmapContextGetHeight on valid bitmap context.
     let image_height = unsafe { ffi::CGBitmapContextGetHeight(ctx) } as f64;
 
@@ -421,7 +434,15 @@ fn render_spotlight(
     height: usize,
     color_space: CGColorSpaceRef,
 ) {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "image dimensions fit in f64 mantissa"
+    )]
     let image_height = height as f64;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "image dimensions fit in f64 mantissa"
+    )]
     let image_width = width as f64;
     let full_rect = CGRectFFI {
         origin: CGPointFFI { x: 0.0, y: 0.0 },
@@ -510,7 +531,15 @@ pub fn render_grid(
             CGRectFFI {
                 origin: CGPointFFI { x: 0.0, y: 0.0 },
                 size: CGSizeFFI {
+                    #[expect(
+                        clippy::cast_precision_loss,
+                        reason = "image dimensions fit in f64 mantissa"
+                    )]
                     width: width as f64,
+                    #[expect(
+                        clippy::cast_precision_loss,
+                        reason = "image dimensions fit in f64 mantissa"
+                    )]
                     height: height as f64,
                 },
             },
@@ -518,7 +547,15 @@ pub fn render_grid(
         );
     }
 
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "image dimensions fit in f64 mantissa"
+    )]
     let image_height = height as f64;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "image dimensions fit in f64 mantissa"
+    )]
     let image_width = width as f64;
     let font = create_font("Helvetica", 9.0 * scale_factor);
 
@@ -555,7 +592,7 @@ pub fn render_grid(
             ffi::CGContextStrokePath(ctx);
         }
 
-        let label = format!("{}", window_x as i64);
+        let label = format!("{window_x:.0}");
         let (tw, th) = measure_text(&label, font);
         let label_rect = CGRectFFI {
             origin: CGPointFFI {
@@ -603,7 +640,7 @@ pub fn render_grid(
             ffi::CGContextStrokePath(ctx);
         }
 
-        let label = format!("{}", window_y as i64);
+        let label = format!("{window_y:.0}");
         let (tw, th) = measure_text(&label, font);
         let label_rect = CGRectFFI {
             origin: CGPointFFI {
@@ -672,7 +709,15 @@ pub fn render(
             CGRectFFI {
                 origin: CGPointFFI { x: 0.0, y: 0.0 },
                 size: CGSizeFFI {
+                    #[expect(
+                        clippy::cast_precision_loss,
+                        reason = "image dimensions fit in f64 mantissa"
+                    )]
                     width: width as f64,
+                    #[expect(
+                        clippy::cast_precision_loss,
+                        reason = "image dimensions fit in f64 mantissa"
+                    )]
                     height: height as f64,
                 },
             },

@@ -88,10 +88,15 @@ fn get_batch_attr_array() -> CFArrayRef {
                 cf_strings.iter().map(|s| (*s).cast()).collect();
             // SAFETY: CFArrayCreate produces an immutable array from valid CFStrings.
             let array = unsafe {
+                #[expect(
+                    clippy::cast_possible_wrap,
+                    reason = "attribute count fits in CFIndex (i64)"
+                )]
+                let count = ptrs.len() as CFIndex;
                 CFArrayCreate(
                     std::ptr::null(),
                     ptrs.as_ptr(),
-                    ptrs.len() as CFIndex,
+                    count,
                     &raw const kCFTypeArrayCallBacks,
                 )
             };
@@ -295,7 +300,12 @@ impl BatchAttrs {
         }
         // SAFETY: index is in bounds (checked above), self.array is valid CFArray.
         unsafe {
-            let val = CFArrayGetValueAtIndex(self.array, idx as CFIndex);
+            #[expect(
+                clippy::cast_possible_wrap,
+                reason = "AX child index fits in CFIndex (i64)"
+            )]
+            let cf_index = idx as CFIndex;
+            let val = CFArrayGetValueAtIndex(self.array, cf_index);
             if val.is_null() {
                 return None;
             }
@@ -408,7 +418,13 @@ impl BatchAttrs {
                 return Vec::new();
             }
             let count = CFArrayGetCount(val as CFArrayRef);
-            let mut result = Vec::with_capacity(count as usize);
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "CFArray count fits in usize"
+            )]
+            #[expect(clippy::cast_sign_loss, reason = "CFArray count is non-negative")]
+            let count_usize = count as usize;
+            let mut result = Vec::with_capacity(count_usize);
             for i in 0..count {
                 let child = CFArrayGetValueAtIndex(val as CFArrayRef, i);
                 // CFRetain: CFArrayGetValueAtIndex returns a non-retained pointer.
@@ -439,7 +455,13 @@ impl BatchAttrs {
                 return None;
             }
             let count = CFArrayGetCount(val as CFArrayRef);
-            let mut result = Vec::with_capacity(count as usize);
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "CFArray count fits in usize"
+            )]
+            #[expect(clippy::cast_sign_loss, reason = "CFArray count is non-negative")]
+            let count_usize = count as usize;
+            let mut result = Vec::with_capacity(count_usize);
             for i in 0..count {
                 let item = CFArrayGetValueAtIndex(val as CFArrayRef, i);
                 if item.is_null() || item as CFTypeRef == kCFNull {
@@ -779,7 +801,13 @@ fn get_ax_element_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
             return Vec::new();
         }
         let count = CFArrayGetCount(value as CFArrayRef);
-        let mut children = Vec::with_capacity(count as usize);
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "CFArray count fits in usize"
+        )]
+        #[expect(clippy::cast_sign_loss, reason = "CFArray count is non-negative")]
+        let count_usize = count as usize;
+        let mut children = Vec::with_capacity(count_usize);
         for i in 0..count {
             let child = CFArrayGetValueAtIndex(value as CFArrayRef, i);
             // CFRetain: CFArrayGetValueAtIndex returns a non-retained pointer.
@@ -883,11 +911,22 @@ fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
         }
         // Slow path: non-ASCII strings need a buffer copy
         let len = CFStringGetLength(cf_str);
-        let mut buf = vec![0_u8; (len as usize + 1) * 4]; // worst case: 4 bytes per char
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "CFString length fits in usize"
+        )]
+        #[expect(clippy::cast_sign_loss, reason = "CFString length is non-negative")]
+        let len_usize = len as usize;
+        let mut buf = vec![0_u8; (len_usize + 1) * 4]; // worst case: 4 bytes per char
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "buffer length fits in CFIndex (i64)"
+        )]
+        let buf_len = buf.len() as CFIndex;
         if CFStringGetCString(
             cf_str,
             buf.as_mut_ptr().cast::<std::ffi::c_char>(),
-            buf.len() as CFIndex,
+            buf_len,
             K_CF_STRING_ENCODING_UTF8,
         ) {
             let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
@@ -923,7 +962,7 @@ fn number_to_rust_string(number: CFNumberRef) -> Option<String> {
         ) != 0
         {
             return Some(if (fval - fval.floor()).abs() < f64::EPSILON {
-                format!("{}", fval as i64)
+                format!("{fval:.0}")
             } else {
                 format!("{fval}")
             });

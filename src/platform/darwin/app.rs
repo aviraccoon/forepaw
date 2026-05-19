@@ -180,8 +180,7 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
         ));
     }
 
-    // SAFETY: collect_windows_for_pid is an unsafe fn that iterates the CFArray.
-    let mut app_windows = unsafe { collect_windows_for_pid(window_list, pid) };
+    let mut app_windows = windows_for_pid(window_list, pid);
 
     // Multi-process fallback: some apps (Steam) render UI in helper processes.
     if app_windows.is_empty() {
@@ -190,8 +189,7 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
                 let main_bundle_str = main_bundle.to_string();
                 let helper_pids = collect_helper_pids(&main_bundle_str, pid);
                 if !helper_pids.is_empty() {
-                    // SAFETY: collect_windows_for_pids iterates the CFArray.
-                    app_windows = unsafe { collect_windows_for_pids(window_list, &helper_pids) };
+                    app_windows = windows_for_pids(window_list, &helper_pids);
                 }
             }
         }
@@ -337,8 +335,8 @@ pub fn validate_point_in_window(point: &Point, pid: i32) -> Result<(), ForepawEr
     let h = resolved.bounds.height;
     if point.x < 0.0 || point.y < 0.0 || point.x > w || point.y > h {
         return Err(ForepawError::ActionFailed(format!(
-            "Point ({}, {}) is outside window bounds (0,0)-({},{})",
-            point.x as i32, point.y as i32, w as i32, h as i32
+            "Point ({:.0}, {:.0}) is outside window bounds (0,0)-({:.0},{:.0})",
+            point.x, point.y, w, h
         )));
     }
     Ok(())
@@ -402,7 +400,16 @@ struct WindowEntry {
     bounds: Rect,
 }
 
-unsafe fn collect_windows_for_pid(window_list: CFArrayRef, pid: i32) -> Vec<WindowEntry> {
+/// Walk a `CGWindowListCopyWindowInfo` array, filtering by owner PID.
+/// Returns windows with bounds >= 10x10.
+///
+/// # Safety
+///
+/// `window_list` must be a valid `CFArrayRef` from `CGWindowListCopyWindowInfo`.
+unsafe fn collect_windows(
+    window_list: CFArrayRef,
+    pid_matches: impl Fn(i32) -> bool,
+) -> Vec<WindowEntry> {
     // SAFETY: CFArrayGetCount on valid CFArray.
     let count = unsafe { CFArrayGetCount(window_list) };
     let mut entries = Vec::new();
@@ -415,7 +422,7 @@ unsafe fn collect_windows_for_pid(window_list: CFArrayRef, pid: i32) -> Vec<Wind
         }
         // SAFETY: dict accessor on valid CFDictionary.
         let _owner_pid = match get_dict_i32(info, unsafe { kCGWindowOwnerPID }) {
-            Some(p) if p == pid => p,
+            Some(p) if pid_matches(p) => p,
             _ => continue,
         };
         // SAFETY: accessing a global CFStringRef constant.
@@ -426,7 +433,14 @@ unsafe fn collect_windows_for_pid(window_list: CFArrayRef, pid: i32) -> Vec<Wind
         };
         // SAFETY: dict accessor on valid CFDictionary.
         let window_id = get_dict_i32(info, unsafe { kCGWindowNumber })
-            .and_then(|id| if id > 0 { Some(id as u32) } else { None })
+            .and_then(|id| {
+                #[expect(clippy::cast_sign_loss, reason = "window ID validated > 0 before cast")]
+                if id > 0 {
+                    Some(id as u32)
+                } else {
+                    None
+                }
+            })
             .unwrap_or(0);
         // SAFETY: dict accessor on valid CFDictionary.
         let title = get_dict_string(info, unsafe { kCGWindowName }).unwrap_or_default();
@@ -441,46 +455,14 @@ unsafe fn collect_windows_for_pid(window_list: CFArrayRef, pid: i32) -> Vec<Wind
     entries
 }
 
-unsafe fn collect_windows_for_pids(
-    window_list: CFArrayRef,
-    pids: &HashSet<i32>,
-) -> Vec<WindowEntry> {
-    // SAFETY: CFArrayGetCount on valid CFArray.
-    let count = unsafe { CFArrayGetCount(window_list) };
-    let mut entries = Vec::new();
+fn windows_for_pid(window_list: CFArrayRef, pid: i32) -> Vec<WindowEntry> {
+    // SAFETY: window_list comes from CGWindowListCopyWindowInfo.
+    unsafe { collect_windows(window_list, |p| p == pid) }
+}
 
-    for i in 0..count {
-        // SAFETY: index in bounds, CFArray is valid.
-        let info = unsafe { CFArrayGetValueAtIndex(window_list, i as _) as CFDictionaryRef };
-        if info.is_null() {
-            continue;
-        }
-        // SAFETY: dict accessor on valid CFDictionary.
-        let _owner_pid = match get_dict_i32(info, unsafe { kCGWindowOwnerPID }) {
-            Some(p) if pids.contains(&p) => p,
-            _ => continue,
-        };
-        // SAFETY: accessing a global CFStringRef constant.
-        let bounds_key = unsafe { kCGWindowBounds };
-        let bounds = match get_dict_bounds(info, bounds_key) {
-            Some(b) if b.width >= 10.0 && b.height >= 10.0 => b,
-            _ => continue,
-        };
-        // SAFETY: dict accessor on valid CFDictionary.
-        let window_id = get_dict_i32(info, unsafe { kCGWindowNumber })
-            .and_then(|id| if id > 0 { Some(id as u32) } else { None })
-            .unwrap_or(0);
-        // SAFETY: dict accessor on valid CFDictionary.
-        let title = get_dict_string(info, unsafe { kCGWindowName }).unwrap_or_default();
-
-        entries.push(WindowEntry {
-            id: window_id,
-            title,
-            bounds,
-        });
-    }
-
-    entries
+fn windows_for_pids(window_list: CFArrayRef, pids: &HashSet<i32>) -> Vec<WindowEntry> {
+    // SAFETY: window_list comes from CGWindowListCopyWindowInfo.
+    unsafe { collect_windows(window_list, |p| pids.contains(&p)) }
 }
 
 fn match_window(windows: &[WindowEntry], pattern: &str) -> Result<ResolvedWindow, ForepawError> {
@@ -620,10 +602,15 @@ pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option
         }
         // Fallback: copy into a buffer
         let mut buf = [0_u8; 1024];
+        #[expect(
+            clippy::cast_possible_wrap,
+            reason = "buffer length fits in CFIndex (i64)"
+        )]
+        let buf_len = buf.len() as CFIndex;
         if CFStringGetCString(
             val as CFStringRef,
             buf.as_mut_ptr().cast::<std::ffi::c_char>(),
-            buf.len() as CFIndex,
+            buf_len,
             K_CF_STRING_ENCODING_UTF8,
         ) {
             let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
@@ -823,7 +810,13 @@ fn get_ax_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
             return Vec::new();
         }
         let count = CFArrayGetCount(value as CFArrayRef);
-        let mut children = Vec::with_capacity(count as usize);
+        #[expect(clippy::cast_sign_loss, reason = "CFArray count is non-negative")]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "CFArray count fits in usize"
+        )]
+        let count_usize = count as usize;
+        let mut children = Vec::with_capacity(count_usize);
         for i in 0..count {
             let child = CFArrayGetValueAtIndex(value as CFArrayRef, i);
             // AXUIElementRef is a newtype around *const c_void, so we need

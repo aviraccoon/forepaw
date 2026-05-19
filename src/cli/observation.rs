@@ -401,17 +401,17 @@ impl Ocr {
             for r in &output.results {
                 let (cx, cy) = r.center();
                 println!(
-                    "{{\"text\": \"{}\", \"x\": {}, \"y\": {}, \"bounds\": {{\"x\": {}, \"y\": {}, \"w\": {}, \"h\": {}}}}}",
+                    "{{\"text\": \"{}\", \"x\": {:.0}, \"y\": {:.0}, \"bounds\": {{\"x\": {:.0}, \"y\": {:.0}, \"w\": {:.0}, \"h\": {:.0}}}}}",
                     r.text,
-                    cx as i64, cy as i64,
-                    r.bounds.x as i64, r.bounds.y as i64,
-                    r.bounds.width as i64, r.bounds.height as i64
+                    cx, cy,
+                    r.bounds.x, r.bounds.y,
+                    r.bounds.width, r.bounds.height
                 );
             }
         } else {
             for r in &output.results {
                 let (cx, cy) = r.center();
-                println!("{}  [{},{}]", r.text, cx as i64, cy as i64);
+                println!("{}  [{:.0},{:.0}]", r.text, cx, cy);
             }
         }
 

@@ -105,10 +105,10 @@ pub fn ocr(
         results.push(OCRResult {
             text,
             bounds: Rect::new(
-                f64::from(min_x / scale as f32),
-                f64::from(min_y / scale as f32),
-                f64::from((max_x - min_x) / scale as f32),
-                f64::from((max_y - min_y) / scale as f32),
+                f64::from(min_x) / f64::from(scale),
+                f64::from(min_y) / f64::from(scale),
+                f64::from(max_x - min_x) / f64::from(scale),
+                f64::from(max_y - min_y) / f64::from(scale),
             ),
         });
     }
@@ -146,7 +146,11 @@ fn create_software_bitmap(
     width: u32,
     height: u32,
 ) -> Result<SoftwareBitmap, ForepawError> {
-    let bitmap = SoftwareBitmap::Create(BitmapPixelFormat::Bgra8, width as i32, height as i32)
+    #[expect(clippy::cast_possible_wrap, reason = "image dimensions fit in i32")]
+    let w = width as i32;
+    #[expect(clippy::cast_possible_wrap, reason = "image dimensions fit in i32")]
+    let h = height as i32;
+    let bitmap = SoftwareBitmap::Create(BitmapPixelFormat::Bgra8, w, h)
         .map_err(|e| ForepawError::ActionFailed(format!("SoftwareBitmap::Create failed: {e}")))?;
 
     // Lock the buffer for writing

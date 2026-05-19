@@ -117,8 +117,13 @@ fn smooth_move_mouse(
         }
     };
 
+    #[expect(clippy::cast_possible_truncation, reason = "step count fits in u32")]
     let step_delay = duration / steps as u32;
     for i in 1..=steps {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "step index to f64 for interpolation"
+        )]
         let t = i as f64 / steps as f64;
         let x = current.x + (target.x - current.x) * t;
         let y = current.y + (target.y - current.y) * t;
@@ -231,8 +236,8 @@ pub fn click_element(
         let window_origin = pid
             .and_then(|p| app::find_window(p, None).ok())
             .map_or(Point::new(0.0, 0.0), |w| w.origin());
-        let rel_x = (screen_point.x - window_origin.x) as i32;
-        let rel_y = (screen_point.y - window_origin.y) as i32;
+        let rel_x = screen_point.x - window_origin.x;
+        let rel_y = screen_point.y - window_origin.y;
         let label = if is_right_click {
             "right-clicked"
         } else if is_double_click {
@@ -240,7 +245,9 @@ pub fn click_element(
         } else {
             "clicked"
         };
-        return Ok(ActionResult::ok_msg(format!("{label} at {rel_x},{rel_y}")));
+        return Ok(ActionResult::ok_msg(format!(
+            "{label} at {rel_x:.0},{rel_y:.0}"
+        )));
     }
 
     // Last resort for links: try AXPress anyway (only for regular left click)
@@ -291,7 +298,12 @@ pub fn type_via_keyboard(text: &str) -> Result<(), ForepawError> {
                 1,
             );
             if !key_down.is_null() {
-                ffi::CGEventKeyboardSetUnicodeString(key_down, utf16.len() as u32, utf16.as_ptr());
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "single-char UTF-16 length is 1 or 2"
+                )]
+                let utf16_len = utf16.len() as u32;
+                ffi::CGEventKeyboardSetUnicodeString(key_down, utf16_len, utf16.as_ptr());
                 ffi::CGEventPost(ffi::K_CG_EVENT_TAP_CGHID, key_down);
                 ffi::CFRelease(key_down as ffi::CFTypeRef);
             }
@@ -459,6 +471,11 @@ fn move_mouse_to_scroll_target(point: CGPointFFI) {
 /// Capture a pixel fingerprint of a window for scroll boundary detection.
 /// Uses `CGWindowListCreateImage` to grab a thin horizontal strip from the
 /// window center -- fast, no file I/O.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "CGImage dimensions fit in i32"
+)]
+#[expect(clippy::too_many_lines, reason = "pixel fingerprint capture pipeline")]
 fn capture_scroll_fingerprint(window_id: u32) -> Option<Vec<u8>> {
     #[expect(
         clippy::multiple_unsafe_ops_per_block,
@@ -483,7 +500,9 @@ fn capture_scroll_fingerprint(window_id: u32) -> Option<Vec<u8>> {
             return None;
         }
 
+        #[expect(clippy::cast_possible_wrap, reason = "screen dimensions fit in i32")]
         let h = ffi::CGImageGetHeight(image) as i32;
+        #[expect(clippy::cast_possible_wrap, reason = "screen dimensions fit in i32")]
         let w = ffi::CGImageGetWidth(image) as i32;
         if h <= 40 || w <= 0 {
             ffi::CFRelease(image as ffi::CFTypeRef);
@@ -492,15 +511,34 @@ fn capture_scroll_fingerprint(window_id: u32) -> Option<Vec<u8>> {
 
         // Crop a 20px tall strip from the vertical center, excluding the
         // rightmost 30px to avoid transient scrollbar overlays.
-        let strip_y = (h / 2 - 10) as usize;
-        let strip_w = std::cmp::max(1, w - 30) as usize;
+        let strip_y = {
+            #[expect(clippy::cast_sign_loss, reason = "h >= 40 ensures positive")]
+            let y = (h / 2 - 10) as usize;
+            y
+        };
+        let strip_w = {
+            #[expect(clippy::cast_sign_loss, reason = "w > 0 ensures positive")]
+            let sw = std::cmp::max(1, w - 30) as usize;
+            sw
+        };
         let strip_rect = CGRectFFI {
             origin: CGPointFFI {
                 x: 0.0,
-                y: strip_y as f64,
+                y: {
+                    #[expect(clippy::cast_precision_loss, reason = "screen y fits in f64 mantissa")]
+                    let y = strip_y as f64;
+                    y
+                },
             },
             size: ffi::CGSizeFFI {
-                width: strip_w as f64,
+                width: {
+                    #[expect(
+                        clippy::cast_precision_loss,
+                        reason = "screen width fits in f64 mantissa"
+                    )]
+                    let w = strip_w as f64;
+                    w
+                },
                 height: 20.0,
             },
         };
@@ -540,7 +578,15 @@ fn capture_scroll_fingerprint(window_id: u32) -> Option<Vec<u8>> {
             CGRectFFI {
                 origin: CGPointFFI { x: 0.0, y: 0.0 },
                 size: ffi::CGSizeFFI {
+                    #[expect(
+                        clippy::cast_precision_loss,
+                        reason = "strip pixel width fits in f64 mantissa"
+                    )]
                     width: strip_w as f64,
+                    #[expect(
+                        clippy::cast_precision_loss,
+                        reason = "strip pixel height fits in f64 mantissa"
+                    )]
                     height: strip_h as f64,
                 },
             },
@@ -624,6 +670,10 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
     thread::sleep(Duration::from_millis(20));
 
     let segments = path.len() - 1;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "segment count to f64 for delay calculation"
+    )]
     let step_delay = options.duration / (segments as f64) / f64::from(options.steps);
 
     for seg_idx in 0..segments {
@@ -693,14 +743,15 @@ pub fn click_at_point(
 
     perform_mouse_click(cg_point, options.button, options.click_count)?;
 
-    let rel_x = point.x as i32;
-    let rel_y = point.y as i32;
     let label = match options.button {
         MouseButton::Right => "right-clicked",
         MouseButton::Left if options.click_count > 1 => "double-clicked",
         MouseButton::Left => "clicked",
     };
-    Ok(ActionResult::ok_msg(format!("{label} at {rel_x},{rel_y}")))
+    Ok(ActionResult::ok_msg(format!(
+        "{label} at {:.0},{:.0}",
+        point.x, point.y
+    )))
 }
 
 /// Click at the center of a region (saliency-detected area).
@@ -730,10 +781,9 @@ pub fn click_region(
 
     perform_mouse_click(cg_point, options.button, options.click_count)?;
 
-    let rel_x = center.x as i32;
-    let rel_y = center.y as i32;
     Ok(ActionResult::ok_msg(format!(
-        "clicked region at {rel_x},{rel_y}"
+        "clicked region at {:.0},{:.0}",
+        center.x, center.y
     )))
 }
 
@@ -763,9 +813,11 @@ pub fn hover_ref(
 
     // Report window-relative coordinates
     let window_origin = app::find_window(pid, None).map_or(Point::new(0.0, 0.0), |w| w.origin());
-    let rel_x = (screen_point.x - window_origin.x) as i32;
-    let rel_y = (screen_point.y - window_origin.y) as i32;
-    Ok(ActionResult::ok_msg(format!("hovered at {rel_x},{rel_y}")))
+    let rel_x = screen_point.x - window_origin.x;
+    let rel_y = screen_point.y - window_origin.y;
+    Ok(ActionResult::ok_msg(format!(
+        "hovered at {rel_x:.0},{rel_y:.0}"
+    )))
 }
 
 /// Hover at a point. If app is specified, coordinates are window-relative.
@@ -801,8 +853,8 @@ pub fn hover_at_point(
         move_mouse_to(target)?;
     }
     Ok(ActionResult::ok_msg(format!(
-        "hovered at {},{}",
-        point.x as i32, point.y as i32
+        "hovered at {:.0},{:.0}",
+        point.x, point.y
     )))
 }
 
@@ -916,6 +968,10 @@ pub fn scroll(
         }
     };
 
+    #[expect(
+        clippy::cast_possible_wrap,
+        reason = "scroll amount fits in i32 for CGEventCreateScrollWheelEvent"
+    )]
     let (delta_y, delta_x) = match direction {
         "up" => (amount as i32, 0),
         "down" => (-(amount as i32), 0),
@@ -950,15 +1006,15 @@ pub fn scroll(
     };
 
     let window_origin = resolved.origin();
-    let rel_x = (scroll_point.x - window_origin.x) as i32;
-    let rel_y = (scroll_point.y - window_origin.y) as i32;
+    let rel_x = scroll_point.x - window_origin.x;
+    let rel_y = scroll_point.y - window_origin.y;
     let boundary_note = if at_boundary {
         " (at boundary -- content did not change)"
     } else {
         ""
     };
     Ok(ActionResult::ok_msg(format!(
-        "scrolled {direction} {amount} ticks at {rel_x},{rel_y}{boundary_note}"
+        "scrolled {direction} {amount} ticks at {rel_x:.0},{rel_y:.0}{boundary_note}"
     )))
 }
 
@@ -1000,8 +1056,8 @@ pub fn drag_path(
     // Report using the original input coordinates
     let msg = if let [from, to] = path.as_slice() {
         format!(
-            "dragged from {},{} to {},{} ({} steps, {:.1}s)",
-            from.x as i32, from.y as i32, to.x as i32, to.y as i32, options.steps, options.duration,
+            "dragged from {:.0},{:.0} to {:.0},{:.0} ({} steps, {:.1}s)",
+            from.x, from.y, to.x, to.y, options.steps, options.duration,
         )
     } else {
         format!(
@@ -1047,7 +1103,7 @@ pub fn drag_refs(
     perform_mouse_drag(&path, options)?;
 
     Ok(ActionResult::ok_msg(format!(
-        "dragged from {},{} to {},{} ({} steps, {:.1}s)",
-        from.x as i32, from.y as i32, to.x as i32, to.y as i32, options.steps, options.duration,
+        "dragged from {:.0},{:.0} to {:.0},{:.0} ({} steps, {:.1}s)",
+        from.x, from.y, to.x, to.y, options.steps, options.duration,
     )))
 }

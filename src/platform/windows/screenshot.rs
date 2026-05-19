@@ -80,7 +80,9 @@ pub fn capture_pixels(
             r
         };
 
+        #[expect(clippy::cast_sign_loss, reason = "max(1) ensures non-negative")]
         let width = (rect.right - rect.left).max(1) as u32;
+        #[expect(clippy::cast_sign_loss, reason = "max(1) ensures non-negative")]
         let height = (rect.bottom - rect.top).max(1) as u32;
 
         // Try PrintWindow first -- captures window content even when occluded
@@ -97,7 +99,9 @@ pub fn capture_pixels(
         Ok((rgba, width, height))
     } else {
         let rect = capture_rect_fullscreen();
+        #[expect(clippy::cast_sign_loss, reason = "max(1) ensures non-negative")]
         let width = (rect.right - rect.left).max(1) as u32;
+        #[expect(clippy::cast_sign_loss, reason = "max(1) ensures non-negative")]
         let height = (rect.bottom - rect.top).max(1) as u32;
         // SAFETY: Win32/WinRT FFI call with valid arguments.
         let hdc = unsafe { GetDC(None) };
@@ -118,6 +122,16 @@ fn capture_print_window(
     width: u32,
     height: u32,
 ) -> Result<Vec<u8>, ()> {
+    #[expect(clippy::cast_possible_wrap, reason = "image dimensions fit in i32")]
+    let w = width as i32;
+    #[expect(clippy::cast_possible_wrap, reason = "image dimensions fit in i32")]
+    let h = height as i32;
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "BITMAPINFOHEADER is a fixed Win32 struct (~40 bytes)"
+    )]
+    let bi_size = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+
     #[expect(
         clippy::multiple_unsafe_ops_per_block,
         reason = "Win32/WinRT FFI pipeline"
@@ -126,7 +140,7 @@ fn capture_print_window(
     unsafe {
         let hdc = GetDC(None);
         let hdc_mem = CreateCompatibleDC(Some(hdc));
-        let h_bitmap = CreateCompatibleBitmap(hdc, width as i32, height as i32);
+        let h_bitmap = CreateCompatibleBitmap(hdc, w, h);
         let old_bitmap = SelectObject(hdc_mem, HGDIOBJ::from(h_bitmap));
 
         // PW_RENDERFULLCONTENT = 2 -- captures DirectComposition-rendered content
@@ -148,9 +162,9 @@ fn capture_print_window(
 
         let mut bmi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: width as i32,
-                biHeight: -(height as i32), // negative = top-down
+                biSize: bi_size,
+                biWidth: w,
+                biHeight: -h, // negative = top-down
                 biPlanes: 1,
                 biBitCount: 32,
                 biCompression: BI_RGB.0,
@@ -236,6 +250,16 @@ fn capture_region_rgba(
     width: u32,
     height: u32,
 ) -> Result<Vec<u8>, ForepawError> {
+    #[expect(clippy::cast_possible_wrap, reason = "image dimensions fit in i32")]
+    let w = width as i32;
+    #[expect(clippy::cast_possible_wrap, reason = "image dimensions fit in i32")]
+    let h = height as i32;
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "BITMAPINFOHEADER is a fixed Win32 struct (~40 bytes)"
+    )]
+    let bi_size = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+
     #[expect(
         clippy::multiple_unsafe_ops_per_block,
         reason = "Win32/WinRT FFI pipeline"
@@ -243,15 +267,15 @@ fn capture_region_rgba(
     // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         let hdc_mem = CreateCompatibleDC(Some(hdc_source));
-        let h_bitmap = CreateCompatibleBitmap(hdc_source, width as i32, height as i32);
+        let h_bitmap = CreateCompatibleBitmap(hdc_source, w, h);
         let old_bitmap = SelectObject(hdc_mem, HGDIOBJ::from(h_bitmap));
 
         BitBlt(
             hdc_mem,
             0,
             0,
-            width as i32,
-            height as i32,
+            w,
+            h,
             Some(hdc_source),
             x,
             y,
@@ -263,9 +287,9 @@ fn capture_region_rgba(
 
         let mut bmi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: width as i32,
-                biHeight: -(height as i32), // negative = top-down
+                biSize: bi_size,
+                biWidth: w,
+                biHeight: -h, // negative = top-down
                 biPlanes: 1,
                 biBitCount: 32,
                 biCompression: BI_RGB.0,

@@ -81,8 +81,8 @@ fn crop_image(
             )));
         }
 
-        let img_w = ffi::CGImageGetWidth(image) as i32;
-        let img_h = ffi::CGImageGetHeight(image) as i32;
+        let img_w = crate::core::cast::usize_to_i32(ffi::CGImageGetWidth(image))?;
+        let img_h = crate::core::cast::usize_to_i32(ffi::CGImageGetHeight(image))?;
 
         // Clamp rect to image bounds
         let cx = rect.0.clamp(0, img_w - 1);
@@ -311,10 +311,10 @@ pub fn apply_crop(
         input_path,
         &cropped_path,
         (
-            crop_rect.0 as i32,
-            crop_rect.1 as i32,
-            crop_rect.2 as i32,
-            crop_rect.3 as i32,
+            crate::core::cast::i64_to_i32(crop_rect.0)?,
+            crate::core::cast::i64_to_i32(crop_rect.1)?,
+            crate::core::cast::i64_to_i32(crop_rect.2)?,
+            crate::core::cast::i64_to_i32(crop_rect.3)?,
         ),
     )?;
     fs::remove_file(input_path).ok();

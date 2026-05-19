@@ -33,11 +33,17 @@ fn rand_u16() -> u16 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos() as usize;
-    (pid.wrapping_mul(2_654_435_761)
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "hash mixing truncation is intentional"
+    )]
+    let mixed = (pid
+        .wrapping_mul(2_654_435_761)
         .wrapping_add(tid)
         .wrapping_add(stack)
         .wrapping_add(count)
-        ^ nanos) as u16
+        ^ nanos) as u16;
+    mixed
 }
 
 /// Get current thread ID as a usize.

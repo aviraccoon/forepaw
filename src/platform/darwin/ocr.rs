@@ -69,6 +69,10 @@ pub fn ocr(
     let rep = reps
         .firstObject()
         .ok_or_else(|| ForepawError::ActionFailed("No image representations found".into()))?;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "pixel height fits in f64 mantissa"
+    )]
     let image_height = rep.pixelsHigh() as f64;
 
     let c_path = std::ffi::CString::new(screenshot_result.path.clone())
@@ -148,6 +152,10 @@ fn recognize_text(
     image_height: f64,
     find: Option<&str>,
 ) -> Result<Vec<OCRResult>, ForepawError> {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "image width fits in f64 mantissa"
+    )]
     // SAFETY: CGImageGetWidth is a read-only accessor on a valid CGImage.
     let image_width = unsafe { ffi::CGImageGetWidth(cg_image) } as f64;
 
@@ -251,11 +259,11 @@ pub fn resolve_ocr_text(
         for (i, m) in matches.iter().enumerate() {
             writeln!(
                 listing,
-                "  --index {}: '{}' at {},{}",
+                "  --index {}: '{}' at {:.0},{:.0}",
                 i + 1,
                 m.text,
-                m.center().0 as i32,
-                m.center().1 as i32
+                m.center().0,
+                m.center().1
             )
             .ok();
         }
@@ -309,15 +317,14 @@ pub fn ocr_click(
 
     super::input::perform_mouse_click(cg_point, options.button, options.click_count)?;
 
-    let rel_x = window_point.x as i32;
-    let rel_y = window_point.y as i32;
     let label = match options.button {
         crate::core::key_combo::MouseButton::Right => "right-clicked",
         _ if options.click_count > 1 => "double-clicked",
         crate::core::key_combo::MouseButton::Left => "clicked",
     };
     Ok(crate::platform::ActionResult::ok_msg(format!(
-        "{label} '{matched_text}' at {rel_x},{rel_y}"
+        "{label} '{matched_text}' at {:.0},{:.0}",
+        window_point.x, window_point.y
     )))
 }
 
@@ -343,10 +350,9 @@ pub fn ocr_hover(
     };
     super::input::move_mouse_to(cg_point)?;
 
-    let rel_x = window_point.x as i32;
-    let rel_y = window_point.y as i32;
     Ok(crate::platform::ActionResult::ok_msg(format!(
-        "hovered '{matched_text}' at {rel_x},{rel_y}"
+        "hovered '{matched_text}' at {:.0},{:.0}",
+        window_point.x, window_point.y
     )))
 }
 
@@ -388,7 +394,6 @@ pub fn wait(
     }
 
     Err(ForepawError::ActionFailed(format!(
-        "Timed out after {}s waiting for '{text}'",
-        timeout as i32
+        "Timed out after {timeout:.0}s waiting for '{text}'"
     )))
 }

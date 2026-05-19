@@ -62,16 +62,7 @@ windows-future = "0.3"
 [lints.clippy]
 pedantic = { level = "deny", priority = -1 }
 
-# -- Allow overrides for pedantic lints not yet clean ---------------------
-# Remove lines as code is fixed. The base pedantic denial then takes effect.
-
-cast_possible_truncation   = "allow"  # FFI: i64 counts from AX API
-cast_possible_wrap         = "allow"  # FFI: usize -> i64 for CFIndex
-cast_precision_loss        = "allow"  # FFI: usize -> f64 for coordinates
-cast_sign_loss             = "allow"  # FFI: i64 -> usize for counts
-
-# -- Cherry-picked restriction lints --------------------------------------
-# All start as allow. Toggle to warn as code is cleaned up.
+# -- Cherry-picked restriction lints (all active at warn) ----------------
 
 # Don't Panic
 string_slice              = "warn"

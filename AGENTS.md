@@ -48,7 +48,7 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 ## Formatting
 
 - **rustfmt** (ships with Rust toolchain). Default settings.
-- Run `cargo fmt` before committing.
+- Run `cargo fmt` before committing. **Re-run `cargo clippy` after `cargo fmt`** -- rustfmt can introduce or change lint-triggering patterns (e.g. collapsing format args).
 - Zero clippy warnings: `cargo clippy` must pass clean on all platform targets you changed. Use `mise run lint-all` to check all targets.
 - Swift test apps use `swift-format` (via `mise run fmt`).
 
@@ -68,4 +68,5 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 - **Coordinate-based actions validate against window bounds.** `click_at_point` and `hover_at_point` reject coordinates outside the target window (errors, not clamps -- a misplaced click could be destructive). Any new coordinate-based action must validate when `--app` is specified.
 - Implement `std::str::FromStr` for string-parsed enums (clippy enforces this over custom `from_str` methods).
 - Use `anyhow::Result` in CLI command methods; use `Result<_, ForepawError>` in platform/trait methods.
+- **Per-site `#[expect]` for cast lints, never fn-wide.** Fn-wide `#[expect(clippy::cast_*)]` silently suppresses new casts added later. Always annotate the specific `as` expression with `#[expect(clippy::cast_X, reason = "why this is safe")]`. For display-only casts (format strings), prefer eliminating the cast entirely by formatting f64 directly with `{:.0}` instead of casting to `i32`/`i64` first.
 - `forepaw-audit` and other companion tools depend on this crate as a library dependency (not subprocess/JSON). Keep the lib surface clean.

@@ -6,10 +6,9 @@ use crate::core::types::Point;
 #[must_use]
 pub fn validate(point: &Point, window_size: &Point) -> Option<String> {
     if point.x < 0.0 || point.x > window_size.x || point.y < 0.0 || point.y > window_size.y {
-        let bounds_str = format!("{}x{}", window_size.x as i64, window_size.y as i64);
         Some(format!(
-            "coordinates {},{} are outside window bounds (0,0 {bounds_str}). Re-snapshot to get current positions.",
-            point.x as i64, point.y as i64
+            "coordinates {:.0},{:.0} are outside window bounds ({:.0}x{:.0}). Re-snapshot to get current positions.",
+            point.x, point.y, window_size.x, window_size.y
         ))
     } else {
         None

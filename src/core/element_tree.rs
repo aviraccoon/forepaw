@@ -172,6 +172,10 @@ impl SnapshotTiming {
     #[must_use]
     pub fn report(&self) -> String {
         let mut lines: Vec<String> = Vec::new();
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "node count fits in f64 mantissa"
+        )]
         let avg = if self.node_count > 0 {
             self.total_ms / self.node_count as f64
         } else {
@@ -211,6 +215,10 @@ impl SnapshotTiming {
                 continue;
             }
 
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "node count fits in f64 mantissa"
+            )]
             let pct = if total > 0 {
                 count as f64 / total as f64 * 100.0
             } else {

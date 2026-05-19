@@ -125,12 +125,12 @@ impl SnapshotDiff {
                 }
             }
 
-            let mut last_printed: isize = -2;
+            let mut last_printed: Option<usize> = None;
             for (i, line) in self.lines.iter().enumerate() {
                 if !visible_indices.contains(&i) {
                     continue;
                 }
-                if i as isize > last_printed + 1 && last_printed >= 0 {
+                if last_printed.is_some_and(|last| i > last + 1) {
                     output.push("  ...".to_string());
                 }
                 match line.kind {
@@ -138,7 +138,7 @@ impl SnapshotDiff {
                     DiffLineKind::Removed => output.push(format!("- {}", line.text)),
                     DiffLineKind::Unchanged => output.push(format!("  {}", line.text)),
                 }
-                last_printed = i as isize;
+                last_printed = Some(i);
             }
         }
 

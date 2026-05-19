@@ -51,12 +51,14 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
         if process_name.eq_ignore_ascii_case("ApplicationFrameHost") {
             for entry in &entries {
                 if !entry.title.is_empty() {
+                    #[expect(clippy::cast_possible_wrap, reason = "PID fits in i32")]
+                    let pid_i32 = pid as i32;
                     apps.push(AppInfo {
                         name: entry.title.clone(),
                         // Use the window title as bundle_id for UWP apps
                         // (the actual exe name is unhelpful)
                         bundle_id: Some(entry.title.clone()),
-                        pid: pid as i32,
+                        pid: pid_i32,
                     });
                 }
             }
@@ -69,11 +71,13 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
             .find(|e| !e.title.is_empty())
             .map_or_else(|| process_name.clone(), |e| e.title.clone());
 
+        #[expect(clippy::cast_possible_wrap, reason = "PID fits in i32")]
+        let pid_i32 = pid as i32;
         apps.push(AppInfo {
             name: display_name,
             // Use executable name as "bundle ID" on Windows (no real bundle IDs)
             bundle_id: Some(process_name),
-            pid: pid as i32,
+            pid: pid_i32,
         });
     }
 
@@ -242,7 +246,15 @@ pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
         let title_match = e.title.to_lowercase().contains(&filter_lower);
         let is_desktop = e.title == "Program Manager";
         let has_title = !e.title.is_empty();
-        let area = e.bounds.as_ref().map_or(0, |b| (b.width * b.height) as u64);
+        let area = e.bounds.as_ref().map_or(0_u64, |b| {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "screen dimensions fit in u64"
+            )]
+            #[expect(clippy::cast_sign_loss, reason = "window area is always positive")]
+            let area = (b.width * b.height) as u64;
+            area
+        });
 
         // Pack into a tuple for lexicographic comparison:
         // (title_matches_query, not_desktop, has_title, area)
@@ -283,12 +295,22 @@ fn get_window_text(hwnd: HWND) -> String {
         if len == 0 {
             return String::new();
         }
-        let mut buf = vec![0_u16; (len as usize) + 1];
+        #[expect(
+            clippy::cast_sign_loss,
+            reason = "GetWindowTextLengthW returns non-negative"
+        )]
+        let buf_len = (len as usize) + 1;
+        let mut buf = vec![0_u16; buf_len];
         let written = GetWindowTextW(hwnd, &mut buf);
         if written == 0 {
             return String::new();
         }
-        String::from_utf16_lossy(buf.get(..written as usize).unwrap_or_default())
+        #[expect(
+            clippy::cast_sign_loss,
+            reason = "GetWindowTextW returns non-negative character count"
+        )]
+        let end = written as usize;
+        String::from_utf16_lossy(buf.get(..end).unwrap_or_default())
     }
 }
 

@@ -14,6 +14,10 @@ use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI, CGSizeFFI};
 /// Returns window-relative coordinates (accounting for region offset),
 /// or `None` if no salient pixels are found.
 #[expect(clippy::too_many_lines, reason = "saliency algorithm")]
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "pixel dimensions to f64 for coordinate math"
+)]
 #[must_use]
 #[expect(
     clippy::indexing_slicing,
