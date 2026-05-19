@@ -1,0 +1,318 @@
+//! Linux backend using AT-SPI2 via D-Bus.
+//!
+//! Implements the `DesktopProvider` trait using:
+//! - AT-SPI2 registry (`org.a11y.atspi.Registry`) for app enumeration
+//! - `org.a11y.atspi.Accessible` interface for tree walking
+//! - `org.a11y.atspi.Component` interface for element bounds
+//! - `spectacle` (KDE) or `magick import` (X11) for screenshots
+//! - `tesseract` CLI for OCR
+//!
+//! All D-Bus calls use `zbus::blocking` to stay synchronous (matching
+//! the sync `DesktopProvider` trait). No async runtime needed.
+//!
+//! # AT-SPI2 bus discovery
+//!
+//! The AT-SPI2 bus is a separate D-Bus from the session bus. The address
+//! is obtained by calling `org.a11y.Bus.GetAddress` on the session bus,
+//! then connecting to that address for all subsequent AT-SPI2 calls.
+
+pub mod app;
+
+use crate::core::errors::ForepawError;
+use crate::platform::DesktopProvider;
+
+/// Linux implementation of `DesktopProvider`.
+///
+/// Connects to the AT-SPI2 accessibility bus (discovered from the
+/// session bus at `org.a11y.Bus`) and uses `zbus::blocking` for
+/// all D-Bus communication.
+pub struct LinuxProvider {
+    // No cached connection -- connections are established per-call
+    // so the binary can be inspected (`--help`, `--version`)
+    // without requiring an AT-SPI2 bus.
+}
+
+impl LinuxProvider {
+    /// Creates a new `LinuxProvider`.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Default for LinuxProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DesktopProvider for LinuxProvider {
+    // --- Observation ---
+
+    fn list_apps(&self) -> Result<Vec<crate::platform::AppInfo>, ForepawError> {
+        app::list_apps()
+    }
+
+    fn list_windows(
+        &self,
+        app: Option<&str>,
+    ) -> Result<Vec<crate::platform::WindowInfo>, ForepawError> {
+        app::list_windows(app)
+    }
+
+    fn snapshot(
+        &self,
+        _app: &str,
+        _options: &crate::platform::SnapshotOptions,
+    ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
+        // TODO: recursive AT-SPI2 tree walk via Accessible interface
+        Err(ForepawError::ActionFailed(
+            "snapshot not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn screenshot(
+        &self,
+        _params: &crate::platform::ScreenshotParams,
+    ) -> Result<crate::platform::ScreenshotResult, ForepawError> {
+        // TODO: shell out to spectacle (KDE) or magick import (X11)
+        Err(ForepawError::ActionFailed(
+            "screenshot not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn ocr(
+        &self,
+        _app: Option<&str>,
+        _window: Option<&str>,
+        _find: Option<&str>,
+        _screenshot_options: Option<&crate::platform::ScreenshotOptions>,
+    ) -> Result<crate::core::ocr_result::OCROutput, ForepawError> {
+        // TODO: shell out to tesseract CLI
+        Err(ForepawError::ActionFailed(
+            "ocr not yet implemented on Linux".into(),
+        ))
+    }
+
+    // --- Actions (stubs) ---
+
+    fn click_ref(
+        &self,
+        r#ref: crate::core::element_tree::ElementRef,
+        _app: &str,
+        _options: &crate::core::key_combo::ClickOptions,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(format!(
+            "click not yet implemented on Linux (ref: {ref})"
+        )))
+    }
+
+    fn click_at_point(
+        &self,
+        _point: crate::core::types::Point,
+        _app: &str,
+        _options: &crate::core::key_combo::ClickOptions,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "click not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn click_region(
+        &self,
+        _region: crate::core::types::Rect,
+        _app: &str,
+        _window: Option<&str>,
+        _options: &crate::core::key_combo::ClickOptions,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "click_region not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn hover_ref(
+        &self,
+        r#ref: crate::core::element_tree::ElementRef,
+        _app: &str,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(format!(
+            "hover not yet implemented on Linux (ref: {ref})"
+        )))
+    }
+
+    fn hover_at_point(
+        &self,
+        _point: crate::core::types::Point,
+        _app: Option<&str>,
+        _smooth: bool,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "hover not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn hover_region(
+        &self,
+        _region: crate::core::types::Rect,
+        _app: &str,
+        _window: Option<&str>,
+        _smooth: bool,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "hover_region not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn ocr_hover(
+        &self,
+        _text: &str,
+        _app: &str,
+        _window: Option<&str>,
+        _index: Option<usize>,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "ocr_hover not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn type_ref(
+        &self,
+        r#ref: crate::core::element_tree::ElementRef,
+        _text: &str,
+        _app: &str,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(format!(
+            "type not yet implemented on Linux (ref: {ref})"
+        )))
+    }
+
+    fn keyboard_type(
+        &self,
+        _text: &str,
+        _app: Option<&str>,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "keyboard_type not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn press(
+        &self,
+        _keys: &crate::core::key_combo::KeyCombo,
+        _app: Option<&str>,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "press not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn scroll(
+        &self,
+        _direction: &str,
+        _amount: u32,
+        _app: &str,
+        _window: Option<&str>,
+        _ref: Option<crate::core::element_tree::ElementRef>,
+        _at: Option<crate::core::types::Point>,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "scroll not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn drag_path(
+        &self,
+        _path: &[crate::core::types::Point],
+        _options: &crate::core::key_combo::DragOptions,
+        _app: Option<&str>,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "drag not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn drag_refs(
+        &self,
+        _from: crate::core::element_tree::ElementRef,
+        _to: crate::core::element_tree::ElementRef,
+        _app: &str,
+        _options: &crate::core::key_combo::DragOptions,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "drag not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn ocr_click(
+        &self,
+        _text: &str,
+        _app: &str,
+        _window: Option<&str>,
+        _options: &crate::core::key_combo::ClickOptions,
+        _index: Option<usize>,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "ocr_click not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn wait(
+        &self,
+        _text: &str,
+        _app: &str,
+        _window: Option<&str>,
+        _timeout: f64,
+        _interval: f64,
+    ) -> Result<crate::platform::ActionResult, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "wait not yet implemented on Linux".into(),
+        ))
+    }
+
+    // --- Utility ---
+
+    fn resolve_ref_position(
+        &self,
+        _ref: crate::core::element_tree::ElementRef,
+        _app: &str,
+    ) -> Result<crate::core::types::Point, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "resolve_ref_position not yet implemented on Linux".into(),
+        ))
+    }
+
+    fn resolve_ref_bounds(
+        &self,
+        _ref: crate::core::element_tree::ElementRef,
+        _app: &str,
+    ) -> Result<crate::core::types::Rect, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "resolve_ref_bounds not yet implemented on Linux".into(),
+        ))
+    }
+
+    // --- Permissions ---
+    // Linux has no equivalent of macOS Accessibility / Screen Recording gates.
+    // AT-SPI2 works without special permissions (any user process can connect).
+    // X11/Wayland screen capture may need compositor-specific permissions.
+
+    fn has_permissions(&self) -> bool {
+        true
+    }
+
+    fn has_screen_recording_permission(&self) -> bool {
+        true
+    }
+
+    fn validate_screen_recording(&self) -> bool {
+        true
+    }
+
+    fn request_permissions(&self) -> bool {
+        true
+    }
+
+    fn request_screen_recording_permission(&self) -> bool {
+        true
+    }
+}

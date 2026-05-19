@@ -7,6 +7,9 @@ pub mod darwin;
 
 #[cfg(target_os = "windows")]
 pub mod windows;
+
+#[cfg(target_os = "linux")]
+pub mod linux;
 use crate::core::annotation::{Annotation, AnnotationStyle};
 use crate::core::crop_region::CropRegion;
 use crate::core::element_tree::ElementRef;

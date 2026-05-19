@@ -52,8 +52,17 @@ fn rand_u16() -> u16 {
 /// a stable numeric value, so we use platform-specific methods.
 #[cfg(unix)]
 fn thread_id() -> usize {
+    #[cfg_attr(
+        all(target_os = "linux", target_env = "gnu"),
+        expect(
+            clippy::cast_possible_truncation,
+            reason = "glibc pthread_t is c_ulong, pointer-sized on all real targets"
+        )
+    )]
     // SAFETY: pthread_self is always safe to call.
-    unsafe { libc::pthread_self() as usize }
+    unsafe {
+        libc::pthread_self() as usize
+    }
 }
 
 #[cfg(windows)]

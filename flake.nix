@@ -22,6 +22,9 @@
               # Cross-compilation to Windows
               cargo-xwin
               lld
+              # Cross-compilation to Linux
+              cargo-zigbuild
+              zig
               # Linting and auditing
               cargo-audit
               cargo-machete

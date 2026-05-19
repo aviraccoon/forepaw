@@ -57,7 +57,8 @@ fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     let provider = forepaw::platform::windows::WindowsProvider::new();
 
-    // Future: #[cfg(target_os = "linux")] let provider = LinuxProvider::new();
+    #[cfg(target_os = "linux")]
+    let provider = forepaw::platform::linux::LinuxProvider::new();
 
     let provider = &provider as &dyn DesktopProvider;
 
