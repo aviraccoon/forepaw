@@ -74,7 +74,7 @@ trait Component {
 // ---------------------------------------------------------------------------
 
 /// Connect to the AT-SPI2 accessibility bus.
-fn connect_atspi_bus() -> Result<Connection, ForepawError> {
+pub(crate) fn connect_atspi_bus() -> Result<Connection, ForepawError> {
     let session = Connection::session().map_err(|e| {
         ForepawError::ActionFailed(format!("failed to connect to session bus: {e}"))
     })?;

@@ -58,3 +58,34 @@ jobs:
 
       - name: Lint x86_64
         run: cargo clippy --target x86_64-pc-windows-msvc -- -D warnings
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild
+
+      - name: Cache Cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-linux-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-linux-
+
+      - name: Check generated AT-SPI roles
+        run: |
+          diff <(bash res/generate_atspi_roles.sh) src/platform/linux/atspi_roles.rs
+
+      - name: Check musl x86_64
+        run: cargo zigbuild --target x86_64-unknown-linux-musl --lib
+
+      - name: Lint musl x86_64
+        run: cargo clippy --target x86_64-unknown-linux-musl -- -D warnings

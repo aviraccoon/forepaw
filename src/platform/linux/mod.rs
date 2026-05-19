@@ -17,6 +17,8 @@
 //! then connecting to that address for all subsequent AT-SPI2 calls.
 
 pub mod app;
+pub mod atspi_roles;
+pub mod snapshot;
 
 use crate::core::errors::ForepawError;
 use crate::platform::DesktopProvider;
@@ -62,13 +64,10 @@ impl DesktopProvider for LinuxProvider {
 
     fn snapshot(
         &self,
-        _app: &str,
-        _options: &crate::platform::SnapshotOptions,
+        app: &str,
+        options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
-        // TODO: recursive AT-SPI2 tree walk via Accessible interface
-        Err(ForepawError::ActionFailed(
-            "snapshot not yet implemented on Linux".into(),
-        ))
+        snapshot::snapshot(app, options)
     }
 
     fn screenshot(
