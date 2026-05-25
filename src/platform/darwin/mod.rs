@@ -16,6 +16,7 @@ mod ffi;
 
 pub mod annotation;
 pub mod app;
+pub mod hit_test;
 pub mod input;
 pub mod key_code;
 pub mod ocr;
@@ -236,6 +237,14 @@ impl DesktopProvider for DarwinProvider {
         app: &str,
     ) -> Result<crate::core::types::Rect, ForepawError> {
         snapshot::resolve_ref_bounds(r#ref.id, app)
+    }
+
+    fn element_at_point(
+        &self,
+        point: crate::core::types::Point,
+        app_hint: Option<&str>,
+    ) -> Result<crate::platform::HitTestResult, ForepawError> {
+        hit_test::element_at_point(point, app_hint)
     }
 
     fn has_permissions(&self) -> bool {

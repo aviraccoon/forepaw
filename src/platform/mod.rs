@@ -66,6 +66,39 @@ impl ActionResult {
     }
 }
 
+/// An element in the ancestor chain of a hit-test result.
+#[derive(Debug, Clone)]
+pub struct AncestorInfo {
+    /// The AX role (e.g. `AXWindow`, `AXGroup`, `AXButton`).
+    pub role: String,
+    /// The element's accessible name, if any.
+    pub name: Option<String>,
+    /// Bounds in screen coordinates.
+    pub bounds: Option<Rect>,
+}
+
+/// Result of a hit test at a screen coordinate.
+///
+/// Contains the deepest element at the point and its ancestor chain,
+/// ordered root-first (index 0 = root application element).
+/// The element is the leaf hit by the platform hit-test API
+/// (e.g. `AXUIElementCopyElementAtPosition` returns the deepest child).
+#[derive(Debug, Clone)]
+pub struct HitTestResult {
+    pub role: String,
+    pub name: Option<String>,
+    pub value: Option<String>,
+    pub bounds: Option<Rect>,
+    /// Available actions on this element (e.g. `Press`, `ShowMenu`).
+    /// Platform-specific: `AXActionNames` on macOS, Control Patterns on Windows,
+    /// Action names on AT-SPI2.
+    pub actions: Vec<String>,
+    /// Ancestor chain from root to parent, ordered root-first.
+    pub ancestors: Vec<AncestorInfo>,
+    /// PID of the owning application.
+    pub pid: i32,
+}
+
 /// Options controlling screenshot output format and quality.
 #[derive(Debug, Clone)]
 pub struct ScreenshotOptions {
@@ -445,6 +478,22 @@ pub trait DesktopProvider: Send + Sync {
     /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
     /// or [`ForepawError::ActionFailed`] if the element has no position or size.
     fn resolve_ref_bounds(&self, r#ref: ElementRef, app: &str) -> Result<Rect, ForepawError>;
+
+    /// Performs a hit test at the given screen coordinates.
+    ///
+    /// Returns the deepest accessibility element at the point and its ancestor chain.
+    /// When `app_hint` is `None`, searches all running applications (system-wide).
+    /// When scoped to an app name, only searches within that application.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if no element is found at the given point
+    /// or the platform accessibility API fails.
+    fn element_at_point(
+        &self,
+        point: Point,
+        app_hint: Option<&str>,
+    ) -> Result<HitTestResult, ForepawError>;
 
     // Permissions
     fn has_permissions(&self) -> bool;

@@ -33,13 +33,13 @@ const DEFAULT_DEPTH: usize = 15;
 const ELECTRON_DEPTH: usize = 25;
 
 // Batch attribute indices -- must match BATCH_ATTR_NAMES order.
-const ATTR_ROLE: usize = 0;
-const ATTR_TITLE: usize = 1;
-const ATTR_DESCRIPTION: usize = 2;
-const ATTR_VALUE: usize = 3;
-const ATTR_POSITION: usize = 4;
-const ATTR_SIZE: usize = 5;
-const ATTR_CHILDREN: usize = 6;
+pub(super) const ATTR_ROLE: usize = 0;
+pub(super) const ATTR_TITLE: usize = 1;
+pub(super) const ATTR_DESCRIPTION: usize = 2;
+pub(super) const ATTR_VALUE: usize = 3;
+pub(super) const ATTR_POSITION: usize = 4;
+pub(super) const ATTR_SIZE: usize = 5;
+pub(super) const ATTR_CHILDREN: usize = 6;
 const ATTR_SUBROLE: usize = 7;
 const ATTR_TITLE_UI_ELEMENT: usize = 8;
 const ATTR_HELP: usize = 9;
@@ -284,7 +284,7 @@ struct TreePruning {
 
 /// Wrapper around the `CFArray` returned by `AXUIElementCopyMultipleAttributeValues`.
 /// Provides typed accessors for each attribute by index. Releases the `CFArray` on drop.
-struct BatchAttrs {
+pub(super) struct BatchAttrs {
     array: CFArrayRef,
 }
 
@@ -318,7 +318,7 @@ impl BatchAttrs {
     }
 
     /// Extract a String attribute.
-    fn string(&self, idx: usize) -> Option<String> {
+    pub(super) fn string(&self, idx: usize) -> Option<String> {
         let val = self.raw(idx)?;
         #[expect(
             clippy::multiple_unsafe_ops_per_block,
@@ -335,7 +335,7 @@ impl BatchAttrs {
     }
 
     /// Extract the value attribute (index 3), which can be `CFString` or `CFNumber`.
-    fn value_string(&self, idx: usize) -> Option<String> {
+    pub(super) fn value_string(&self, idx: usize) -> Option<String> {
         let val = self.raw(idx)?;
         #[expect(
             clippy::multiple_unsafe_ops_per_block,
@@ -396,7 +396,7 @@ impl BatchAttrs {
     }
 
     /// Build a Rect from position (`pos_idx`) and size (`size_idx`) attributes.
-    fn bounds(&self, pos_idx: usize, size_idx: usize) -> Option<Rect> {
+    pub(super) fn bounds(&self, pos_idx: usize, size_idx: usize) -> Option<Rect> {
         let pt = self.point(pos_idx)?;
         let (w, h) = self.size_val(size_idx)?;
         Some(Rect::new(pt.x, pt.y, w, h))
@@ -490,7 +490,7 @@ impl Drop for BatchAttrs {
 }
 
 /// Call `AXUIElementCopyMultipleAttributeValues` for all 13 batch attributes.
-fn fetch_batch_attributes(element: AXUIElementRef) -> Option<BatchAttrs> {
+pub(super) fn fetch_batch_attributes(element: AXUIElementRef) -> Option<BatchAttrs> {
     let attr_array = get_batch_attr_array();
     let mut values: CFArrayRef = std::ptr::null();
     // SAFETY: AXUIElementCopyMultipleAttributeValues copies attributes into
@@ -894,7 +894,7 @@ pub fn get_element_size(element: AXUIElementRef) -> Option<(f64, f64)> {
 
 /// Convert a `CFStringRef` to a Rust String. Handles both ASCII (fast path)
 /// and non-ASCII (buffer copy) strings.
-fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
+pub(super) fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
     #[expect(
         clippy::multiple_unsafe_ops_per_block,
         reason = "CFString fast ptr + slow buffer"
@@ -972,7 +972,7 @@ fn number_to_rust_string(number: CFNumberRef) -> Option<String> {
 }
 
 /// Return None for empty strings -- AX APIs often return "" rather than nil.
-fn non_empty(s: Option<&String>) -> Option<String> {
+pub(super) fn non_empty(s: Option<&String>) -> Option<String> {
     s.and_then(|v| if v.is_empty() { None } else { Some(v.clone()) })
 }
 

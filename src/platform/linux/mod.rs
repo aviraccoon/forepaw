@@ -18,6 +18,7 @@
 
 pub mod app;
 pub mod atspi_roles;
+pub mod hit_test;
 pub mod snapshot;
 
 use crate::core::errors::ForepawError;
@@ -288,6 +289,14 @@ impl DesktopProvider for LinuxProvider {
         Err(ForepawError::ActionFailed(
             "resolve_ref_bounds not yet implemented on Linux".into(),
         ))
+    }
+
+    fn element_at_point(
+        &self,
+        point: crate::core::types::Point,
+        app_hint: Option<&str>,
+    ) -> Result<crate::platform::HitTestResult, ForepawError> {
+        hit_test::element_at_point(point, app_hint)
     }
 
     // --- Permissions ---

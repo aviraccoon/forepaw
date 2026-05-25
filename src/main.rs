@@ -4,7 +4,7 @@ use clap::Parser;
 use forepaw::cli::action::{
     Batch, Click, Drag, Hover, KeyboardType, OcrClick, Press, Scroll, Type, Wait,
 };
-use forepaw::cli::observation::{ListApps, ListWindows, Ocr, Screenshot, Snapshot};
+use forepaw::cli::observation::{HitTest, ListApps, ListWindows, Ocr, Screenshot, Snapshot};
 use forepaw::cli::system::Permissions;
 use forepaw::platform::DesktopProvider;
 
@@ -31,6 +31,8 @@ enum Commands {
     ListApps(ListApps),
     #[command(name = "list-windows")]
     ListWindows(ListWindows),
+    #[command(name = "hit-test")]
+    HitTest(HitTest),
     #[command(name = "ocr")]
     Ocr(Ocr),
     Click(Click),
@@ -68,6 +70,7 @@ fn main() -> anyhow::Result<()> {
         Commands::ListApps(cmd) => cmd.run(provider),
         Commands::ListWindows(cmd) => cmd.run(provider),
         Commands::Ocr(cmd) => cmd.run(provider),
+        Commands::HitTest(cmd) => cmd.run(provider),
         Commands::Click(cmd) => cmd.run(provider),
         Commands::Type(cmd) => cmd.run(provider),
         Commands::KeyboardType(cmd) => cmd.run(provider),

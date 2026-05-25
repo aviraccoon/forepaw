@@ -8,6 +8,7 @@
 //! - `SendInput` for keyboard/mouse input (future)
 
 pub mod app;
+pub mod hit_test;
 pub mod ocr;
 pub mod screenshot;
 pub mod snapshot;
@@ -272,6 +273,14 @@ impl DesktopProvider for WindowsProvider {
         Err(ForepawError::ActionFailed(
             "resolve_ref_bounds not yet implemented on Windows".into(),
         ))
+    }
+
+    fn element_at_point(
+        &self,
+        point: crate::core::types::Point,
+        app_hint: Option<&str>,
+    ) -> Result<crate::platform::HitTestResult, ForepawError> {
+        hit_test::element_at_point(point, app_hint)
     }
 
     // --- Permissions ---

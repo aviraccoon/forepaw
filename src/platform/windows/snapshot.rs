@@ -28,7 +28,7 @@ use super::app;
 /// equivalent map to the nearest structural equivalent or `AXUnknown`.
 ///
 /// Source: <https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controltype-ids>
-fn control_type_to_role(control_type: i32) -> &'static str {
+pub(super) fn control_type_to_role(control_type: i32) -> &'static str {
     match control_type {
         50000 => "AXButton",                             // Button
         50001 => "AXCalendar",                           // Calendar
@@ -335,7 +335,7 @@ fn get_bstr_property(
 
 /// Get the bounding rectangle from a UIA element.
 /// Uses `CurrentBoundingRectangle` which returns a RECT directly.
-fn get_element_bounds(element: &IUIAutomationElement) -> Option<Rect> {
+pub(super) fn get_element_bounds(element: &IUIAutomationElement) -> Option<Rect> {
     // SAFETY: UIA bounding rect read on valid element.
     let rect: RECT = unsafe { element.CurrentBoundingRectangle().ok() }?;
 

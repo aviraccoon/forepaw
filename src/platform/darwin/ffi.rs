@@ -186,6 +186,21 @@ extern "C" {
         value_ptr: *mut c_void,
     ) -> Boolean;
     pub(super) fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
+
+    // Hit testing and system-wide element
+    pub(super) fn AXUIElementCreateSystemWide() -> AXUIElementRef;
+    pub(super) fn AXUIElementCopyElementAtPosition(
+        element: AXUIElementRef,
+        x: f32,
+        y: f32,
+        result: *mut AXUIElementRef,
+    ) -> AXError;
+
+    // Action names (for HitTestResult.actions)
+    pub(super) fn AXUIElementCopyActionNames(
+        element: AXUIElementRef,
+        action_names: *mut CFArrayRef,
+    ) -> AXError;
 }
 
 // ---------------------------------------------------------------------------

@@ -25,7 +25,7 @@ use super::atspi_roles::atspi_role_to_role;
 // ---------------------------------------------------------------------------
 
 /// Get a string property from an AT-SPI2 accessible via D-Bus Properties.Get.
-fn get_property(
+pub(super) fn get_property(
     conn: &Connection,
     destination: &str,
     path: &str,
@@ -57,7 +57,7 @@ fn get_property(
 }
 
 /// Get the role of an accessible element.
-fn get_role(conn: &Connection, destination: &str, path: &str) -> u32 {
+pub(super) fn get_role(conn: &Connection, destination: &str, path: &str) -> u32 {
     let reply = conn.call_method(
         Some(destination),
         path,
@@ -72,7 +72,7 @@ fn get_role(conn: &Connection, destination: &str, path: &str) -> u32 {
 }
 
 /// Get the bounds (x, y, width, height) of a component.
-fn get_bounds(conn: &Connection, destination: &str, path: &str) -> Option<Rect> {
+pub(super) fn get_bounds(conn: &Connection, destination: &str, path: &str) -> Option<Rect> {
     let reply = conn.call_method(
         Some(destination),
         path,
@@ -103,7 +103,7 @@ fn get_bounds(conn: &Connection, destination: &str, path: &str) -> Option<Rect> 
 ///
 /// The zbus proxy macro has a known issue with `Vec<(String, ObjectPath)>`
 /// deserialization, so we call it directly.
-fn get_children(
+pub(super) fn get_children(
     conn: &Connection,
     destination: &str,
     path: &str,
@@ -131,7 +131,7 @@ fn get_children(
 }
 
 /// Get the value of an accessible element (for text fields, sliders, etc).
-fn get_value(conn: &Connection, destination: &str, path: &str) -> Option<String> {
+pub(super) fn get_value(conn: &Connection, destination: &str, path: &str) -> Option<String> {
     // Try the Value interface first (CurrentValue)
     let reply = conn.call_method(
         Some(destination),
@@ -233,7 +233,7 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
 }
 
 /// Find the bus name for an application by name (case-insensitive).
-fn find_app_bus(conn: &Connection, app_name: &str) -> Result<String, ForepawError> {
+pub(super) fn find_app_bus(conn: &Connection, app_name: &str) -> Result<String, ForepawError> {
     let children = get_children(
         conn,
         "org.a11y.atspi.Registry",

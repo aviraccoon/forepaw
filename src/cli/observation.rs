@@ -1,7 +1,7 @@
 /// CLI subcommands: observation (snapshot, screenshot, list-apps, list-windows, ocr).
 use clap::Args;
 
-use crate::cli::parse::parse_region;
+use crate::cli::parse::{parse_coordinate, parse_region};
 use crate::core::annotation::AnnotationStyle;
 use crate::core::crop_region::CropRegion;
 use crate::core::element_tree::ElementRef;
@@ -9,6 +9,21 @@ use crate::core::snapshot_cache::SnapshotCache;
 use crate::core::snapshot_diff::SnapshotDiffer;
 use crate::core::tree_renderer::TreeRenderer;
 use crate::platform::{DesktopProvider, ImageFormat, ScreenshotOptions, SnapshotOptions};
+
+/// Maximum length for a displayed value or name in hit-test output.
+/// Terminal content, web page text, and large text fields can be
+/// hundreds of KB — never useful to dump inline.
+const HIT_DISPLAY_MAX: usize = 200;
+
+/// Truncate a string for inline display, appending a note if truncated.
+fn truncate_display(s: &str) -> String {
+    let display: String = s.chars().take(HIT_DISPLAY_MAX).collect();
+    if s.len() > HIT_DISPLAY_MAX {
+        format!("{}[... {} more chars]", display, s.len() - HIT_DISPLAY_MAX)
+    } else {
+        display
+    }
+}
 
 /// Shared global options (app, window, json).
 #[derive(Args, Clone)]
@@ -338,6 +353,113 @@ impl ListWindows {
         for w in windows {
             println!("{}  {}  \"{}\"", w.id, w.app, w.title);
         }
+        Ok(())
+    }
+}
+
+/// Hit-test an accessibility element at screen coordinates.
+#[derive(clap::Args)]
+#[command(about = "Find what element is at screen coordinates")]
+pub struct HitTest {
+    #[command(flatten)]
+    pub global: GlobalOptions,
+
+    /// Coordinates as "x,y" (screen coordinates).
+    pub point: String,
+
+    /// Show full element values without truncation (default truncates at 200 chars).
+    #[arg(long)]
+    pub full_values: bool,
+}
+
+impl HitTest {
+    /// Performs a hit test at the given screen coordinates and prints the result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the coordinates are invalid, or the hit test fails
+    /// (no element at point, permission denied, etc).
+    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+        let point = parse_coordinate(&self.point)
+            .ok_or_else(|| anyhow::anyhow!("Invalid coordinates: {}. Expected x,y", self.point))?;
+
+        let result = provider.element_at_point(point, self.global.app.as_deref())?;
+
+        let truncate = |s: &str| {
+            if self.full_values {
+                s.to_owned()
+            } else {
+                truncate_display(s)
+            }
+        };
+
+        let value_display = result.value.as_ref().map(|v| truncate(v));
+
+        if self.global.json {
+            let name = truncate(result.name.as_deref().unwrap_or(""));
+            let value = truncate(result.value.as_deref().unwrap_or(""));
+            let (bx, by, bw, bh) = result
+                .bounds
+                .map_or((0.0, 0.0, 0.0, 0.0), |b| (b.x, b.y, b.width, b.height));
+            println!(
+                "{{ \"role\": \"{}\", \"name\": \"{}\", \"value\": \"{}\", \"bounds\": [{:.0}, {:.0}, {:.0}, {:.0}], \"pid\": {}, \"actions\": [{}], \"ancestors\": [{}] }}",
+                result.role,
+                name.escape_default(),
+                value.escape_default(),
+                bx, by, bw, bh,
+                result.pid,
+                result
+                    .actions
+                    .iter()
+                    .map(|a| format!("\"{a}\""))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                result
+                    .ancestors
+                    .iter()
+                    .map(|a| {
+                        let an = truncate(a.name.as_deref().unwrap_or(""));
+                        format!("{{ \"role\": \"{}\", \"name\": \"{}\" }}", a.role, an.escape_default())
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+            return Ok(());
+        }
+
+        println!("Element at ({:.0}, {:.0}):", point.x, point.y);
+        println!("  Role:      {}", result.role);
+        if let Some(ref name) = result.name {
+            println!("  Name:      {}", truncate(name));
+        }
+        if let Some(ref value) = value_display {
+            println!("  Value:     {value}");
+        }
+        if let Some(ref bounds) = result.bounds {
+            println!(
+                "  Bounds:    [{:.0}, {:.0}, {:.0}, {:.0}]",
+                bounds.x, bounds.y, bounds.width, bounds.height
+            );
+        }
+        if !result.actions.is_empty() {
+            println!("  Actions:   {}", result.actions.join(", "));
+        }
+        if result.pid > 0 {
+            println!("  PID:       {}", result.pid);
+        }
+
+        if !result.ancestors.is_empty() {
+            println!("  Ancestors:");
+            for (i, ancestor) in result.ancestors.iter().enumerate() {
+                let label = ancestor
+                    .name
+                    .as_ref()
+                    .map(|n| format!(" \"{}\"", truncate(n)))
+                    .unwrap_or_default();
+                println!("    {}. {} {label}", i + 1, ancestor.role);
+            }
+        }
+
         Ok(())
     }
 }
