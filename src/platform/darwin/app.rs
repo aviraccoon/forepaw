@@ -21,7 +21,7 @@ use crate::platform::darwin::ffi::{
     AXUIElementRef, AXUIElementSetAttributeValue, CFArrayGetCount, CFArrayGetTypeID,
     CFArrayGetValueAtIndex, CFArrayRef, CFDictionaryGetTypeID, CFDictionaryGetValue,
     CFDictionaryRef, CFGetTypeID, CFIndex, CFNumberGetTypeID, CFNumberGetValue, CFNumberRef,
-    CFRelease, CFStringGetCString, CFStringGetCStringPtr, CFStringGetTypeID, CFStringRef,
+    CFRelease, CFRetain, CFStringGetCString, CFStringGetCStringPtr, CFStringGetTypeID, CFStringRef,
     CFTypeRef, CGWindowListCopyWindowInfo, CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY,
     K_CF_NUMBER_DOUBLE_TYPE, K_CF_NUMBER_SINT32_TYPE, K_CF_STRING_ENCODING_UTF8,
     K_CG_NULL_WINDOW_ID,
@@ -853,8 +853,7 @@ fn get_ax_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
         let mut children = Vec::with_capacity(count_usize);
         for i in 0..count {
             let child = CFArrayGetValueAtIndex(value as CFArrayRef, i);
-            // AXUIElementRef is a newtype around *const c_void, so we need
-            // to transmute the raw pointer.
+            CFRetain(child as CFTypeRef);
             children.push(AXUIElementRef::from_raw(child));
         }
         CFRelease(value);
