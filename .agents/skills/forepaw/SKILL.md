@@ -49,7 +49,22 @@ Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' ch
 
 **Performance:** Offscreen elements (outside the visible window area) are automatically excluded in all modes. With `-i`, menu bar and zero-size (hidden/collapsed) elements are also excluded. This dramatically speeds up apps like Music that expose large amounts of invisible content in their AX tree (e.g. play history at negative Y coordinates). Use `--offscreen` to include offscreen elements, `--menu` or `--zero-size` to include those back with `-i`.
 
-### 2. OCR (fallback for sparse trees)
+### 2. Hit test (quick element lookup)
+
+```bash
+forepaw hit-test 500,300                              # what element is at these screen coords?
+forepaw hit-test 50,15 --app konsole                  # scoped to a specific app
+forepaw hit-test 500,300 --json                       # machine-readable output
+forepaw hit-test 500,300 --full-values                 # show entire element value (no truncation)
+```
+
+Finds the deepest accessibility element at screen coordinates. Returns role, name, value, bounds, available actions, owning PID, and ancestor chain (root → window → parent → element). Default truncates long values (e.g. terminal content) to 200 chars; use `--full-values` to see everything.
+
+System-wide by default (cross-app). Use `--app` to scope to a specific application. The ancestor chain shows the element's place in the accessibility tree — useful for understanding element context without a full snapshot.
+
+This is a lightweight query (no full tree walk). On macOS/Windows, it uses a native hit test under 1ms. On Linux, it uses AT-SPI2's `Component.GetAccessibleAtPoint`.
+
+### 3. OCR (fallback for sparse trees)
 
 ```bash
 forepaw ocr --app Discord                    # all text with coordinates + screenshot
@@ -63,7 +78,7 @@ Returns a screenshot path (first line) followed by recognized text with click co
 
 Screenshot format options: `--format`, `--quality`, `--scale`, `--no-cursor` (same as `screenshot` command).
 
-### 3. Screenshot (for visual inspection)
+### 4. Screenshot (for visual inspection)
 
 ```bash
 forepaw screenshot --app "App Name"   # plain screenshot
@@ -79,7 +94,7 @@ Returns a screenshot path (WebP if `cwebp` is installed, else JPEG; 1x scale by 
 
 **Area capture with `--ref` or `--region`:** Crops the screenshot to just the specified area. `--ref @eN` resolves the element's bounds from the AX tree. `--region x,y,w,h` uses window-relative coordinates. Both add 20px padding by default (override with `--padding`). Works with `--annotate` too -- annotations are rendered on the full image first, then cropped. Requires `--app`.
 
-### 4. Annotated screenshot (visual + structural)
+### 5. Annotated screenshot (visual + structural)
 
 ```bash
 forepaw screenshot --app "App Name" --annotate           # numbered badges (default)
