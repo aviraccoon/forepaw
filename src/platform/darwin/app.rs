@@ -219,7 +219,9 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
 ///
 /// Returns [`ForepawError::PermissionDenied`] if accessibility access is not granted,
 /// or [`ForepawError::AppNotFound`] if `app_name` is provided but no matching process is found.
-pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawError> {
+pub fn list_windows(
+    app: Option<&crate::platform::AppTarget>,
+) -> Result<Vec<WindowInfo>, ForepawError> {
     // SAFETY: FFI call with valid arguments.
     let window_list = unsafe {
         CGWindowListCopyWindowInfo(CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY, K_CG_NULL_WINDOW_ID)
@@ -230,8 +232,8 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
 
     require_accessibility()?;
 
-    // Build set of allowed PIDs if filtering by app name
-    let allowed_pids: Option<HashSet<i32>> = app_name.map(|name| match find_app(name) {
+    // Build set of allowed PIDs if filtering by app
+    let allowed_pids: Option<HashSet<i32>> = app.map(|target| match find_app_by_target(target) {
         Ok(app) => {
             let mut pids = HashSet::new();
             pids.insert(app.processIdentifier());
@@ -280,7 +282,7 @@ pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawEr
 
         // Filter by app name if no PID set was built (find_app failed)
         if allowed_pids.is_none() {
-            if let Some(filter) = app_name {
+            if let Some(filter) = app.and_then(crate::platform::AppTarget::as_name) {
                 if owner != filter {
                     continue;
                 }
@@ -538,7 +540,12 @@ fn select_best_window(windows: &[WindowEntry]) -> ResolvedWindow {
     }
 }
 
-fn find_app_by_pid(pid: i32) -> Result<Retained<NSRunningApplication>, ForepawError> {
+/// Find a running application by PID.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if no process with the given PID is found.
+pub fn find_app_by_pid(pid: i32) -> Result<Retained<NSRunningApplication>, ForepawError> {
     let workspace = objc2_app_kit::NSWorkspace::sharedWorkspace();
     let apps = workspace.runningApplications();
     for i in 0..apps.count() {
@@ -548,6 +555,24 @@ fn find_app_by_pid(pid: i32) -> Result<Retained<NSRunningApplication>, ForepawEr
         }
     }
     Err(ForepawError::AppNotFound(format!("pid {pid}")))
+}
+
+/// Find a running application by name or PID.
+///
+/// Delegates to [`find_app`] for [`AppTarget::Name`] or [`find_app_by_pid`]
+/// for [`AppTarget::Pid`].
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if no matching process is found,
+/// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
+pub fn find_app_by_target(
+    target: &crate::platform::AppTarget,
+) -> Result<Retained<NSRunningApplication>, ForepawError> {
+    match target {
+        crate::platform::AppTarget::Name(name) => find_app(name),
+        crate::platform::AppTarget::Pid(pid) => find_app_by_pid(*pid),
+    }
 }
 
 fn collect_helper_pids(bundle_id: &str, main_pid: i32) -> HashSet<i32> {

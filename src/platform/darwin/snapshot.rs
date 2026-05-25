@@ -13,11 +13,11 @@ use crate::core::errors::ForepawError;
 use crate::core::icon_class_parser::IconClassParser;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::types::{Point, Rect};
-use crate::platform::SnapshotOptions;
+use crate::platform::{AppTarget, SnapshotOptions};
 
 use super::app::{
-    cf_string_from_str, electron_tree_is_populated, enable_electron_accessibility, find_app,
-    find_window, is_electron_app,
+    cf_string_from_str, electron_tree_is_populated, enable_electron_accessibility,
+    find_app_by_target, find_window, is_electron_app,
 };
 use super::ffi::{
     kCFNull, kCFTypeArrayCallBacks, AXError, AXUIElementCopyAttributeValue,
@@ -161,8 +161,8 @@ const GENERIC_ROLE_DESCRIPTIONS: &[&str] = &[
 ///
 /// Returns [`ForepawError::AppNotFound`] if the application is not running,
 /// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
-pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree, ForepawError> {
-    let running_app = find_app(app_name)?;
+pub fn snapshot(app: &AppTarget, options: &SnapshotOptions) -> Result<ElementTree, ForepawError> {
+    let running_app = find_app_by_target(app)?;
 
     // Activate the app so the AX tree matches what action commands will see.
     // Some apps (browsers) only expose web content when active.
@@ -231,7 +231,7 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
     };
 
     Ok(ElementTree {
-        app: app_name.to_owned(),
+        app: app.display(),
         root: result.root,
         refs: result.refs,
         window_bounds,
@@ -245,8 +245,8 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
 ///
 /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
 /// or [`ForepawError::ActionFailed`] if the element has no position or size.
-pub fn resolve_ref_position(ref_id: i32, app_name: &str) -> Result<Point, ForepawError> {
-    let bounds = resolve_ref_bounds(ref_id, app_name)?;
+pub fn resolve_ref_position(ref_id: i32, app: &AppTarget) -> Result<Point, ForepawError> {
+    let bounds = resolve_ref_bounds(ref_id, app)?;
     Ok(Point::new(
         bounds.x + bounds.width / 2.0,
         bounds.y + bounds.height / 2.0,
@@ -259,8 +259,8 @@ pub fn resolve_ref_position(ref_id: i32, app_name: &str) -> Result<Point, Forepa
 ///
 /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
 /// or [`ForepawError::ActionFailed`] if the element has no position or size.
-pub fn resolve_ref_bounds(ref_id: i32, app_name: &str) -> Result<Rect, ForepawError> {
-    let element = resolve_ref_element(ref_id, app_name)?;
+pub fn resolve_ref_bounds(ref_id: i32, app: &AppTarget) -> Result<Rect, ForepawError> {
+    let element = resolve_ref_element(ref_id, app)?;
     let pos = get_element_position(element)
         .ok_or_else(|| ForepawError::ActionFailed("element has no position".into()))?;
     let (w, h) = get_element_size(element)
@@ -697,8 +697,8 @@ fn computed_name(
 /// # Errors
 ///
 /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree.
-pub fn resolve_ref_element(ref_id: i32, app_name: &str) -> Result<AXUIElementRef, ForepawError> {
-    let running_app = find_app(app_name)?;
+pub fn resolve_ref_element(ref_id: i32, app: &AppTarget) -> Result<AXUIElementRef, ForepawError> {
+    let running_app = find_app_by_target(app)?;
     let is_electron = is_electron_app(&running_app);
     if is_electron {
         enable_electron_accessibility(running_app.processIdentifier());

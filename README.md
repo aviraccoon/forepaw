@@ -83,6 +83,8 @@ That's it. Snapshot gives you refs (`@e1`, `@e2`, ...), you use those refs to ac
 | **Compose** | `batch --app Notes "click @e3 ;; keyboard-type hello ;; press return"` | Multiple actions in one invocation |
 | | `wait "Upload complete" --app App` | Poll until text appears on screen |
 
+All commands that take `--app` also accept `--pid` for targeting by process ID (mutually exclusive). Use `list-apps` to find PIDs, and `--pid` when multiple instances of the same app are running.
+
 All coordinates are **window-relative** -- `(0,0)` is the top-left of the window, not the screen. Coordinates don't change when the window moves. Out-of-bounds coordinates are rejected (a misplaced click on the wrong app could be destructive).
 
 ## Electron apps just work

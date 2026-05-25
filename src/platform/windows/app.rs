@@ -17,6 +17,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::core::errors::ForepawError;
 use crate::core::types::Rect;
+use crate::platform::AppTarget;
 use crate::platform::{AppInfo, WindowInfo};
 
 /// List running GUI applications.
@@ -92,23 +93,30 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
 ///
 /// # Errors
 ///
-/// Returns [`ForepawError::AppNotFound`] if `app_name` is provided but no matching window is found.
-pub fn list_windows(app_name: Option<&str>) -> Result<Vec<WindowInfo>, ForepawError> {
+/// Returns [`ForepawError::AppNotFound`] if `app` is provided but no matching window is found.
+pub fn list_windows(app: Option<&AppTarget>) -> Result<Vec<WindowInfo>, ForepawError> {
     let entries = collect_visible_windows();
 
-    let filtered: Vec<WindowEntry> = match app_name {
-        Some(filter) => {
-            let filter_lower = filter.to_lowercase();
-            entries
-                .into_iter()
-                .filter(|e| {
-                    // Match against window title
-                    e.title.to_lowercase().contains(&filter_lower)
-                        // Or against process executable name
-                        || e.process_name.to_lowercase().contains(&filter_lower)
-                })
-                .collect()
-        }
+    let filtered: Vec<WindowEntry> = match app {
+        Some(target) => match target {
+            AppTarget::Name(name) => {
+                let filter_lower = name.to_lowercase();
+                entries
+                    .into_iter()
+                    .filter(|e| {
+                        // Match against window title
+                        e.title.to_lowercase().contains(&filter_lower)
+                            // Or against process executable name
+                            || e.process_name.to_lowercase().contains(&filter_lower)
+                    })
+                    .collect()
+            }
+            AppTarget::Pid(pid) => {
+                #[expect(clippy::cast_sign_loss, reason = "PID from system is positive")]
+                let pid_u32 = *pid as u32;
+                entries.into_iter().filter(|e| e.pid == pid_u32).collect()
+            }
+        },
         None => entries,
     };
 
@@ -225,42 +233,72 @@ unsafe extern "system" fn enum_window_callback(hwnd: HWND, lparam: LPARAM) -> BO
 /// # Errors
 ///
 /// Returns [`ForepawError::AppNotFound`] if no window matches the query.
-pub fn find_app_hwnd(app_name: &str) -> Result<(HWND, Rect), ForepawError> {
+pub fn find_app_hwnd(app: &AppTarget) -> Result<(HWND, Rect), ForepawError> {
     let entries = collect_visible_windows();
-    let filter_lower = app_name.to_lowercase();
 
-    let matching: Vec<&WindowEntry> = entries
-        .iter()
-        .filter(|e| {
-            e.title.to_lowercase().contains(&filter_lower)
-                || e.process_name.to_lowercase().contains(&filter_lower)
-        })
-        .collect();
+    let matching: Vec<&WindowEntry> = match app {
+        AppTarget::Name(name) => {
+            let filter_lower = name.to_lowercase();
+            entries
+                .iter()
+                .filter(|e| {
+                    e.title.to_lowercase().contains(&filter_lower)
+                        || e.process_name.to_lowercase().contains(&filter_lower)
+                })
+                .collect()
+        }
+        AppTarget::Pid(pid) => {
+            #[expect(clippy::cast_sign_loss, reason = "PID from system is positive")]
+            let pid_u32 = *pid as u32;
+            entries.iter().filter(|e| e.pid == pid_u32).collect()
+        }
+    };
 
     if matching.is_empty() {
-        return Err(ForepawError::AppNotFound(app_name.to_owned()));
+        return Err(ForepawError::AppNotFound(app.display()));
     }
 
     // Score each candidate: prefer title match > non-desktop > titled > largest area
-    let Some(best) = matching.iter().max_by_key(|e| {
-        let title_match = e.title.to_lowercase().contains(&filter_lower);
-        let is_desktop = e.title == "Program Manager";
-        let has_title = !e.title.is_empty();
-        let area = e.bounds.as_ref().map_or(0_u64, |b| {
-            #[expect(
-                clippy::cast_possible_truncation,
-                reason = "screen dimensions fit in u64"
-            )]
-            #[expect(clippy::cast_sign_loss, reason = "window area is always positive")]
-            let area = (b.width * b.height) as u64;
-            area
-        });
+    let best = match app {
+        AppTarget::Name(name) => {
+            let filter_lower = name.to_lowercase();
+            matching.iter().max_by_key(|e| {
+                let title_match = e.title.to_lowercase().contains(&filter_lower);
+                let is_desktop = e.title == "Program Manager";
+                let has_title = !e.title.is_empty();
+                let area = e.bounds.as_ref().map_or(0_u64, |b| {
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "screen dimensions fit in u64"
+                    )]
+                    #[expect(clippy::cast_sign_loss, reason = "window area is always positive")]
+                    let area = (b.width * b.height) as u64;
+                    area
+                });
+                (title_match, !is_desktop, has_title, area)
+            })
+        }
+        AppTarget::Pid(_) => {
+            // PID match is unambiguous, just pick the best window
+            matching.iter().max_by_key(|e| {
+                let is_desktop = e.title == "Program Manager";
+                let has_title = !e.title.is_empty();
+                let area = e.bounds.as_ref().map_or(0_u64, |b| {
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "screen dimensions fit in u64"
+                    )]
+                    #[expect(clippy::cast_sign_loss, reason = "window area is always positive")]
+                    let area = (b.width * b.height) as u64;
+                    area
+                });
+                (!is_desktop, has_title, area)
+            })
+        }
+    };
 
-        // Pack into a tuple for lexicographic comparison:
-        // (title_matches_query, not_desktop, has_title, area)
-        (title_match, !is_desktop, has_title, area)
-    }) else {
-        return Err(ForepawError::AppNotFound(app_name.to_owned()));
+    let Some(best) = best else {
+        return Err(ForepawError::AppNotFound(app.display()));
     };
 
     let bounds = best

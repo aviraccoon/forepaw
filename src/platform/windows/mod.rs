@@ -14,7 +14,7 @@ pub mod screenshot;
 pub mod snapshot;
 
 use crate::core::errors::ForepawError;
-use crate::platform::DesktopProvider;
+use crate::platform::{AppTarget, DesktopProvider};
 
 /// Windows implementation of `DesktopProvider`.
 pub struct WindowsProvider;
@@ -41,7 +41,7 @@ impl DesktopProvider for WindowsProvider {
 
     fn list_windows(
         &self,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
     ) -> Result<Vec<crate::platform::WindowInfo>, ForepawError> {
         app::list_windows(app)
     }
@@ -50,7 +50,7 @@ impl DesktopProvider for WindowsProvider {
 
     fn snapshot(
         &self,
-        app: &str,
+        app: &AppTarget,
         options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
         snapshot::snapshot(app, options)
@@ -70,7 +70,7 @@ impl DesktopProvider for WindowsProvider {
 
     fn ocr(
         &self,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
         window: Option<&str>,
         find: Option<&str>,
         screenshot_options: Option<&crate::platform::ScreenshotOptions>,
@@ -83,7 +83,7 @@ impl DesktopProvider for WindowsProvider {
     fn click_ref(
         &self,
         r#ref: crate::core::element_tree::ElementRef,
-        _app: &str,
+        _app: &AppTarget,
         _options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(format!(
@@ -94,7 +94,7 @@ impl DesktopProvider for WindowsProvider {
     fn click_at_point(
         &self,
         _point: crate::core::types::Point,
-        _app: &str,
+        _app: &AppTarget,
         _options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(
@@ -105,7 +105,7 @@ impl DesktopProvider for WindowsProvider {
     fn click_region(
         &self,
         _region: crate::core::types::Rect,
-        _app: &str,
+        _app: &AppTarget,
         _window: Option<&str>,
         _options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -117,7 +117,7 @@ impl DesktopProvider for WindowsProvider {
     fn hover_ref(
         &self,
         r#ref: crate::core::element_tree::ElementRef,
-        _app: &str,
+        _app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(format!(
             "hover not yet implemented on Windows (ref: {ref})"
@@ -127,7 +127,7 @@ impl DesktopProvider for WindowsProvider {
     fn hover_at_point(
         &self,
         _point: crate::core::types::Point,
-        _app: Option<&str>,
+        _app: Option<&AppTarget>,
         _smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(
@@ -138,7 +138,7 @@ impl DesktopProvider for WindowsProvider {
     fn hover_region(
         &self,
         _region: crate::core::types::Rect,
-        _app: &str,
+        _app: &AppTarget,
         _window: Option<&str>,
         _smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -150,7 +150,7 @@ impl DesktopProvider for WindowsProvider {
     fn ocr_hover(
         &self,
         _text: &str,
-        _app: &str,
+        _app: &AppTarget,
         _window: Option<&str>,
         _index: Option<usize>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -163,7 +163,7 @@ impl DesktopProvider for WindowsProvider {
         &self,
         r#ref: crate::core::element_tree::ElementRef,
         _text: &str,
-        _app: &str,
+        _app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(format!(
             "type not yet implemented on Windows (ref: {ref})"
@@ -173,7 +173,7 @@ impl DesktopProvider for WindowsProvider {
     fn keyboard_type(
         &self,
         _text: &str,
-        _app: Option<&str>,
+        _app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(
             "keyboard_type not yet implemented on Windows".into(),
@@ -183,7 +183,7 @@ impl DesktopProvider for WindowsProvider {
     fn press(
         &self,
         _keys: &crate::core::key_combo::KeyCombo,
-        _app: Option<&str>,
+        _app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(
             "press not yet implemented on Windows".into(),
@@ -194,7 +194,7 @@ impl DesktopProvider for WindowsProvider {
         &self,
         _direction: &str,
         _amount: u32,
-        _app: &str,
+        _app: &AppTarget,
         _window: Option<&str>,
         _ref: Option<crate::core::element_tree::ElementRef>,
         _at: Option<crate::core::types::Point>,
@@ -208,7 +208,7 @@ impl DesktopProvider for WindowsProvider {
         &self,
         _path: &[crate::core::types::Point],
         _options: &crate::core::key_combo::DragOptions,
-        _app: Option<&str>,
+        _app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(
             "drag not yet implemented on Windows".into(),
@@ -219,7 +219,7 @@ impl DesktopProvider for WindowsProvider {
         &self,
         _from: crate::core::element_tree::ElementRef,
         _to: crate::core::element_tree::ElementRef,
-        _app: &str,
+        _app: &AppTarget,
         _options: &crate::core::key_combo::DragOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(
@@ -230,7 +230,7 @@ impl DesktopProvider for WindowsProvider {
     fn ocr_click(
         &self,
         _text: &str,
-        _app: &str,
+        _app: &AppTarget,
         _window: Option<&str>,
         _options: &crate::core::key_combo::ClickOptions,
         _index: Option<usize>,
@@ -243,7 +243,7 @@ impl DesktopProvider for WindowsProvider {
     fn wait(
         &self,
         _text: &str,
-        _app: &str,
+        _app: &AppTarget,
         _window: Option<&str>,
         _timeout: f64,
         _interval: f64,
@@ -258,7 +258,7 @@ impl DesktopProvider for WindowsProvider {
     fn resolve_ref_position(
         &self,
         _ref: crate::core::element_tree::ElementRef,
-        _app: &str,
+        _app: &AppTarget,
     ) -> Result<crate::core::types::Point, ForepawError> {
         Err(ForepawError::ActionFailed(
             "resolve_ref_position not yet implemented on Windows".into(),
@@ -268,7 +268,7 @@ impl DesktopProvider for WindowsProvider {
     fn resolve_ref_bounds(
         &self,
         _ref: crate::core::element_tree::ElementRef,
-        _app: &str,
+        _app: &AppTarget,
     ) -> Result<crate::core::types::Rect, ForepawError> {
         Err(ForepawError::ActionFailed(
             "resolve_ref_bounds not yet implemented on Windows".into(),
@@ -278,7 +278,7 @@ impl DesktopProvider for WindowsProvider {
     fn element_at_point(
         &self,
         point: crate::core::types::Point,
-        app_hint: Option<&str>,
+        app_hint: Option<&AppTarget>,
     ) -> Result<crate::platform::HitTestResult, ForepawError> {
         hit_test::element_at_point(point, app_hint)
     }

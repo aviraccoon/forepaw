@@ -353,9 +353,9 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
 
     let mut resolved_window: Option<app::ResolvedWindow> = None;
 
-    if let Some(app_name) = params.app {
+    if let Some(app) = params.app {
         let (_running_app, pid) = {
-            let running_app = app::find_app(app_name)?;
+            let running_app = app::find_app_by_target(app)?;
             let pid = running_app.processIdentifier();
             #[expect(
                 deprecated,
@@ -388,7 +388,7 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     };
 
     // Annotation requires an app name (for AX tree)
-    let Some(app_name) = params.app else {
+    let Some(app) = params.app else {
         return render_plain(
             &raw_path,
             &tag,
@@ -405,7 +405,7 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
         max_depth: SnapshotOptions::DEFAULT_DEPTH,
         ..Default::default()
     };
-    let tree = snapshot::snapshot(app_name, &snapshot_opts)?;
+    let tree = snapshot::snapshot(app, &snapshot_opts)?;
 
     // Determine window bounds for coordinate conversion
     let window_bounds = if let Some(resolved) = resolved_window.as_ref() {

@@ -16,13 +16,11 @@ use zbus::zvariant::{ObjectPath, Value};
 
 use crate::core::errors::ForepawError;
 use crate::core::types::Point;
-use crate::platform::{AncestorInfo, HitTestResult};
+use crate::platform::{AncestorInfo, AppTarget, HitTestResult};
 
 use super::app::connect_atspi_bus;
 use super::atspi_roles::atspi_role_to_role;
-use super::snapshot::{
-    find_app_bus, get_bounds, get_children, get_property, get_role, get_value,
-};
+use super::app::{find_app_bus, get_bounds, get_children, get_property, get_role, get_value};
 
 /// Performs a hit test at the given screen coordinates.
 ///
@@ -41,7 +39,7 @@ use super::snapshot::{
 /// the AT-SPI2 bus is unreachable, or `app_hint` is set but the app isn't found.
 pub fn element_at_point(
     point: Point,
-    app_hint: Option<&str>,
+    app_hint: Option<&AppTarget>,
 ) -> Result<HitTestResult, ForepawError> {
     let conn = connect_atspi_bus()?;
 
@@ -57,8 +55,8 @@ pub fn element_at_point(
     let y = point.y as i32;
 
     // Get the bus names to query
-    let app_buses: Vec<String> = if let Some(app_name) = app_hint {
-        vec![find_app_bus(&conn, app_name)?]
+    let app_buses: Vec<String> = if let Some(app) = app_hint {
+        vec![find_app_bus(&conn, app)?]
     } else {
         // System-wide: iterate all registered apps
         get_children(
@@ -66,9 +64,7 @@ pub fn element_at_point(
             "org.a11y.atspi.Registry",
             "/org/a11y/atspi/accessible/root",
         )
-        .map_err(|e| {
-            ForepawError::ActionFailed(format!("failed to list AT-SPI2 apps: {e}"))
-        })?
+        .map_err(|e| ForepawError::ActionFailed(format!("failed to list AT-SPI2 apps: {e}")))?
         .into_iter()
         .map(|(bus, _path)| bus)
         .collect()
@@ -119,11 +115,7 @@ fn query_app_at_point(
 }
 
 /// Build a `HitTestResult` from a found element.
-fn build_hit_result(
-    conn: &Connection,
-    hit_bus: &str,
-    hit_path: &str,
-) -> HitTestResult {
+fn build_hit_result(conn: &Connection, hit_bus: &str, hit_path: &str) -> HitTestResult {
     let role_num = get_role(conn, hit_bus, hit_path);
     let role = atspi_role_to_role(role_num).to_owned();
     let name = get_property(conn, hit_bus, hit_path, "Name");

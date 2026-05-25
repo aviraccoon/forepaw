@@ -16,7 +16,7 @@ use crate::core::ocr_result::{OCROutput, OCRResult};
 use crate::core::types::Rect;
 use crate::platform::darwin::app;
 use crate::platform::darwin::ffi::{self, CGPointFFI};
-use crate::platform::ScreenshotOptions;
+use crate::platform::{AppTarget, ScreenshotOptions};
 
 /// Run OCR on an app window (or full screen).
 ///
@@ -29,7 +29,7 @@ use crate::platform::ScreenshotOptions;
 /// [`ForepawError::AppNotFound`] if the target application is not running,
 /// or [`ForepawError::WindowNotFound`] if the window filter doesn't match.
 pub fn ocr(
-    app_name: Option<&str>,
+    app: Option<&AppTarget>,
     window: Option<&str>,
     find: Option<&str>,
     screenshot_options: Option<&ScreenshotOptions>,
@@ -43,7 +43,7 @@ pub fn ocr(
     };
 
     let screenshot_params = crate::platform::ScreenshotParams {
-        app: app_name,
+        app,
         window,
         style: None,
         only: None,
@@ -241,11 +241,11 @@ fn recognize_text(
 /// or multiple matches exist without an explicit index.
 pub fn resolve_ocr_text(
     text: &str,
-    app_name: &str,
+    app: &AppTarget,
     window: Option<&str>,
     index: Option<usize>,
 ) -> Result<(String, crate::core::types::Point), ForepawError> {
-    let output = ocr(Some(app_name), window, Some(text), None)?;
+    let output = ocr(Some(app), window, Some(text), None)?;
     let matches = output.results;
 
     if matches.is_empty() {
@@ -301,14 +301,14 @@ pub fn resolve_ocr_text(
 /// or the underlying click fails.
 pub fn ocr_click(
     text: &str,
-    app_name: &str,
+    app: &AppTarget,
     window: Option<&str>,
     options: &crate::core::key_combo::ClickOptions,
     index: Option<usize>,
 ) -> Result<crate::platform::ActionResult, ForepawError> {
-    let (matched_text, window_point) = resolve_ocr_text(text, app_name, window, index)?;
+    let (matched_text, window_point) = resolve_ocr_text(text, app, window, index)?;
 
-    let (_, pid) = super::input::activate_app(app_name)?;
+    let (_, pid) = super::input::activate_app(app)?;
     let screen_point = app::to_screen_point(&window_point, pid)?;
     let cg_point = CGPointFFI {
         x: screen_point.x,
@@ -336,13 +336,13 @@ pub fn ocr_click(
 /// or the underlying hover fails.
 pub fn ocr_hover(
     text: &str,
-    app_name: &str,
+    app: &AppTarget,
     window: Option<&str>,
     index: Option<usize>,
 ) -> Result<crate::platform::ActionResult, ForepawError> {
-    let (matched_text, window_point) = resolve_ocr_text(text, app_name, window, index)?;
+    let (matched_text, window_point) = resolve_ocr_text(text, app, window, index)?;
 
-    let (_, pid) = super::input::activate_app(app_name)?;
+    let (_, pid) = super::input::activate_app(app)?;
     let screen_point = app::to_screen_point(&window_point, pid)?;
     let cg_point = CGPointFFI {
         x: screen_point.x,
@@ -364,7 +364,7 @@ pub fn ocr_hover(
 /// or [`ForepawError::ScreenRecordingDenied`] if screen recording permission is missing.
 pub fn wait(
     text: &str,
-    app_name: &str,
+    app: &AppTarget,
     window: Option<&str>,
     timeout: f64,
     interval: f64,
@@ -374,7 +374,7 @@ pub fn wait(
     let interval_dur = std::time::Duration::from_secs_f64(interval);
 
     loop {
-        match ocr(Some(app_name), window, Some(text), None) {
+        match ocr(Some(app), window, Some(text), None) {
             Ok(output) if !output.results.is_empty() => {
                 let Some(matched) = output.results.first() else {
                     continue;

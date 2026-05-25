@@ -352,10 +352,13 @@ Without `--window`, commands target the largest window for that app.
 
 The title shown in quotes in `list-windows` output is what you pass to `--window`. If the title matches multiple windows, forepaw returns an error listing all matches with their IDs.
 
-## When to use --app
+## When to use --app / --pid
 
-- **With --app**: activates the app before acting. Use for click, type, keyboard-type, press when targeting a specific app.
-- **Without --app**: sends input globally. Use for system hotkeys (Raycast, Spotlight) or typing into whatever is already focused.
+- **With --app**: activates the app by name before acting. Use for click, type, keyboard-type, press when targeting a specific app.
+- **With --pid**: activates the app by process ID. Use when you need unambiguous targeting (multiple instances, similar names). PIDs are shown in `list-apps` output.
+- **Without either**: sends input globally. Use for system hotkeys (Raycast, Spotlight) or typing into whatever is already focused.
+
+`--app` and `--pid` are mutually exclusive. Use `--app` by default; switch to `--pid` when name resolution is ambiguous.
 
 ## Important behaviors
 

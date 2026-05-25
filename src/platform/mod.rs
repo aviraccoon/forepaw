@@ -18,6 +18,79 @@ use crate::core::key_combo::{ClickOptions, DragOptions, KeyCombo};
 use crate::core::ocr_result::OCROutput;
 use crate::core::types::{Point, Rect};
 
+/// Identifies a target application unambiguously.
+///
+/// `Name` uses the platform's fuzzy resolution (display name, bundle ID,
+/// process name, partial match). `Pid` targets a specific process.
+///
+/// CLI maps `--app` → `Name` and `--pid` → `Pid`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum AppTarget {
+    /// Application name (display name, bundle ID, or partial match).
+    Name(String),
+    /// Process ID.
+    Pid(i32),
+}
+
+impl AppTarget {
+    /// Create a name-based target.
+    #[must_use]
+    pub fn name(s: impl Into<String>) -> Self {
+        Self::Name(s.into())
+    }
+
+    /// Create a PID-based target.
+    #[must_use]
+    pub fn pid(n: i32) -> Self {
+        Self::Pid(n)
+    }
+
+    /// Return a display string for error messages.
+    #[must_use]
+    pub fn display(&self) -> String {
+        match self {
+            Self::Name(s) => s.clone(),
+            Self::Pid(n) => format!("pid {n}"),
+        }
+    }
+
+    /// Return the name if this is a `Name` target.
+    #[must_use]
+    pub fn as_name(&self) -> Option<&str> {
+        match self {
+            Self::Name(s) => Some(s),
+            Self::Pid(_) => None,
+        }
+    }
+
+    /// Return the PID if this is a `Pid` target.
+    #[must_use]
+    pub fn as_pid(&self) -> Option<i32> {
+        match self {
+            Self::Name(_) => None,
+            Self::Pid(n) => Some(*n),
+        }
+    }
+
+    /// Cache key: the name string, or `"pid:{n}"` for PID targets.
+    #[must_use]
+    pub fn cache_key(&self) -> String {
+        match self {
+            Self::Name(s) => s.clone(),
+            Self::Pid(n) => format!("pid:{n}"),
+        }
+    }
+}
+
+impl std::fmt::Display for AppTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(s) => write!(f, "{s}"),
+            Self::Pid(n) => write!(f, "pid {n}"),
+        }
+    }
+}
+
 /// Info about a running application.
 #[derive(Debug, Clone)]
 pub struct AppInfo {
@@ -154,7 +227,7 @@ impl ImageFormat {
 
 /// Parameters for screenshot operations.
 pub struct ScreenshotParams<'a> {
-    pub app: Option<&'a str>,
+    pub app: Option<&'a AppTarget>,
     pub window: Option<&'a str>,
     pub style: Option<AnnotationStyle>,
     pub only: Option<&'a [ElementRef]>,
@@ -227,7 +300,7 @@ pub trait DesktopProvider: Send + Sync {
     ///
     /// Returns [`ForepawError::AppNotFound`] if `app` is provided but no matching
     /// process is found.
-    fn list_windows(&self, app: Option<&str>) -> Result<Vec<WindowInfo>, ForepawError>;
+    fn list_windows(&self, app: Option<&AppTarget>) -> Result<Vec<WindowInfo>, ForepawError>;
 
     /// Walks the accessibility tree of the given application.
     ///
@@ -237,7 +310,7 @@ pub trait DesktopProvider: Send + Sync {
     /// [`ForepawError::PermissionDenied`] if accessibility access is not granted.
     fn snapshot(
         &self,
-        app: &str,
+        app: &AppTarget,
         options: &SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError>;
 
@@ -259,7 +332,7 @@ pub trait DesktopProvider: Send + Sync {
     /// or [`ForepawError::WindowNotFound`] if a window filter doesn't match.
     fn ocr(
         &self,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
         window: Option<&str>,
         find: Option<&str>,
         screenshot_options: Option<&ScreenshotOptions>,
@@ -277,7 +350,7 @@ pub trait DesktopProvider: Send + Sync {
     fn click_ref(
         &self,
         r#ref: ElementRef,
-        app: &str,
+        app: &AppTarget,
         options: &ClickOptions,
     ) -> Result<ActionResult, ForepawError>;
 
@@ -291,7 +364,7 @@ pub trait DesktopProvider: Send + Sync {
     fn click_at_point(
         &self,
         point: Point,
-        app: &str,
+        app: &AppTarget,
         options: &ClickOptions,
     ) -> Result<ActionResult, ForepawError>;
 
@@ -305,7 +378,7 @@ pub trait DesktopProvider: Send + Sync {
     fn click_region(
         &self,
         region: Rect,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         options: &ClickOptions,
     ) -> Result<ActionResult, ForepawError>;
@@ -316,7 +389,7 @@ pub trait DesktopProvider: Send + Sync {
     ///
     /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
     /// or [`ForepawError::ActionFailed`] if the element has no position or size.
-    fn hover_ref(&self, r#ref: ElementRef, app: &str) -> Result<ActionResult, ForepawError>;
+    fn hover_ref(&self, r#ref: ElementRef, app: &AppTarget) -> Result<ActionResult, ForepawError>;
 
     /// Moves the cursor to absolute screen coordinates.
     ///
@@ -326,7 +399,7 @@ pub trait DesktopProvider: Send + Sync {
     fn hover_at_point(
         &self,
         point: Point,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
         smooth: bool,
     ) -> Result<ActionResult, ForepawError>;
 
@@ -340,7 +413,7 @@ pub trait DesktopProvider: Send + Sync {
     fn hover_region(
         &self,
         region: Rect,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         smooth: bool,
     ) -> Result<ActionResult, ForepawError>;
@@ -354,7 +427,7 @@ pub trait DesktopProvider: Send + Sync {
     fn ocr_hover(
         &self,
         text: &str,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         index: Option<usize>,
     ) -> Result<ActionResult, ForepawError>;
@@ -369,7 +442,7 @@ pub trait DesktopProvider: Send + Sync {
         &self,
         r#ref: ElementRef,
         text: &str,
-        app: &str,
+        app: &AppTarget,
     ) -> Result<ActionResult, ForepawError>;
 
     /// Types text via simulated keyboard events into whatever has focus.
@@ -377,7 +450,11 @@ pub trait DesktopProvider: Send + Sync {
     /// # Errors
     ///
     /// Returns [`ForepawError::ActionFailed`] if the platform input API rejects the events.
-    fn keyboard_type(&self, text: &str, app: Option<&str>) -> Result<ActionResult, ForepawError>;
+    fn keyboard_type(
+        &self,
+        text: &str,
+        app: Option<&AppTarget>,
+    ) -> Result<ActionResult, ForepawError>;
 
     /// Presses a key combination (e.g. Cmd+S) via simulated keyboard events.
     ///
@@ -385,7 +462,8 @@ pub trait DesktopProvider: Send + Sync {
     ///
     /// Returns [`ForepawError::ActionFailed`] if the key combination is invalid
     /// or the platform input API rejects the events.
-    fn press(&self, keys: &KeyCombo, app: Option<&str>) -> Result<ActionResult, ForepawError>;
+    fn press(&self, keys: &KeyCombo, app: Option<&AppTarget>)
+        -> Result<ActionResult, ForepawError>;
 
     /// Scrolls the content of the target window.
     ///
@@ -398,7 +476,7 @@ pub trait DesktopProvider: Send + Sync {
         &self,
         direction: &str,
         amount: u32,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         r#ref: Option<ElementRef>,
         at: Option<Point>,
@@ -414,7 +492,7 @@ pub trait DesktopProvider: Send + Sync {
         &self,
         path: &[Point],
         options: &DragOptions,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
     ) -> Result<ActionResult, ForepawError>;
 
     /// Drags from one element to another, identified by refs.
@@ -427,7 +505,7 @@ pub trait DesktopProvider: Send + Sync {
         &self,
         from: ElementRef,
         to: ElementRef,
-        app: &str,
+        app: &AppTarget,
         options: &DragOptions,
     ) -> Result<ActionResult, ForepawError>;
 
@@ -440,7 +518,7 @@ pub trait DesktopProvider: Send + Sync {
     fn ocr_click(
         &self,
         text: &str,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         options: &ClickOptions,
         index: Option<usize>,
@@ -455,7 +533,7 @@ pub trait DesktopProvider: Send + Sync {
     fn wait(
         &self,
         text: &str,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         timeout: f64,
         interval: f64,
@@ -469,7 +547,11 @@ pub trait DesktopProvider: Send + Sync {
     ///
     /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
     /// or [`ForepawError::ActionFailed`] if the element has no position or size.
-    fn resolve_ref_position(&self, r#ref: ElementRef, app: &str) -> Result<Point, ForepawError>;
+    fn resolve_ref_position(
+        &self,
+        r#ref: ElementRef,
+        app: &AppTarget,
+    ) -> Result<Point, ForepawError>;
 
     /// Resolves an element ref to its bounding rectangle in screen coordinates.
     ///
@@ -477,7 +559,7 @@ pub trait DesktopProvider: Send + Sync {
     ///
     /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
     /// or [`ForepawError::ActionFailed`] if the element has no position or size.
-    fn resolve_ref_bounds(&self, r#ref: ElementRef, app: &str) -> Result<Rect, ForepawError>;
+    fn resolve_ref_bounds(&self, r#ref: ElementRef, app: &AppTarget) -> Result<Rect, ForepawError>;
 
     /// Performs a hit test at the given screen coordinates.
     ///
@@ -492,7 +574,7 @@ pub trait DesktopProvider: Send + Sync {
     fn element_at_point(
         &self,
         point: Point,
-        app_hint: Option<&str>,
+        app_hint: Option<&AppTarget>,
     ) -> Result<HitTestResult, ForepawError>;
 
     // Permissions

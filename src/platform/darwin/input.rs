@@ -12,7 +12,7 @@ use crate::platform::darwin::app::{self, ResolvedWindow};
 use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI};
 use crate::platform::darwin::key_code;
 use crate::platform::darwin::snapshot;
-use crate::platform::ActionResult;
+use crate::platform::{ActionResult, AppTarget};
 
 use objc2::rc::Retained;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
@@ -22,8 +22,10 @@ use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
 /// # Errors
 ///
 /// Returns [`ForepawError::AppNotFound`] if the application is not running.
-pub fn activate_app(app_name: &str) -> Result<(Retained<NSRunningApplication>, i32), ForepawError> {
-    let running_app = app::find_app(app_name)?;
+pub fn activate_app(
+    app: &AppTarget,
+) -> Result<(Retained<NSRunningApplication>, i32), ForepawError> {
+    let running_app = app::find_app_by_target(app)?;
     let pid = running_app.processIdentifier();
     #[expect(
         deprecated,
@@ -36,10 +38,10 @@ pub fn activate_app(app_name: &str) -> Result<(Retained<NSRunningApplication>, i
 
 /// Activate an app and resolve its main window.
 fn activate_and_resolve_window(
-    app_name: &str,
+    app: &AppTarget,
     window: Option<&str>,
 ) -> Result<(Retained<NSRunningApplication>, i32, ResolvedWindow), ForepawError> {
-    let (running_app, pid) = activate_app(app_name)?;
+    let (running_app, pid) = activate_app(app)?;
     let resolved = app::find_window(pid, window)?;
     Ok((running_app, pid, resolved))
 }
@@ -713,11 +715,11 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
 /// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
 pub fn click_ref(
     r#ref: crate::core::element_tree::ElementRef,
-    app_name: &str,
+    app: &AppTarget,
     options: &ClickOptions,
 ) -> Result<ActionResult, ForepawError> {
-    let (_, pid) = activate_app(app_name)?;
-    let element = snapshot::resolve_ref_element(r#ref.id, app_name)?;
+    let (_, pid) = activate_app(app)?;
+    let element = snapshot::resolve_ref_element(r#ref.id, app)?;
     click_element(element, options, Some(pid))
 }
 
@@ -730,10 +732,10 @@ pub fn click_ref(
 /// or [`ForepawError::ActionFailed`] if the point falls outside the window.
 pub fn click_at_point(
     point: Point,
-    app_name: &str,
+    app: &AppTarget,
     options: &ClickOptions,
 ) -> Result<ActionResult, ForepawError> {
-    let (_, pid, _resolved) = activate_and_resolve_window(app_name, None)?;
+    let (_, pid, _resolved) = activate_and_resolve_window(app, None)?;
     app::validate_point_in_window(&point, pid)?;
     let screen_point = app::to_screen_point(&point, pid)?;
     let cg_point = CGPointFFI {
@@ -763,11 +765,11 @@ pub fn click_at_point(
 /// or the point falls outside the window.
 pub fn click_region(
     region: crate::core::types::Rect,
-    app_name: &str,
+    app: &AppTarget,
     window: Option<&str>,
     options: &ClickOptions,
 ) -> Result<ActionResult, ForepawError> {
-    let (_, pid, _resolved) = activate_and_resolve_window(app_name, window)?;
+    let (_, pid, _resolved) = activate_and_resolve_window(app, window)?;
     let center = Point::new(
         region.x + region.width / 2.0,
         region.y + region.height / 2.0,
@@ -795,10 +797,10 @@ pub fn click_region(
 /// or [`ForepawError::ActionFailed`] if the element has no position or size.
 pub fn hover_ref(
     r#ref: crate::core::element_tree::ElementRef,
-    app_name: &str,
+    app: &AppTarget,
 ) -> Result<ActionResult, ForepawError> {
-    let (_, pid) = activate_app(app_name)?;
-    let element = snapshot::resolve_ref_element(r#ref.id, app_name)?;
+    let (_, pid) = activate_app(app)?;
+    let element = snapshot::resolve_ref_element(r#ref.id, app)?;
 
     let pos = snapshot::get_element_position(element)
         .ok_or_else(|| ForepawError::ActionFailed(format!("Cannot determine position of {ref}")))?;
@@ -829,11 +831,11 @@ pub fn hover_ref(
 /// point falls outside the window, or the mouse move fails.
 pub fn hover_at_point(
     point: Point,
-    app_name: Option<&str>,
+    app: Option<&AppTarget>,
     smooth: bool,
 ) -> Result<ActionResult, ForepawError> {
-    let target = if let Some(app_name) = app_name {
-        let (_, pid) = activate_app(app_name)?;
+    let target = if let Some(app) = app {
+        let (_, pid) = activate_app(app)?;
         app::validate_point_in_window(&point, pid)?;
         let screen = app::to_screen_point(&point, pid)?;
         CGPointFFI {
@@ -866,7 +868,7 @@ pub fn hover_at_point(
 /// or the point falls outside the window.
 pub fn hover_region(
     region: crate::core::types::Rect,
-    app_name: &str,
+    app: &AppTarget,
     _window: Option<&str>,
     smooth: bool,
 ) -> Result<ActionResult, ForepawError> {
@@ -874,7 +876,7 @@ pub fn hover_region(
         region.x + region.width / 2.0,
         region.y + region.height / 2.0,
     );
-    hover_at_point(center, Some(app_name), smooth)
+    hover_at_point(center, Some(app), smooth)
 }
 
 /// Type text into an element ref (set value or keyboard fallback).
@@ -886,10 +888,10 @@ pub fn hover_region(
 pub fn type_ref(
     r#ref: crate::core::element_tree::ElementRef,
     text: &str,
-    app_name: &str,
+    app: &AppTarget,
 ) -> Result<ActionResult, ForepawError> {
-    activate_app(app_name)?;
-    let element = snapshot::resolve_ref_element(r#ref.id, app_name)?;
+    activate_app(app)?;
+    let element = snapshot::resolve_ref_element(r#ref.id, app)?;
     set_value_on_element(element, text)
 }
 
@@ -898,9 +900,9 @@ pub fn type_ref(
 /// # Errors
 ///
 /// Returns [`ForepawError::ActionFailed`] if the platform input API fails.
-pub fn keyboard_type(text: &str, app_name: Option<&str>) -> Result<ActionResult, ForepawError> {
-    if let Some(app_name) = app_name {
-        activate_app(app_name)?;
+pub fn keyboard_type(text: &str, app: Option<&AppTarget>) -> Result<ActionResult, ForepawError> {
+    if let Some(app) = app {
+        activate_app(app)?;
     }
     type_via_keyboard(text)?;
     Ok(ActionResult::ok_msg(format!("typed {} chars", text.len())))
@@ -912,9 +914,9 @@ pub fn keyboard_type(text: &str, app_name: Option<&str>) -> Result<ActionResult,
 ///
 /// Returns [`ForepawError::AppNotFound`] if the app is specified but not running,
 /// or [`ForepawError::ActionFailed`] if the key event cannot be posted.
-pub fn press_key(keys: &KeyCombo, app_name: Option<&str>) -> Result<ActionResult, ForepawError> {
-    if let Some(app_name) = app_name {
-        activate_app(app_name)?;
+pub fn press_key(keys: &KeyCombo, app: Option<&AppTarget>) -> Result<ActionResult, ForepawError> {
+    if let Some(app) = app {
+        activate_app(app)?;
     }
     press_via_keyboard(keys)?;
     Ok(ActionResult::ok())
@@ -930,12 +932,12 @@ pub fn press_key(keys: &KeyCombo, app_name: Option<&str>) -> Result<ActionResult
 pub fn scroll(
     direction: &str,
     amount: u32,
-    app_name: &str,
+    app: &AppTarget,
     window: Option<&str>,
     r#ref: Option<crate::core::element_tree::ElementRef>,
     at: Option<Point>,
 ) -> Result<ActionResult, ForepawError> {
-    let (_, pid, resolved) = activate_and_resolve_window(app_name, window)?;
+    let (_, pid, resolved) = activate_and_resolve_window(app, window)?;
 
     let scroll_point = if let Some(point) = at {
         // Scroll at window-relative coordinates
@@ -949,7 +951,7 @@ pub fn scroll(
         }
     } else if let Some(r#ref) = r#ref {
         // Scroll at element center
-        let element = snapshot::resolve_ref_element(r#ref.id, app_name)?;
+        let element = snapshot::resolve_ref_element(r#ref.id, app)?;
         let pos = snapshot::get_element_position(element).ok_or_else(|| {
             ForepawError::ActionFailed(format!("Cannot determine position of {ref}"))
         })?;
@@ -1027,7 +1029,7 @@ pub fn scroll(
 pub fn drag_path(
     path: &[Point],
     options: &DragOptions,
-    app_name: Option<&str>,
+    app: Option<&AppTarget>,
 ) -> Result<ActionResult, ForepawError> {
     if path.len() < 2 {
         return Err(ForepawError::ActionFailed(
@@ -1035,8 +1037,8 @@ pub fn drag_path(
         ));
     }
 
-    let cg_path: Vec<CGPointFFI> = if let Some(app_name) = app_name {
-        let (_, pid) = activate_app(app_name)?;
+    let cg_path: Vec<CGPointFFI> = if let Some(app) = app {
+        let (_, pid) = activate_app(app)?;
         path.iter()
             .map(|p| app::to_screen_point(p, pid).map(|sp| CGPointFFI { x: sp.x, y: sp.y }))
             .collect::<Result<Vec<_>, _>>()?
@@ -1079,13 +1081,13 @@ pub fn drag_path(
 pub fn drag_refs(
     from_ref: crate::core::element_tree::ElementRef,
     to_ref: crate::core::element_tree::ElementRef,
-    app_name: &str,
+    app: &AppTarget,
     options: &DragOptions,
 ) -> Result<ActionResult, ForepawError> {
-    let (_, pid) = activate_app(app_name)?;
+    let (_, pid) = activate_app(app)?;
 
-    let from = snapshot::resolve_ref_position(from_ref.id, app_name)?;
-    let to = snapshot::resolve_ref_position(to_ref.id, app_name)?;
+    let from = snapshot::resolve_ref_position(from_ref.id, app)?;
+    let to = snapshot::resolve_ref_position(to_ref.id, app)?;
 
     let from_screen = app::to_screen_point(&from, pid)?;
     let to_screen = app::to_screen_point(&to, pid)?;

@@ -9,9 +9,9 @@
 
 use crate::core::errors::ForepawError;
 use crate::core::types::{Point, Rect};
-use crate::platform::{AncestorInfo, HitTestResult};
+use crate::platform::{AncestorInfo, AppTarget, HitTestResult};
 
-use super::app::{cf_string_from_str, find_app};
+use super::app::{cf_string_from_str, find_app_by_target};
 use super::ffi::{
     kCFNull, AXError, AXUIElementCopyActionNames, AXUIElementCopyAttributeValue,
     AXUIElementCopyElementAtPosition, AXUIElementCreateApplication, AXUIElementCreateSystemWide,
@@ -20,8 +20,8 @@ use super::ffi::{
 };
 use super::snapshot::{
     cf_string_to_rust, fetch_batch_attributes, get_ax_string_attr, get_element_position,
-    get_element_size, non_empty, ATTR_DESCRIPTION, ATTR_POSITION, ATTR_ROLE, ATTR_SIZE,
-    ATTR_TITLE, ATTR_VALUE,
+    get_element_size, non_empty, ATTR_DESCRIPTION, ATTR_POSITION, ATTR_ROLE, ATTR_SIZE, ATTR_TITLE,
+    ATTR_VALUE,
 };
 
 /// Performs a hit test at the given screen coordinates.
@@ -36,11 +36,11 @@ use super::snapshot::{
 /// Returns [`ForepawError::ActionFailed`] if no element is found at the position.
 pub fn element_at_point(
     point: Point,
-    app_hint: Option<&str>,
+    app_hint: Option<&AppTarget>,
 ) -> Result<HitTestResult, ForepawError> {
     // 1. Create the scope element: system-wide for cross-app, or per-app
-    let scope_element = if let Some(app_name) = app_hint {
-        let running_app = find_app(app_name)?;
+    let scope_element = if let Some(app) = app_hint {
+        let running_app = find_app_by_target(app)?;
         // SAFETY: AXUIElementCreateApplication is a system call, no preconditions.
         unsafe { AXUIElementCreateApplication(running_app.processIdentifier()) }
     } else {
@@ -63,14 +63,11 @@ pub fn element_at_point(
     let mut hit_element = AXUIElementRef(std::ptr::null());
     // SAFETY: AXUIElementCopyElementAtPosition takes a screen coordinate and returns
     // a retained AXUIElementRef on success. scope_element is a valid AXUIElementRef.
-    let err = unsafe {
-        AXUIElementCopyElementAtPosition(scope_element, x, y, &raw mut hit_element)
-    };
+    let err =
+        unsafe { AXUIElementCopyElementAtPosition(scope_element, x, y, &raw mut hit_element) };
 
     if err != AXError::Success || hit_element.0.is_null() {
-        return Err(ForepawError::ActionFailed(
-            "no element at position".into(),
-        ));
+        return Err(ForepawError::ActionFailed("no element at position".into()));
     }
 
     // 3. Get the PID of the owning process
@@ -94,7 +91,9 @@ pub fn element_at_point(
                 .and_then(|a| non_empty(a.string(ATTR_DESCRIPTION).as_ref()))
         });
     let value = attrs.as_ref().and_then(|a| a.value_string(ATTR_VALUE));
-    let bounds = attrs.as_ref().and_then(|a| a.bounds(ATTR_POSITION, ATTR_SIZE));
+    let bounds = attrs
+        .as_ref()
+        .and_then(|a| a.bounds(ATTR_POSITION, ATTR_SIZE));
 
     // 5. Fetch available actions
     let actions = get_action_names(hit_element);
@@ -103,13 +102,10 @@ pub fn element_at_point(
     let mut ancestors: Vec<AncestorInfo> = Vec::new();
     let mut current = hit_element;
     while let Some(parent_element) = get_ax_parent_element(current) {
-        let parent_role =
-            get_ax_string_attr(parent_element, "AXRole").unwrap_or_default();
-        let parent_name = get_ax_string_attr(parent_element, "AXTitle")
-            .filter(|s| !s.is_empty());
+        let parent_role = get_ax_string_attr(parent_element, "AXRole").unwrap_or_default();
+        let parent_name = get_ax_string_attr(parent_element, "AXTitle").filter(|s| !s.is_empty());
         let parent_bounds = get_element_position(parent_element).and_then(|pos| {
-            get_element_size(parent_element)
-                .map(|(w, h)| Rect::new(pos.x, pos.y, w, h))
+            get_element_size(parent_element).map(|(w, h)| Rect::new(pos.x, pos.y, w, h))
         });
 
         ancestors.push(AncestorInfo {

@@ -6,158 +6,23 @@
 //! ref assigner and tree renderer work unchanged across platforms.
 
 use zbus::blocking::Connection;
-use zbus::zvariant::{ObjectPath, Value};
 
 use crate::core::element_tree::{is_interactive_role, ElementNode, ElementTree, SnapshotTiming};
 use crate::core::errors::ForepawError;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::types::Rect;
+use crate::platform::AppTarget;
 use crate::platform::SnapshotOptions;
 
-use super::app::connect_atspi_bus;
+use super::app::{connect_atspi_bus, find_app_bus, get_bounds, get_children, get_property, get_role, get_value};
 use super::atspi_roles::atspi_role_to_role;
 
 // AT-SPI2 role mapping is generated from res/atspi-constants.h.
 // See src/platform/linux/atspi_roles.rs.
 
 // ---------------------------------------------------------------------------
-// D-Bus helpers
+// Name resolution helpers
 // ---------------------------------------------------------------------------
-
-/// Get a string property from an AT-SPI2 accessible via D-Bus Properties.Get.
-pub(super) fn get_property(
-    conn: &Connection,
-    destination: &str,
-    path: &str,
-    property: &str,
-) -> Option<String> {
-    let reply = conn
-        .call_method(
-            Some(destination),
-            path,
-            Some("org.freedesktop.DBus.Properties"),
-            "Get",
-            &("org.a11y.atspi.Accessible", property),
-        )
-        .ok()?;
-
-    let body = reply.body();
-    let value: Value<'_> = body.deserialize().ok()?;
-    match value {
-        Value::Str(s) => {
-            let s = s.to_string();
-            if s.is_empty() {
-                None
-            } else {
-                Some(s)
-            }
-        }
-        _ => None,
-    }
-}
-
-/// Get the role of an accessible element.
-pub(super) fn get_role(conn: &Connection, destination: &str, path: &str) -> u32 {
-    let reply = conn.call_method(
-        Some(destination),
-        path,
-        Some("org.a11y.atspi.Accessible"),
-        "GetRole",
-        &(),
-    );
-    match reply {
-        Ok(r) => r.body().deserialize::<u32>().unwrap_or(0),
-        Err(_) => 0,
-    }
-}
-
-/// Get the bounds (x, y, width, height) of a component.
-pub(super) fn get_bounds(conn: &Connection, destination: &str, path: &str) -> Option<Rect> {
-    let reply = conn.call_method(
-        Some(destination),
-        path,
-        Some("org.a11y.atspi.Component"),
-        "GetExtents",
-        &(0u32), // coord_type 0 = screen
-    );
-    match reply {
-        Ok(r) => {
-            let (x, y, width, height): (i32, i32, i32, i32) = r.body().deserialize().ok()?;
-            let rect = Rect::new(
-                f64::from(x),
-                f64::from(y),
-                f64::from(width),
-                f64::from(height),
-            );
-            if rect.width > 0.0 && rect.height > 0.0 {
-                Some(rect)
-            } else {
-                None
-            }
-        }
-        Err(_) => None,
-    }
-}
-
-/// Get children of an accessible element via raw D-Bus call.
-///
-/// The zbus proxy macro has a known issue with `Vec<(String, ObjectPath)>`
-/// deserialization, so we call it directly.
-pub(super) fn get_children(
-    conn: &Connection,
-    destination: &str,
-    path: &str,
-) -> Result<Vec<(String, ObjectPath<'static>)>, ForepawError> {
-    let reply = conn
-        .call_method(
-            Some(destination),
-            path,
-            Some("org.a11y.atspi.Accessible"),
-            "GetChildren",
-            &(),
-        )
-        .map_err(|e| ForepawError::ActionFailed(format!("GetChildren on {path}: {e}")))?;
-
-    let body = reply.body();
-    let children: Vec<(String, ObjectPath<'_>)> = body
-        .deserialize()
-        .map_err(|e| ForepawError::ActionFailed(format!("GetChildren deserialization: {e}")))?;
-
-    // Convert to owned (static-lifetime) values.
-    Ok(children
-        .into_iter()
-        .map(|(s, p)| (s, p.into_owned()))
-        .collect())
-}
-
-/// Get the value of an accessible element (for text fields, sliders, etc).
-pub(super) fn get_value(conn: &Connection, destination: &str, path: &str) -> Option<String> {
-    // Try the Value interface first (CurrentValue)
-    let reply = conn.call_method(
-        Some(destination),
-        path,
-        Some("org.a11y.atspi.Value"),
-        "GetCurrentValue",
-        &(),
-    );
-    if let Ok(r) = reply {
-        let body = r.body();
-        // Value can be double or string depending on the element
-        if let Ok(val) = body.deserialize::<f64>() {
-            // Format as integer if whole number
-            if val.fract() == 0.0 {
-                return Some(format!("{val:.0}"));
-            }
-            return Some(val.to_string());
-        }
-        if let Ok(val) = body.deserialize::<String>() {
-            if !val.is_empty() {
-                return Some(val);
-            }
-        }
-    }
-    None
-}
 
 /// Get the help text property for name resolution.
 fn get_help_text(conn: &Connection, destination: &str, path: &str) -> Option<String> {
@@ -184,11 +49,11 @@ struct TreePruning {
 ///
 /// Returns [`ForepawError::AppNotFound`] if the application is not running,
 /// or [`ForepawError::ActionFailed`] if the AT-SPI2 bus is unreachable.
-pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree, ForepawError> {
+pub fn snapshot(app: &AppTarget, options: &SnapshotOptions) -> Result<ElementTree, ForepawError> {
     let conn = connect_atspi_bus()?;
 
     // Find the target app's bus name.
-    let app_bus = find_app_bus(&conn, app_name)?;
+    let app_bus = find_app_bus(&conn, app)?;
 
     // Build pruning config.
     let window_bounds = options.window_bounds;
@@ -224,31 +89,12 @@ pub fn snapshot(app_name: &str, options: &SnapshotOptions) -> Result<ElementTree
     };
 
     Ok(ElementTree {
-        app: app_name.to_owned(),
+        app: app.display(),
         root: result.root,
         refs: result.refs,
         window_bounds,
         timing,
     })
-}
-
-/// Find the bus name for an application by name (case-insensitive).
-pub(super) fn find_app_bus(conn: &Connection, app_name: &str) -> Result<String, ForepawError> {
-    let children = get_children(
-        conn,
-        "org.a11y.atspi.Registry",
-        "/org/a11y/atspi/accessible/root",
-    )?;
-
-    for (bus_name, _path) in &children {
-        let name = get_property(conn, bus_name, "/org/a11y/atspi/accessible/root", "Name")
-            .unwrap_or_default();
-        if name.eq_ignore_ascii_case(app_name) {
-            return Ok(bus_name.clone());
-        }
-    }
-
-    Err(ForepawError::AppNotFound(app_name.to_owned()))
 }
 
 // ---------------------------------------------------------------------------

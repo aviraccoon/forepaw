@@ -25,7 +25,7 @@ pub mod screenshot;
 pub mod snapshot;
 
 use crate::core::errors::ForepawError;
-use crate::platform::DesktopProvider;
+use crate::platform::{AppTarget, DesktopProvider};
 
 /// macOS implementation of `DesktopProvider`.
 pub struct DarwinProvider;
@@ -50,14 +50,14 @@ impl DesktopProvider for DarwinProvider {
 
     fn list_windows(
         &self,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
     ) -> Result<Vec<crate::platform::WindowInfo>, ForepawError> {
         app::list_windows(app)
     }
 
     fn snapshot(
         &self,
-        app: &str,
+        app: &AppTarget,
         options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
         snapshot::snapshot(app, options)
@@ -72,7 +72,7 @@ impl DesktopProvider for DarwinProvider {
 
     fn ocr(
         &self,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
         window: Option<&str>,
         find: Option<&str>,
         screenshot_options: Option<&crate::platform::ScreenshotOptions>,
@@ -83,7 +83,7 @@ impl DesktopProvider for DarwinProvider {
     fn click_ref(
         &self,
         r#ref: crate::core::element_tree::ElementRef,
-        app: &str,
+        app: &AppTarget,
         options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::click_ref(r#ref, app, options)
@@ -92,7 +92,7 @@ impl DesktopProvider for DarwinProvider {
     fn click_at_point(
         &self,
         point: crate::core::types::Point,
-        app: &str,
+        app: &AppTarget,
         options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::click_at_point(point, app, options)
@@ -101,7 +101,7 @@ impl DesktopProvider for DarwinProvider {
     fn click_region(
         &self,
         region: crate::core::types::Rect,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -111,7 +111,7 @@ impl DesktopProvider for DarwinProvider {
     fn hover_ref(
         &self,
         r#ref: crate::core::element_tree::ElementRef,
-        app: &str,
+        app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::hover_ref(r#ref, app)
     }
@@ -119,7 +119,7 @@ impl DesktopProvider for DarwinProvider {
     fn hover_at_point(
         &self,
         point: crate::core::types::Point,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
         smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::hover_at_point(point, app, smooth)
@@ -128,7 +128,7 @@ impl DesktopProvider for DarwinProvider {
     fn hover_region(
         &self,
         region: crate::core::types::Rect,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -138,7 +138,7 @@ impl DesktopProvider for DarwinProvider {
     fn ocr_hover(
         &self,
         text: &str,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         index: Option<usize>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -149,7 +149,7 @@ impl DesktopProvider for DarwinProvider {
         &self,
         r#ref: crate::core::element_tree::ElementRef,
         text: &str,
-        app: &str,
+        app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::type_ref(r#ref, text, app)
     }
@@ -157,7 +157,7 @@ impl DesktopProvider for DarwinProvider {
     fn keyboard_type(
         &self,
         text: &str,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::keyboard_type(text, app)
     }
@@ -165,7 +165,7 @@ impl DesktopProvider for DarwinProvider {
     fn press(
         &self,
         keys: &crate::core::key_combo::KeyCombo,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::press_key(keys, app)
     }
@@ -174,7 +174,7 @@ impl DesktopProvider for DarwinProvider {
         &self,
         direction: &str,
         amount: u32,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         r#ref: Option<crate::core::element_tree::ElementRef>,
         at: Option<crate::core::types::Point>,
@@ -186,7 +186,7 @@ impl DesktopProvider for DarwinProvider {
         &self,
         path: &[crate::core::types::Point],
         options: &crate::core::key_combo::DragOptions,
-        app: Option<&str>,
+        app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::drag_path(path, options, app)
     }
@@ -195,7 +195,7 @@ impl DesktopProvider for DarwinProvider {
         &self,
         from: crate::core::element_tree::ElementRef,
         to: crate::core::element_tree::ElementRef,
-        app: &str,
+        app: &AppTarget,
         options: &crate::core::key_combo::DragOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::drag_refs(from, to, app, options)
@@ -204,7 +204,7 @@ impl DesktopProvider for DarwinProvider {
     fn ocr_click(
         &self,
         text: &str,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         options: &crate::core::key_combo::ClickOptions,
         index: Option<usize>,
@@ -215,7 +215,7 @@ impl DesktopProvider for DarwinProvider {
     fn wait(
         &self,
         text: &str,
-        app: &str,
+        app: &AppTarget,
         window: Option<&str>,
         timeout: f64,
         interval: f64,
@@ -226,7 +226,7 @@ impl DesktopProvider for DarwinProvider {
     fn resolve_ref_position(
         &self,
         r#ref: crate::core::element_tree::ElementRef,
-        app: &str,
+        app: &AppTarget,
     ) -> Result<crate::core::types::Point, ForepawError> {
         snapshot::resolve_ref_position(r#ref.id, app)
     }
@@ -234,7 +234,7 @@ impl DesktopProvider for DarwinProvider {
     fn resolve_ref_bounds(
         &self,
         r#ref: crate::core::element_tree::ElementRef,
-        app: &str,
+        app: &AppTarget,
     ) -> Result<crate::core::types::Rect, ForepawError> {
         snapshot::resolve_ref_bounds(r#ref.id, app)
     }
@@ -242,7 +242,7 @@ impl DesktopProvider for DarwinProvider {
     fn element_at_point(
         &self,
         point: crate::core::types::Point,
-        app_hint: Option<&str>,
+        app_hint: Option<&AppTarget>,
     ) -> Result<crate::platform::HitTestResult, ForepawError> {
         hit_test::element_at_point(point, app_hint)
     }

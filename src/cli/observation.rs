@@ -25,11 +25,11 @@ fn truncate_display(s: &str) -> String {
     }
 }
 
-/// Shared global options (app, window, json).
+/// Shared global options (app/pid, window, json).
 #[derive(Args, Clone)]
 pub struct GlobalOptions {
-    #[arg(long, help = "Target application name")]
-    pub app: Option<String>,
+    #[command(flatten)]
+    pub app_target: crate::cli::AppTargetArgs,
 
     #[arg(long, help = "Window title or ID (e.g. 'Hacker News' or 'w-7290')")]
     pub window: Option<String>,
@@ -92,11 +92,7 @@ impl Snapshot {
     /// Returns an error if `--app` is missing, the application is not running,
     /// or accessibility permission is denied.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
-        let app = self
-            .global
-            .app
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("--app is required"))?;
+        let app = self.global.app_target.resolve()?.ok_or_else(|| anyhow::anyhow!("--app or --pid is required"))?;
 
         let interactive = self.interactive;
         let depth = self.depth.unwrap_or(SnapshotOptions::DEFAULT_DEPTH);
@@ -113,19 +109,20 @@ impl Snapshot {
             ..Default::default()
         };
 
-        let tree = provider.snapshot(app, &options)?;
+        let tree = provider.snapshot(&app, &options)?;
         let tree_renderer = TreeRenderer::new();
         let rendered = tree_renderer.render(&tree);
 
         let cache = SnapshotCache::new();
+        let cache_key = app.cache_key();
 
         if self.diff {
-            if let Some(previous) = cache.load(app) {
+            if let Some(previous) = cache.load(&cache_key) {
                 let differ = SnapshotDiffer::new();
                 let result = differ.diff(&previous, &rendered);
                 println!("{}", result.render(self.context));
             } else {
-                println!("[diff: no previous snapshot cached for {app}]");
+                println!("[diff: no previous snapshot cached for {cache_key}]");
                 println!("{rendered}");
             }
         } else {
@@ -138,7 +135,7 @@ impl Snapshot {
         }
 
         // Always cache for future diffs
-        cache.save(app, &rendered).ok();
+        cache.save(&cache_key, &rendered).ok();
 
         Ok(())
     }
@@ -213,9 +210,10 @@ impl Screenshot {
 
         let ss_options = self.build_screenshot_options();
         let crop_region = self.resolve_crop_region(provider)?;
+        let app_target = self.global.app_target.resolve()?;
 
         let params = crate::platform::ScreenshotParams {
-            app: self.global.app.as_deref(),
+            app: app_target.as_ref(),
             window: self.global.window.as_deref(),
             style: annotation_style,
             only: ref_filter.as_deref(),
@@ -265,14 +263,10 @@ impl Screenshot {
         let pad = self.padding.unwrap_or(20.0);
 
         if let Some(ref ref_str) = self.r#ref {
-            let app = self
-                .global
-                .app
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("--ref requires --app"))?;
+            let app = self.global.app_target.resolve()?.ok_or_else(|| anyhow::anyhow!("--app or --pid is required"))?;
             let element_ref = ElementRef::parse(ref_str)
                 .ok_or_else(|| anyhow::anyhow!("Invalid ref format: {ref_str}. Expected @eN"))?;
-            let bounds = provider.resolve_ref_bounds(element_ref, app)?;
+            let bounds = provider.resolve_ref_bounds(element_ref, &app)?;
             return Ok(Some(CropRegion::new(bounds, pad)));
         }
 
@@ -349,7 +343,8 @@ impl ListWindows {
     ///
     /// Returns an error if the specified application is not found.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
-        let windows = provider.list_windows(self.global.app.as_deref())?;
+        let app_target = self.global.app_target.resolve()?;
+        let windows = provider.list_windows(app_target.as_ref())?;
         for w in windows {
             println!("{}  {}  \"{}\"", w.id, w.app, w.title);
         }
@@ -383,7 +378,8 @@ impl HitTest {
         let point = parse_coordinate(&self.point)
             .ok_or_else(|| anyhow::anyhow!("Invalid coordinates: {}. Expected x,y", self.point))?;
 
-        let result = provider.element_at_point(point, self.global.app.as_deref())?;
+        let app_target = self.global.app_target.resolve()?;
+        let result = provider.element_at_point(point, app_target.as_ref())?;
 
         let truncate = |s: &str| {
             if self.full_values {
@@ -507,8 +503,9 @@ impl Ocr {
             Some(self.build_screenshot_options())
         };
 
+        let app_target = self.global.app_target.resolve()?;
         let output = provider.ocr(
-            self.global.app.as_deref(),
+            app_target.as_ref(),
             self.global.window.as_deref(),
             self.find.as_deref(),
             ss_options.as_ref(),

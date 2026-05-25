@@ -15,7 +15,7 @@ use windows::Win32::UI::Accessibility::{
 
 use crate::core::errors::ForepawError;
 use crate::core::types::Point;
-use crate::platform::{AncestorInfo, HitTestResult};
+use crate::platform::{AncestorInfo, AppTarget, HitTestResult};
 
 use super::snapshot::{control_type_to_role, get_element_bounds};
 
@@ -31,7 +31,7 @@ use super::snapshot::{control_type_to_role, get_element_bounds};
 /// or UIA fails (COM init missing, element disappeared, etc).
 pub fn element_at_point(
     point: Point,
-    _app_hint: Option<&str>,
+    _app_hint: Option<&AppTarget>,
 ) -> Result<HitTestResult, ForepawError> {
     // 1. Create UIA instance
     // SAFETY: CoCreateInstance with CUIAutomation CLSID is a standard COM operation.
@@ -73,9 +73,9 @@ pub fn element_at_point(
     // 6. Create tree walker for parent chain
     // SAFETY: ControlViewWalker is a standard UIA operation.
     let walker: IUIAutomationTreeWalker = unsafe {
-        automation.ControlViewWalker().map_err(|e| {
-            ForepawError::ActionFailed(format!("ControlViewWalker failed: {e}"))
-        })?
+        automation
+            .ControlViewWalker()
+            .map_err(|e| ForepawError::ActionFailed(format!("ControlViewWalker failed: {e}")))?
     };
 
     // 7. Walk parent chain via ControlViewWalker
@@ -145,7 +145,11 @@ fn get_bstr_property(
 ) -> Option<String> {
     let bstr = f(element).ok()?;
     let s = bstr.to_string();
-    if s.is_empty() { None } else { Some(s) }
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
 }
 
 /// Get the element value via the Value pattern.
@@ -162,7 +166,11 @@ fn get_value_pattern(element: &IUIAutomationElement) -> Option<String> {
     // SAFETY: CurrentValue on a valid Value pattern.
     let value = unsafe { pattern.CurrentValue() }.ok()?;
     let s = value.to_string();
-    if s.is_empty() { None } else { Some(s) }
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
 }
 
 /// Detect available control patterns and return their names as action strings.
@@ -170,11 +178,11 @@ fn get_available_patterns(element: &IUIAutomationElement) -> Vec<String> {
     use windows::Win32::UI::Accessibility::{
         IUIAutomationExpandCollapsePattern, IUIAutomationInvokePattern,
         IUIAutomationRangeValuePattern, IUIAutomationScrollPattern,
-        IUIAutomationSelectionItemPattern, IUIAutomationTextPattern,
-        IUIAutomationTogglePattern, IUIAutomationValuePattern, IUIAutomationWindowPattern,
-        UIA_ExpandCollapsePatternId, UIA_InvokePatternId, UIA_RangeValuePatternId,
-        UIA_ScrollPatternId, UIA_SelectionItemPatternId, UIA_TextPatternId,
-        UIA_TogglePatternId, UIA_ValuePatternId, UIA_WindowPatternId,
+        IUIAutomationSelectionItemPattern, IUIAutomationTextPattern, IUIAutomationTogglePattern,
+        IUIAutomationValuePattern, IUIAutomationWindowPattern, UIA_ExpandCollapsePatternId,
+        UIA_InvokePatternId, UIA_RangeValuePatternId, UIA_ScrollPatternId,
+        UIA_SelectionItemPatternId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ValuePatternId,
+        UIA_WindowPatternId,
     };
 
     let mut actions = Vec::new();
@@ -194,13 +202,19 @@ fn get_available_patterns(element: &IUIAutomationElement) -> Vec<String> {
     if check_pattern!(IUIAutomationValuePattern, UIA_ValuePatternId) {
         actions.push("SetValue".to_owned());
     }
-    if check_pattern!(IUIAutomationSelectionItemPattern, UIA_SelectionItemPatternId) {
+    if check_pattern!(
+        IUIAutomationSelectionItemPattern,
+        UIA_SelectionItemPatternId
+    ) {
         actions.push("Select".to_owned());
     }
     if check_pattern!(IUIAutomationScrollPattern, UIA_ScrollPatternId) {
         actions.push("Scroll".to_owned());
     }
-    if check_pattern!(IUIAutomationExpandCollapsePattern, UIA_ExpandCollapsePatternId) {
+    if check_pattern!(
+        IUIAutomationExpandCollapsePattern,
+        UIA_ExpandCollapsePatternId
+    ) {
         actions.push("ExpandCollapse".to_owned());
     }
     if check_pattern!(IUIAutomationTogglePattern, UIA_TogglePatternId) {

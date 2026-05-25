@@ -14,6 +14,7 @@ use windows::Win32::System::WinRT::IMemoryBufferByteAccess;
 use crate::core::errors::ForepawError;
 use crate::core::ocr_result::{OCROutput, OCRResult};
 use crate::core::types::Rect;
+use crate::platform::AppTarget;
 use crate::platform::ScreenshotOptions;
 
 /// Run OCR on an app window (or full screen).
@@ -26,14 +27,14 @@ use crate::platform::ScreenshotOptions;
 /// Returns [`ForepawError::ScreenRecordingDenied`] if screen capture fails,
 /// or [`ForepawError::AppNotFound`] if the target application is not found.
 pub fn ocr(
-    app_name: Option<&str>,
+    app: Option<&AppTarget>,
     window: Option<&str>,
     find: Option<&str>,
     screenshot_options: Option<&ScreenshotOptions>,
 ) -> Result<OCROutput, ForepawError> {
     // Capture screenshot as raw RGBA pixels
     let (rgba_pixels, width, height) =
-        crate::platform::windows::screenshot::capture_pixels(app_name, window)?;
+        crate::platform::windows::screenshot::capture_pixels(app, window)?;
 
     // Upscale 2x before OCR -- Windows.Media.Ocr struggles with small text.
     // Lanczos3 preserves sharpness better than bilinear for text edges.
