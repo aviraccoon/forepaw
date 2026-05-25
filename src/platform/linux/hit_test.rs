@@ -19,8 +19,8 @@ use crate::core::types::Point;
 use crate::platform::{AncestorInfo, AppTarget, HitTestResult};
 
 use super::app::connect_atspi_bus;
-use super::atspi_roles::atspi_role_to_role;
 use super::app::{find_app_bus, get_bounds, get_children, get_property, get_role, get_value};
+use super::atspi_roles::atspi_role_to_role;
 
 /// Performs a hit test at the given screen coordinates.
 ///

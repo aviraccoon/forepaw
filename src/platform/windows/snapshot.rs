@@ -17,8 +17,7 @@ use crate::core::element_tree::{ElementNode, ElementTree, SnapshotTiming};
 use crate::core::errors::ForepawError;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::types::Rect;
-use crate::platform::AppTarget;
-use crate::platform::SnapshotOptions;
+use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
 
 use super::app;
 
@@ -94,9 +93,13 @@ struct TreePruning {
 /// # Errors
 ///
 /// Returns [`ForepawError::AppNotFound`] if the application is not running.
-pub fn snapshot(app: &AppTarget, options: &SnapshotOptions) -> Result<ElementTree, ForepawError> {
+pub fn snapshot(
+    app: &AppTarget,
+    window: Option<&WindowTarget>,
+    options: &SnapshotOptions,
+) -> Result<ElementTree, ForepawError> {
     // Find the target window
-    let (hwnd, _) = app::find_app_hwnd(app)?;
+    let (hwnd, _) = app::find_app_hwnd(app, window)?;
 
     // Bring to foreground (may be needed for accurate tree content)
     app::activate_app(hwnd);

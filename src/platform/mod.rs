@@ -99,6 +99,38 @@ pub struct AppInfo {
     pub pid: i32,
 }
 
+/// How to target a specific window within an app.
+#[derive(Debug, Clone)]
+pub enum WindowTarget {
+    /// Case-insensitive substring match on window title.
+    Title(String),
+    /// Exact window ID (e.g. "w-1234" from `list-windows`).
+    Id(String),
+}
+
+impl WindowTarget {
+    /// Create a title-based window target.
+    #[must_use]
+    pub fn title(title: impl Into<String>) -> Self {
+        Self::Title(title.into())
+    }
+
+    /// Create an ID-based window target.
+    #[must_use]
+    pub fn id(id: impl Into<String>) -> Self {
+        Self::Id(id.into())
+    }
+
+    /// Display string for error messages.
+    #[must_use]
+    pub fn display(&self) -> String {
+        match self {
+            Self::Title(t) => format!("title:{t}"),
+            Self::Id(id) => format!("id:{id}"),
+        }
+    }
+}
+
 /// Info about a visible window.
 #[derive(Debug, Clone)]
 pub struct WindowInfo {
@@ -228,7 +260,7 @@ impl ImageFormat {
 /// Parameters for screenshot operations.
 pub struct ScreenshotParams<'a> {
     pub app: Option<&'a AppTarget>,
-    pub window: Option<&'a str>,
+    pub window: Option<&'a WindowTarget>,
     pub style: Option<AnnotationStyle>,
     pub only: Option<&'a [ElementRef]>,
     pub options: &'a ScreenshotOptions,
@@ -311,6 +343,7 @@ pub trait DesktopProvider: Send + Sync {
     fn snapshot(
         &self,
         app: &AppTarget,
+        window: Option<&WindowTarget>,
         options: &SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError>;
 
@@ -333,7 +366,7 @@ pub trait DesktopProvider: Send + Sync {
     fn ocr(
         &self,
         app: Option<&AppTarget>,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         find: Option<&str>,
         screenshot_options: Option<&ScreenshotOptions>,
     ) -> Result<OCROutput, ForepawError>;
@@ -379,7 +412,7 @@ pub trait DesktopProvider: Send + Sync {
         &self,
         region: Rect,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         options: &ClickOptions,
     ) -> Result<ActionResult, ForepawError>;
 
@@ -414,7 +447,7 @@ pub trait DesktopProvider: Send + Sync {
         &self,
         region: Rect,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         smooth: bool,
     ) -> Result<ActionResult, ForepawError>;
 
@@ -428,7 +461,7 @@ pub trait DesktopProvider: Send + Sync {
         &self,
         text: &str,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         index: Option<usize>,
     ) -> Result<ActionResult, ForepawError>;
 
@@ -477,7 +510,7 @@ pub trait DesktopProvider: Send + Sync {
         direction: &str,
         amount: u32,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         r#ref: Option<ElementRef>,
         at: Option<Point>,
     ) -> Result<ActionResult, ForepawError>;
@@ -519,7 +552,7 @@ pub trait DesktopProvider: Send + Sync {
         &self,
         text: &str,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         options: &ClickOptions,
         index: Option<usize>,
     ) -> Result<ActionResult, ForepawError>;
@@ -534,7 +567,7 @@ pub trait DesktopProvider: Send + Sync {
         &self,
         text: &str,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         timeout: f64,
         interval: f64,
     ) -> Result<ActionResult, ForepawError>;

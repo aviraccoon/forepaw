@@ -26,7 +26,7 @@ use crate::platform::darwin::ffi::{
     K_CF_NUMBER_DOUBLE_TYPE, K_CF_NUMBER_SINT32_TYPE, K_CF_STRING_ENCODING_UTF8,
     K_CG_NULL_WINDOW_ID,
 };
-use crate::platform::{AppInfo, WindowInfo};
+use crate::platform::{AppInfo, WindowInfo, WindowTarget};
 
 // ---------------------------------------------------------------------------
 // Permission gating
@@ -168,7 +168,10 @@ impl ResolvedWindow {
 ///
 /// Returns [`ForepawError::WindowNotFound`] if no window matches the filter,
 /// or [`ForepawError::AmbiguousWindow`] if multiple windows match and none is preferred.
-pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, ForepawError> {
+pub fn find_window(
+    pid: i32,
+    window: Option<&WindowTarget>,
+) -> Result<ResolvedWindow, ForepawError> {
     require_accessibility()?;
     // SAFETY: CGWindowListCopyWindowInfo returns a CFArray the caller owns.
     let window_list = unsafe {
@@ -176,7 +179,7 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
     };
     if window_list.is_null() {
         return Err(ForepawError::WindowNotFound(
-            window.unwrap_or("any").to_owned(),
+            window.map_or_else(|| "any".to_owned(), WindowTarget::display),
         ));
     }
 
@@ -200,12 +203,15 @@ pub fn find_window(pid: i32, window: Option<&str>) -> Result<ResolvedWindow, For
 
     if app_windows.is_empty() {
         return Err(ForepawError::WindowNotFound(
-            window.unwrap_or("any").to_owned(),
+            window.map_or_else(|| "any".to_owned(), WindowTarget::display),
         ));
     }
 
     match window {
-        Some(w) => match_window(&app_windows, w),
+        Some(target) => match target {
+            WindowTarget::Id(id) => match_window_by_id(&app_windows, id),
+            WindowTarget::Title(title) => match_window_by_title(&app_windows, title),
+        },
         None => Ok(select_best_window(&app_windows)),
     }
 }
@@ -467,22 +473,25 @@ fn windows_for_pids(window_list: CFArrayRef, pids: &HashSet<i32>) -> Vec<WindowE
     unsafe { collect_windows(window_list, |p| pids.contains(&p)) }
 }
 
-fn match_window(windows: &[WindowEntry], pattern: &str) -> Result<ResolvedWindow, ForepawError> {
-    // Match by window ID: "w-1234"
-    if let Some(id_str) = pattern.strip_prefix("w-") {
-        if let Ok(id_num) = id_str.parse::<u32>() {
-            if let Some(w) = windows.iter().find(|w| w.id == id_num) {
-                return Ok(ResolvedWindow {
-                    window_id: w.id,
-                    title: w.title.clone(),
-                    bounds: w.bounds,
-                });
-            }
+fn match_window_by_id(windows: &[WindowEntry], id: &str) -> Result<ResolvedWindow, ForepawError> {
+    // Accept bare numeric IDs ("1234") — validate as u32
+    if let Ok(id_num) = id.parse::<u32>() {
+        if let Some(w) = windows.iter().find(|w| w.id == id_num) {
+            return Ok(ResolvedWindow {
+                window_id: w.id,
+                title: w.title.clone(),
+                bounds: w.bounds,
+            });
         }
-        return Err(ForepawError::WindowNotFound(pattern.to_owned()));
     }
+    Err(ForepawError::WindowNotFound(id.to_owned()))
+}
 
-    // Substring match on title (case-insensitive)
+/// Match windows by title substring (case-insensitive).
+fn match_window_by_title(
+    windows: &[WindowEntry],
+    pattern: &str,
+) -> Result<ResolvedWindow, ForepawError> {
     let pattern_lower = pattern.to_lowercase();
     let matches: Vec<&WindowEntry> = windows
         .iter()
@@ -890,50 +899,50 @@ mod tests {
     // --- match_window ---
 
     #[test]
-    fn match_window_by_id() {
+    fn window_id_match() {
         let windows = vec![
             make_entry(100, "Document", 800.0, 600.0),
             make_entry(200, "Settings", 400.0, 300.0),
         ];
-        let result = match_window(&windows, "w-200").unwrap();
+        let result = match_window_by_id(&windows, "200").unwrap();
         assert_eq!(result.window_id, 200);
         assert_eq!(result.title, "Settings");
     }
 
     #[test]
-    fn match_window_by_id_not_found() {
+    fn window_id_not_found() {
         let windows = vec![make_entry(100, "Doc", 800.0, 600.0)];
-        let err = match_window(&windows, "w-999").unwrap_err();
+        let err = match_window_by_id(&windows, "999").unwrap_err();
         match err {
-            ForepawError::WindowNotFound(q) => assert_eq!(q, "w-999"),
+            ForepawError::WindowNotFound(q) => assert_eq!(q, "999"),
             other => panic!("expected WindowNotFound, got {other:?}"),
         }
     }
 
     #[test]
-    fn match_window_by_title_substring() {
+    fn window_title_substring_match() {
         let windows = vec![
             make_entry(100, "My Document.txt", 800.0, 600.0),
             make_entry(200, "Settings", 400.0, 300.0),
         ];
-        let result = match_window(&windows, "document").unwrap();
+        let result = match_window_by_title(&windows, "document").unwrap();
         assert_eq!(result.window_id, 100);
     }
 
     #[test]
-    fn match_window_case_insensitive() {
+    fn window_title_case_insensitive() {
         let windows = vec![make_entry(100, "Document", 800.0, 600.0)];
-        let result = match_window(&windows, "DOCUMENT").unwrap();
+        let result = match_window_by_title(&windows, "DOCUMENT").unwrap();
         assert_eq!(result.window_id, 100);
     }
 
     #[test]
-    fn match_window_ambiguous() {
+    fn window_title_ambiguous() {
         let windows = vec![
             make_entry(100, "Document 1", 800.0, 600.0),
             make_entry(200, "Document 2", 800.0, 600.0),
         ];
-        let err = match_window(&windows, "Document").unwrap_err();
+        let err = match_window_by_title(&windows, "Document").unwrap_err();
         match err {
             ForepawError::AmbiguousWindow { query, matches: _ } => {
                 assert_eq!(query, "Document");
@@ -943,9 +952,9 @@ mod tests {
     }
 
     #[test]
-    fn match_window_no_match() {
+    fn window_title_no_match() {
         let windows = vec![make_entry(100, "Doc", 800.0, 600.0)];
-        let err = match_window(&windows, "nonexistent").unwrap_err();
+        let err = match_window_by_title(&windows, "nonexistent").unwrap_err();
         match err {
             ForepawError::WindowNotFound(q) => assert_eq!(q, "nonexistent"),
             other => panic!("expected WindowNotFound, got {other:?}"),

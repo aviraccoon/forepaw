@@ -4,7 +4,7 @@ pub mod observation;
 pub mod parse;
 pub mod system;
 
-use crate::platform::AppTarget;
+use crate::platform::{AppTarget, WindowTarget};
 
 /// `--app` and `--pid` flags (mutually exclusive).
 ///
@@ -45,8 +45,37 @@ impl AppTargetArgs {
     ///
     /// Returns an error if neither is provided.
     pub fn require(&self, context: &str) -> anyhow::Result<AppTarget> {
-        self.resolve()?.ok_or_else(|| {
-            anyhow::anyhow!("--app or --pid is required for {context}")
-        })
+        self.resolve()?
+            .ok_or_else(|| anyhow::anyhow!("--app or --pid is required for {context}"))
+    }
+}
+
+/// `--window` and `--window-id` flags (mutually exclusive).
+///
+/// Flattened into observation commands and action structs.
+/// Clap enforces that at most one is set.
+#[derive(clap::Args, Clone, Debug)]
+#[group(multiple = false)]
+pub struct WindowTargetArgs {
+    #[arg(long, help = "Window title (case-insensitive substring match)")]
+    pub window: Option<String>,
+
+    #[arg(long, help = "Window ID from list-windows (e.g. 7290)")]
+    pub window_id: Option<String>,
+}
+
+impl WindowTargetArgs {
+    /// Resolve `--window` or `--window-id` into a `WindowTarget`.
+    ///
+    /// Returns `Some(target)` if one is set, `None` if neither is set.
+    /// Clap's group validation already prevents both being set.
+    #[must_use]
+    pub fn resolve(&self) -> Option<WindowTarget> {
+        match (&self.window, &self.window_id) {
+            (Some(title), None) => Some(WindowTarget::title(title)),
+            (None, Some(id)) => Some(WindowTarget::id(id.strip_prefix("w-").unwrap_or(id))),
+            (None, None) => None,
+            (Some(_), Some(_)) => unreachable!("clap group prevents both --window and --window-id"),
+        }
     }
 }

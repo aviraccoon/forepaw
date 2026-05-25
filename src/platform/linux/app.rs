@@ -11,7 +11,7 @@ use zbus::zvariant::{ObjectPath, Value};
 use crate::core::errors::ForepawError;
 use crate::core::types::Rect;
 use crate::platform::AppTarget;
-use crate::platform::{AppInfo, WindowInfo};
+use crate::platform::{AppInfo, WindowInfo, WindowTarget};
 
 // ---------------------------------------------------------------------------
 // D-Bus proxy definitions
@@ -236,10 +236,7 @@ pub(super) fn get_value(conn: &Connection, destination: &str, path: &str) -> Opt
 }
 
 /// Resolve an `AppTarget` (name or PID) to a D-Bus bus name on the AT-SPI2 bus.
-pub(super) fn find_app_bus(
-    conn: &Connection,
-    app: &AppTarget,
-) -> Result<String, ForepawError> {
+pub(super) fn find_app_bus(conn: &Connection, app: &AppTarget) -> Result<String, ForepawError> {
     let children = get_children(
         conn,
         "org.a11y.atspi.Registry",
@@ -249,9 +246,8 @@ pub(super) fn find_app_bus(
     match app {
         AppTarget::Name(query) => {
             for (bus_name, _path) in &children {
-                let name =
-                    get_property(conn, bus_name, "/org/a11y/atspi/accessible/root", "Name")
-                        .unwrap_or_default();
+                let name = get_property(conn, bus_name, "/org/a11y/atspi/accessible/root", "Name")
+                    .unwrap_or_default();
                 if name.eq_ignore_ascii_case(query) {
                     return Ok(bus_name.clone());
                 }
@@ -259,9 +255,8 @@ pub(super) fn find_app_bus(
             Err(ForepawError::AppNotFound(app.display()))
         }
         AppTarget::Pid(pid) => {
-            let target_pid = u32::try_from(*pid).map_err(|_| {
-                ForepawError::AppNotFound(format!("Invalid PID: {pid}"))
-            })?;
+            let target_pid = u32::try_from(*pid)
+                .map_err(|_| ForepawError::AppNotFound(format!("Invalid PID: {pid}")))?;
             for (bus_name, _path) in &children {
                 let bus_pid = get_pid_for_bus_name(conn, bus_name)?;
                 if bus_pid == target_pid {
@@ -437,6 +432,81 @@ fn get_accessible_property(
             "expected string for {property}, got {:?}",
             other.value_signature()
         ))),
+    }
+}
+
+/// Find a child frame/window of an app matching the given window target.
+///
+/// Returns the child's D-Bus object path and bounds.
+/// - `WindowTarget::Id(id)`: exact match against the object path
+/// - `WindowTarget::Title(title)`: case-insensitive substring match on the window name
+///
+/// Returns [`ForepawError::WindowNotFound`] if no child matches,
+/// or [`ForepawError::AmbiguousWindow`] if multiple title matches.
+pub(super) fn find_child_window(
+    conn: &Connection,
+    bus_name: &str,
+    target: &WindowTarget,
+) -> Result<(String, Option<Rect>), ForepawError> {
+    let children = get_children(conn, bus_name, "/org/a11y/atspi/accessible/root")
+        .map_err(|e| ForepawError::ActionFailed(format!("children for {bus_name}: {e}")))?;
+
+    match target {
+        WindowTarget::Id(id) => {
+            // Match by exact D-Bus object path
+            for (_child_bus, child_path) in &children {
+                if child_path.as_str() == id {
+                    let bounds = window_bounds(conn, bus_name, child_path);
+                    return Ok((child_path.to_string(), bounds));
+                }
+            }
+            Err(ForepawError::WindowNotFound(id.to_owned()))
+        }
+        WindowTarget::Title(pattern) => {
+            // Match by title substring (case-insensitive)
+            let mut matches: Vec<(String, Option<Rect>)> = Vec::new();
+            for (_child_bus, child_path) in &children {
+                let proxy = AccessibleProxyBlocking::builder(conn)
+                    .destination(bus_name)
+                    .map_err(|e| ForepawError::ActionFailed(format!("proxy dest: {e}")))?
+                    .path(child_path.as_str())
+                    .map_err(|e| ForepawError::ActionFailed(format!("proxy path: {e}")))?
+                    .build()
+                    .map_err(|e| ForepawError::ActionFailed(format!("proxy: {e}")))?;
+
+                let role = proxy
+                    .get_role()
+                    .map_err(|e| ForepawError::ActionFailed(format!("role: {e}")))?;
+
+                if role != ROLE_FRAME && role != ROLE_WINDOW {
+                    continue;
+                }
+
+                let title =
+                    get_property(conn, bus_name, child_path.as_str(), "Name").unwrap_or_default();
+
+                if title.to_lowercase().contains(&pattern.to_lowercase()) {
+                    let bounds = window_bounds(conn, bus_name, child_path);
+                    matches.push((child_path.to_string(), bounds));
+                }
+            }
+
+            match matches.len() {
+                1 => Ok(matches.into_iter().next().expect("len == 1 checked")),
+                2.. => {
+                    let titles = matches
+                        .iter()
+                        .map(|(path, _)| format!("  {path}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    Err(ForepawError::AmbiguousWindow {
+                        query: pattern.to_owned(),
+                        matches: titles,
+                    })
+                }
+                0 => Err(ForepawError::WindowNotFound(pattern.to_owned())),
+            }
+        }
     }
 }
 

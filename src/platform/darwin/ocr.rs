@@ -16,7 +16,7 @@ use crate::core::ocr_result::{OCROutput, OCRResult};
 use crate::core::types::Rect;
 use crate::platform::darwin::app;
 use crate::platform::darwin::ffi::{self, CGPointFFI};
-use crate::platform::{AppTarget, ScreenshotOptions};
+use crate::platform::{AppTarget, ScreenshotOptions, WindowTarget};
 
 /// Run OCR on an app window (or full screen).
 ///
@@ -30,7 +30,7 @@ use crate::platform::{AppTarget, ScreenshotOptions};
 /// or [`ForepawError::WindowNotFound`] if the window filter doesn't match.
 pub fn ocr(
     app: Option<&AppTarget>,
-    window: Option<&str>,
+    window: Option<&WindowTarget>,
     find: Option<&str>,
     screenshot_options: Option<&ScreenshotOptions>,
 ) -> Result<OCROutput, ForepawError> {
@@ -242,7 +242,7 @@ fn recognize_text(
 pub fn resolve_ocr_text(
     text: &str,
     app: &AppTarget,
-    window: Option<&str>,
+    window: Option<&WindowTarget>,
     index: Option<usize>,
 ) -> Result<(String, crate::core::types::Point), ForepawError> {
     let output = ocr(Some(app), window, Some(text), None)?;
@@ -302,7 +302,7 @@ pub fn resolve_ocr_text(
 pub fn ocr_click(
     text: &str,
     app: &AppTarget,
-    window: Option<&str>,
+    window: Option<&WindowTarget>,
     options: &crate::core::key_combo::ClickOptions,
     index: Option<usize>,
 ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -337,7 +337,7 @@ pub fn ocr_click(
 pub fn ocr_hover(
     text: &str,
     app: &AppTarget,
-    window: Option<&str>,
+    window: Option<&WindowTarget>,
     index: Option<usize>,
 ) -> Result<crate::platform::ActionResult, ForepawError> {
     let (matched_text, window_point) = resolve_ocr_text(text, app, window, index)?;
@@ -365,7 +365,7 @@ pub fn ocr_hover(
 pub fn wait(
     text: &str,
     app: &AppTarget,
-    window: Option<&str>,
+    window: Option<&WindowTarget>,
     timeout: f64,
     interval: f64,
 ) -> Result<crate::platform::ActionResult, ForepawError> {

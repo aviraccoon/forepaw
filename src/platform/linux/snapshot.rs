@@ -11,10 +11,12 @@ use crate::core::element_tree::{is_interactive_role, ElementNode, ElementTree, S
 use crate::core::errors::ForepawError;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::types::Rect;
-use crate::platform::AppTarget;
-use crate::platform::SnapshotOptions;
+use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
 
-use super::app::{connect_atspi_bus, find_app_bus, get_bounds, get_children, get_property, get_role, get_value};
+use super::app::{
+    connect_atspi_bus, find_app_bus, find_child_window, get_bounds, get_children, get_property,
+    get_role, get_value,
+};
 use super::atspi_roles::atspi_role_to_role;
 
 // AT-SPI2 role mapping is generated from res/atspi-constants.h.
@@ -45,18 +47,34 @@ struct TreePruning {
 
 /// Walk the AT-SPI2 tree for the given app and return an `ElementTree`.
 ///
+/// If `window` is specified, the tree walk is scoped to that specific window
+/// (child frame/window) instead of the full app tree.
+///
 /// # Errors
 ///
 /// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// [`ForepawError::WindowNotFound`] if the specified window is not found,
 /// or [`ForepawError::ActionFailed`] if the AT-SPI2 bus is unreachable.
-pub fn snapshot(app: &AppTarget, options: &SnapshotOptions) -> Result<ElementTree, ForepawError> {
+pub fn snapshot(
+    app: &AppTarget,
+    window: Option<&WindowTarget>,
+    options: &SnapshotOptions,
+) -> Result<ElementTree, ForepawError> {
     let conn = connect_atspi_bus()?;
 
     // Find the target app's bus name.
     let app_bus = find_app_bus(&conn, app)?;
 
-    // Build pruning config.
-    let window_bounds = options.window_bounds;
+    // If a window target is specified, resolve it to a child frame/window path.
+    let (root_path, window_bounds): (String, Option<Rect>) = if let Some(target) = window {
+        find_child_window(&conn, &app_bus, target)?
+    } else {
+        (
+            "/org/a11y/atspi/accessible/root".to_owned(),
+            options.window_bounds,
+        )
+    };
+
     let pruning = TreePruning {
         skip_zero_size: options.skip_zero_size,
         skip_offscreen: options.skip_offscreen,
@@ -64,14 +82,7 @@ pub fn snapshot(app: &AppTarget, options: &SnapshotOptions) -> Result<ElementTre
     };
 
     let walk_start = std::time::Instant::now();
-    let root = build_tree(
-        &conn,
-        &app_bus,
-        "/org/a11y/atspi/accessible/root",
-        0,
-        options.max_depth,
-        &pruning,
-    );
+    let root = build_tree(&conn, &app_bus, &root_path, 0, options.max_depth, &pruning);
     let walk_ms = walk_start.elapsed().as_secs_f64() * 1000.0;
 
     let assigner = RefAssigner::new();

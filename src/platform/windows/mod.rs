@@ -14,7 +14,7 @@ pub mod screenshot;
 pub mod snapshot;
 
 use crate::core::errors::ForepawError;
-use crate::platform::{AppTarget, DesktopProvider};
+use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
 
 /// Windows implementation of `DesktopProvider`.
 pub struct WindowsProvider;
@@ -51,9 +51,10 @@ impl DesktopProvider for WindowsProvider {
     fn snapshot(
         &self,
         app: &AppTarget,
+        window: Option<&WindowTarget>,
         options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
-        snapshot::snapshot(app, options)
+        snapshot::snapshot(app, window, options)
     }
 
     fn screenshot(
@@ -71,7 +72,7 @@ impl DesktopProvider for WindowsProvider {
     fn ocr(
         &self,
         app: Option<&AppTarget>,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         find: Option<&str>,
         screenshot_options: Option<&crate::platform::ScreenshotOptions>,
     ) -> Result<crate::core::ocr_result::OCROutput, ForepawError> {
@@ -106,7 +107,7 @@ impl DesktopProvider for WindowsProvider {
         &self,
         _region: crate::core::types::Rect,
         _app: &AppTarget,
-        _window: Option<&str>,
+        _window: Option<&WindowTarget>,
         _options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(
@@ -139,7 +140,7 @@ impl DesktopProvider for WindowsProvider {
         &self,
         _region: crate::core::types::Rect,
         _app: &AppTarget,
-        _window: Option<&str>,
+        _window: Option<&WindowTarget>,
         _smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(
@@ -151,7 +152,7 @@ impl DesktopProvider for WindowsProvider {
         &self,
         _text: &str,
         _app: &AppTarget,
-        _window: Option<&str>,
+        _window: Option<&WindowTarget>,
         _index: Option<usize>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(
@@ -195,7 +196,7 @@ impl DesktopProvider for WindowsProvider {
         _direction: &str,
         _amount: u32,
         _app: &AppTarget,
-        _window: Option<&str>,
+        _window: Option<&WindowTarget>,
         _ref: Option<crate::core::element_tree::ElementRef>,
         _at: Option<crate::core::types::Point>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -231,7 +232,7 @@ impl DesktopProvider for WindowsProvider {
         &self,
         _text: &str,
         _app: &AppTarget,
-        _window: Option<&str>,
+        _window: Option<&WindowTarget>,
         _options: &crate::core::key_combo::ClickOptions,
         _index: Option<usize>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -244,7 +245,7 @@ impl DesktopProvider for WindowsProvider {
         &self,
         _text: &str,
         _app: &AppTarget,
-        _window: Option<&str>,
+        _window: Option<&WindowTarget>,
         _timeout: f64,
         _interval: f64,
     ) -> Result<crate::platform::ActionResult, ForepawError> {

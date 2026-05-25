@@ -4,7 +4,7 @@ use crate::cli::AppTargetArgs;
 use crate::core::element_tree::ElementRef;
 use crate::core::key_combo::{ClickOptions, DragOptions, KeyCombo, MouseButton};
 use crate::core::output_formatter::OutputFormatter;
-use crate::platform::DesktopProvider;
+use crate::platform::{DesktopProvider, WindowTarget};
 
 /// Resolve `--app` and `--pid` from raw option values (batch subcommand parsing).
 ///
@@ -13,7 +13,10 @@ use crate::platform::DesktopProvider;
 /// # Errors
 ///
 /// Returns an error if both are provided.
-fn resolve_app_raw(app: Option<&str>, pid: Option<i32>) -> anyhow::Result<Option<crate::platform::AppTarget>> {
+fn resolve_app_raw(
+    app: Option<&str>,
+    pid: Option<i32>,
+) -> anyhow::Result<Option<crate::platform::AppTarget>> {
     match (app, pid) {
         (Some(name), None) => Ok(Some(crate::platform::AppTarget::name(name))),
         (None, Some(pid)) => Ok(Some(crate::platform::AppTarget::pid(pid))),
@@ -48,6 +51,9 @@ pub struct Click {
     #[command(flatten)]
     pub app_target: AppTargetArgs,
 
+    #[command(flatten)]
+    pub window_target: crate::cli::WindowTargetArgs,
+
     #[arg(long, help = "Right-click (context menu)")]
     pub right: bool,
 
@@ -75,13 +81,14 @@ impl Click {
             },
             if self.double { 2 } else { 1 },
         );
+        let window_target = self.window_target.resolve();
 
         let result = if let Some(element_ref) = ElementRef::parse(&self.target) {
             let app = self.app_target.require("click")?;
             provider.click_ref(element_ref, &app, &options)?
         } else if let Some(region) = parse_region(&self.target) {
             let app = self.app_target.require("click")?;
-            provider.click_region(region, &app, None, &options)?
+            provider.click_region(region, &app, window_target.as_ref(), &options)?
         } else if let Some(point) = parse_coordinate(&self.target) {
             let app = self.app_target.require("click")?;
             provider.click_at_point(point, &app, &options)?
@@ -219,7 +226,9 @@ impl KeyboardType {
 
 /// Press a keyboard shortcut.
 #[derive(clap::Args)]
-#[command(about = "Press a keyboard shortcut (e.g. cmd+s, ctrl+shift+z). Omit --app/--pid for global hotkeys")]
+#[command(
+    about = "Press a keyboard shortcut (e.g. cmd+s, ctrl+shift+z). Omit --app/--pid for global hotkeys"
+)]
 pub struct Press {
     #[arg(help = "Key combo (e.g. cmd+s, return, escape)")]
     pub combo: String,
@@ -272,8 +281,8 @@ pub struct OcrClick {
     #[command(flatten)]
     pub app_target: AppTargetArgs,
 
-    #[arg(long, help = "Window title or ID")]
-    pub window: Option<String>,
+    #[command(flatten)]
+    pub window_target: crate::cli::WindowTargetArgs,
 
     #[arg(long, help = "Right-click (context menu)")]
     pub right: bool,
@@ -310,8 +319,9 @@ impl OcrClick {
             if self.double { 2 } else { 1 },
         );
         let app = self.app_target.require("ocr-click")?;
+        let window_target = self.window_target.resolve();
         let result =
-            provider.ocr_click(text, &app, self.window.as_deref(), &options, self.index)?;
+            provider.ocr_click(text, &app, window_target.as_ref(), &options, self.index)?;
 
         let formatter = OutputFormatter::new(self.json);
         print!(
@@ -339,8 +349,8 @@ pub struct Hover {
     #[command(flatten)]
     pub app_target: AppTargetArgs,
 
-    #[arg(long, help = "Window title or ID")]
-    pub window: Option<String>,
+    #[command(flatten)]
+    pub window_target: crate::cli::WindowTargetArgs,
 
     #[arg(long, help = "Smooth mouse movement")]
     pub smooth: bool,
@@ -357,18 +367,19 @@ impl Hover {
     /// Returns an error if `--app` is missing for ref/region targets,
     /// or the underlying provider call fails.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+        let window_target = self.window_target.resolve();
         let result = if let Some(element_ref) = ElementRef::parse(&self.target) {
             let app = self.app_target.require("ref-based hover")?;
             provider.hover_ref(element_ref, &app)?
         } else if let Some(region) = parse_region(&self.target) {
             let app = self.app_target.require("region-based hover")?;
-            provider.hover_region(region, &app, self.window.as_deref(), self.smooth)?
+            provider.hover_region(region, &app, window_target.as_ref(), self.smooth)?
         } else if let Some(point) = parse_coordinate(&self.target) {
             let app_target = self.app_target.resolve()?;
             provider.hover_at_point(point, app_target.as_ref(), self.smooth)?
         } else {
             let app = self.app_target.require("text-based hover")?;
-            provider.ocr_hover(&self.target, &app, self.window.as_deref(), None)?
+            provider.ocr_hover(&self.target, &app, window_target.as_ref(), None)?
         };
 
         let formatter = OutputFormatter::new(self.json);
@@ -401,8 +412,8 @@ pub struct Wait {
     #[command(flatten)]
     pub app_target: AppTargetArgs,
 
-    #[arg(long, help = "Window title or ID")]
-    pub window: Option<String>,
+    #[command(flatten)]
+    pub window_target: crate::cli::WindowTargetArgs,
 
     #[arg(long, help = "Maximum seconds to wait (default 10)")]
     pub timeout: Option<f64>,
@@ -428,10 +439,11 @@ impl Wait {
             "wait",
         )?;
         let app = self.app_target.require("wait")?;
+        let window_target = self.window_target.resolve();
         let result = provider.wait(
             text,
             &app,
-            self.window.as_deref(),
+            window_target.as_ref(),
             self.timeout.unwrap_or(10.0),
             self.interval.unwrap_or(1.0),
         )?;
@@ -460,8 +472,8 @@ pub struct Scroll {
     #[command(flatten)]
     pub app_target: AppTargetArgs,
 
-    #[arg(long, help = "Window title or ID")]
-    pub window: Option<String>,
+    #[command(flatten)]
+    pub window_target: crate::cli::WindowTargetArgs,
 
     #[arg(short, long, help = "Number of scroll ticks (default 3)")]
     pub amount: Option<u32>,
@@ -516,11 +528,12 @@ impl Scroll {
             .transpose()?;
 
         let app = self.app_target.require("scroll")?;
+        let window_target = self.window_target.resolve();
         let result = provider.scroll(
             &self.direction,
             self.amount.unwrap_or(3),
             &app,
-            self.window.as_deref(),
+            window_target.as_ref(),
             element_ref,
             scroll_point,
         )?;
@@ -704,8 +717,8 @@ pub struct Batch {
     #[command(flatten)]
     pub app_target: AppTargetArgs,
 
-    #[arg(long, help = "Window title or ID")]
-    pub window: Option<String>,
+    #[command(flatten)]
+    pub window_target: crate::cli::WindowTargetArgs,
 
     #[arg(long, help = "Delay in milliseconds between actions (default 100)")]
     pub delay: Option<u64>,
@@ -737,12 +750,13 @@ impl Batch {
         let formatter = OutputFormatter::new(self.json);
 
         for (i, action) in actions.iter().enumerate() {
+            let window_target = self.window_target.resolve();
             let result = execute_action(
                 action,
                 provider,
                 self.app_target.app.as_deref(),
                 self.app_target.pid,
-                self.window.as_deref(),
+                window_target.as_ref(),
             )?;
             print!(
                 "{}",
@@ -772,7 +786,7 @@ fn execute_action(
     provider: &dyn DesktopProvider,
     batch_app: Option<&str>,
     batch_pid: Option<i32>,
-    batch_window: Option<&str>,
+    batch_window: Option<&WindowTarget>,
 ) -> anyhow::Result<crate::platform::ActionResult> {
     let parts = shell_split(action);
     let command = parts
@@ -811,11 +825,9 @@ fn execute_action(
                     .map_err(Into::into)
             } else if let Some(region) = parse_region(target) {
                 let app = require_app_raw(app_name, effective_pid, "click")?;
-                let win = parse_option("--window", args)
-                    .map(String::from)
-                    .or_else(|| batch_window.map(String::from));
+                let win = resolve_batch_window(args, batch_window);
                 provider
-                    .click_region(region, &app, win.as_deref(), &options)
+                    .click_region(region, &app, win.as_ref(), &options)
                     .map_err(Into::into)
             } else if let Some(point) = parse_coordinate(target) {
                 let app = require_app_raw(app_name, effective_pid, "click")?;
@@ -840,11 +852,9 @@ fn execute_action(
                 provider.hover_ref(r#ref, &app).map_err(Into::into)
             } else if let Some(region) = parse_region(target) {
                 let app = require_app_raw(app_name, effective_pid, "hover")?;
-                let win = parse_option("--window", args)
-                    .map(String::from)
-                    .or_else(|| batch_window.map(String::from));
+                let win = resolve_batch_window(args, batch_window);
                 provider
-                    .hover_region(region, &app, win.as_deref(), smooth)
+                    .hover_region(region, &app, win.as_ref(), smooth)
                     .map_err(Into::into)
             } else if let Some(point) = parse_coordinate(target) {
                 let app_target = resolve_app_raw(app_name, effective_pid)?;
@@ -853,11 +863,9 @@ fn execute_action(
                     .map_err(Into::into)
             } else {
                 let app = require_app_raw(app_name, effective_pid, "hover")?;
-                let win = parse_option("--window", args)
-                    .map(String::from)
-                    .or_else(|| batch_window.map(String::from));
+                let win = resolve_batch_window(args, batch_window);
                 provider
-                    .ocr_hover(target, &app, win.as_deref(), None)
+                    .ocr_hover(target, &app, win.as_ref(), None)
                     .map_err(Into::into)
             }
         }
@@ -912,20 +920,11 @@ fn execute_action(
             let amount = parse_option("--amount", args)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(3);
-            let win = parse_option("--window", args)
-                .map(String::from)
-                .or_else(|| batch_window.map(String::from));
+            let win = resolve_batch_window(args, batch_window);
             let scroll_ref = parse_option("--ref", args).and_then(ElementRef::parse);
             let scroll_at = parse_option("--at", args).and_then(parse_coordinate);
             provider
-                .scroll(
-                    direction,
-                    amount,
-                    &app,
-                    win.as_deref(),
-                    scroll_ref,
-                    scroll_at,
-                )
+                .scroll(direction, amount, &app, win.as_ref(), scroll_ref, scroll_at)
                 .map_err(Into::into)
         }
         "ocr-click" => {
@@ -938,9 +937,7 @@ fn execute_action(
                 effective_pid,
                 "ocr-click",
             )?;
-            let win = parse_option("--window", args)
-                .map(String::from)
-                .or_else(|| batch_window.map(String::from));
+            let win = resolve_batch_window(args, batch_window);
             let options = ClickOptions::new(
                 if args.iter().any(|a| a == "--right") {
                     MouseButton::Right
@@ -955,7 +952,7 @@ fn execute_action(
             );
             let ocr_index = parse_option("--index", args).and_then(|s| s.parse().ok());
             provider
-                .ocr_click(&text, &app, win.as_deref(), &options, ocr_index)
+                .ocr_click(&text, &app, win.as_ref(), &options, ocr_index)
                 .map_err(Into::into)
         }
         "drag" => {
@@ -1037,9 +1034,7 @@ fn execute_action(
                 effective_pid,
                 "wait",
             )?;
-            let win = parse_option("--window", args)
-                .map(String::from)
-                .or_else(|| batch_window.map(String::from));
+            let win = resolve_batch_window(args, batch_window);
             let timeout = parse_option("--timeout", args)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10.0);
@@ -1047,7 +1042,7 @@ fn execute_action(
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(1.0);
             provider
-                .wait(&text, &app, win.as_deref(), timeout, interval)
+                .wait(&text, &app, win.as_ref(), timeout, interval)
                 .map_err(Into::into)
         }
         _ => {
@@ -1084,6 +1079,23 @@ fn collect_positional_text(args: &[String], skip: usize) -> Option<String> {
     }
 }
 
+/// Parse `--window` / `--window-id` from batch args, merging with batch-level target.
+///
+/// Per-action flags take precedence over batch-level.
+/// Returns `None` if neither per-action nor batch-level window is specified.
+fn resolve_batch_window(
+    args: &[String],
+    batch_window: Option<&WindowTarget>,
+) -> Option<WindowTarget> {
+    if let Some(title) = parse_option("--window", args) {
+        return Some(WindowTarget::title(title));
+    }
+    if let Some(id) = parse_option("--window-id", args) {
+        return Some(WindowTarget::id(id.strip_prefix("w-").unwrap_or(id)));
+    }
+    batch_window.cloned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1101,19 +1113,13 @@ mod tests {
 
     #[test]
     fn parse_option_missing() {
-        let args: Vec<String> = ["click", "@e3"]
-            .iter()
-            .map(ToString::to_string)
-            .collect();
+        let args: Vec<String> = ["click", "@e3"].iter().map(ToString::to_string).collect();
         assert_eq!(parse_option("--app", &args), None);
     }
 
     #[test]
     fn parse_option_last_arg_no_value() {
-        let args: Vec<String> = ["click", "--app"]
-            .iter()
-            .map(ToString::to_string)
-            .collect();
+        let args: Vec<String> = ["click", "--app"].iter().map(ToString::to_string).collect();
         assert_eq!(parse_option("--app", &args), None);
     }
 
@@ -1154,10 +1160,7 @@ mod tests {
 
     #[test]
     fn collect_positional_no_positional_after_skip() {
-        let args: Vec<String> = ["@e3"]
-            .iter()
-            .map(ToString::to_string)
-            .collect();
+        let args: Vec<String> = ["@e3"].iter().map(ToString::to_string).collect();
         assert_eq!(collect_positional_text(&args, 1), None);
     }
 
@@ -1168,10 +1171,7 @@ mod tests {
 
     #[test]
     fn collect_positional_zero_skip() {
-        let args: Vec<String> = ["hello", "world"]
-            .iter()
-            .map(ToString::to_string)
-            .collect();
+        let args: Vec<String> = ["hello", "world"].iter().map(ToString::to_string).collect();
         assert_eq!(
             collect_positional_text(&args, 0),
             Some("hello world".to_string())

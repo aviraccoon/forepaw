@@ -31,8 +31,8 @@ pub struct GlobalOptions {
     #[command(flatten)]
     pub app_target: crate::cli::AppTargetArgs,
 
-    #[arg(long, help = "Window title or ID (e.g. 'Hacker News' or 'w-7290')")]
-    pub window: Option<String>,
+    #[command(flatten)]
+    pub window_target: crate::cli::WindowTargetArgs,
 
     #[arg(long, help = "JSON output")]
     pub json: bool,
@@ -92,7 +92,11 @@ impl Snapshot {
     /// Returns an error if `--app` is missing, the application is not running,
     /// or accessibility permission is denied.
     pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
-        let app = self.global.app_target.resolve()?.ok_or_else(|| anyhow::anyhow!("--app or --pid is required"))?;
+        let app = self
+            .global
+            .app_target
+            .resolve()?
+            .ok_or_else(|| anyhow::anyhow!("--app or --pid is required"))?;
 
         let interactive = self.interactive;
         let depth = self.depth.unwrap_or(SnapshotOptions::DEFAULT_DEPTH);
@@ -109,7 +113,9 @@ impl Snapshot {
             ..Default::default()
         };
 
-        let tree = provider.snapshot(&app, &options)?;
+        let window_target = self.global.window_target.resolve();
+
+        let tree = provider.snapshot(&app, window_target.as_ref(), &options)?;
         let tree_renderer = TreeRenderer::new();
         let rendered = tree_renderer.render(&tree);
 
@@ -211,10 +217,11 @@ impl Screenshot {
         let ss_options = self.build_screenshot_options();
         let crop_region = self.resolve_crop_region(provider)?;
         let app_target = self.global.app_target.resolve()?;
+        let window_target = self.global.window_target.resolve();
 
         let params = crate::platform::ScreenshotParams {
             app: app_target.as_ref(),
-            window: self.global.window.as_deref(),
+            window: window_target.as_ref(),
             style: annotation_style,
             only: ref_filter.as_deref(),
             options: &ss_options,
@@ -263,7 +270,11 @@ impl Screenshot {
         let pad = self.padding.unwrap_or(20.0);
 
         if let Some(ref ref_str) = self.r#ref {
-            let app = self.global.app_target.resolve()?.ok_or_else(|| anyhow::anyhow!("--app or --pid is required"))?;
+            let app = self
+                .global
+                .app_target
+                .resolve()?
+                .ok_or_else(|| anyhow::anyhow!("--app or --pid is required"))?;
             let element_ref = ElementRef::parse(ref_str)
                 .ok_or_else(|| anyhow::anyhow!("Invalid ref format: {ref_str}. Expected @eN"))?;
             let bounds = provider.resolve_ref_bounds(element_ref, &app)?;
@@ -504,9 +515,10 @@ impl Ocr {
         };
 
         let app_target = self.global.app_target.resolve()?;
+        let window_target = self.global.window_target.resolve();
         let output = provider.ocr(
             app_target.as_ref(),
-            self.global.window.as_deref(),
+            window_target.as_ref(),
             self.find.as_deref(),
             ss_options.as_ref(),
         )?;

@@ -22,7 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::core::errors::ForepawError;
 use crate::platform::windows::app;
-use crate::platform::AppTarget;
+use crate::platform::{AppTarget, WindowTarget};
 
 /// Initialize DPI awareness for the process.
 ///
@@ -47,7 +47,10 @@ pub fn init_dpi_awareness() {
 ///
 /// Returns [`ForepawError::AppNotFound`] if the target application is not found,
 /// or [`ForepawError::ActionFailed`] if screen capture or file save fails.
-pub fn screenshot(app: Option<&AppTarget>, window: Option<&str>) -> Result<String, ForepawError> {
+pub fn screenshot(
+    app: Option<&AppTarget>,
+    window: Option<&WindowTarget>,
+) -> Result<String, ForepawError> {
     let (rgba_pixels, width, height) = capture_pixels(app, window)?;
     save_pixels_to_temp(&rgba_pixels, width, height)
 }
@@ -69,10 +72,10 @@ pub fn screenshot(app: Option<&AppTarget>, window: Option<&str>) -> Result<Strin
 /// or [`ForepawError::ActionFailed`] if both `PrintWindow` and desktop DC capture fail.
 pub fn capture_pixels(
     app: Option<&AppTarget>,
-    _window: Option<&str>,
+    window: Option<&WindowTarget>,
 ) -> Result<(Vec<u8>, u32, u32), ForepawError> {
     if let Some(name) = app {
-        let (hwnd, _) = app::find_app_hwnd(name)?;
+        let (hwnd, _) = app::find_app_hwnd(name, window)?;
         // SAFETY: Win32/WinRT FFI call with valid arguments.
         let rect = unsafe {
             let mut r = RECT::default();

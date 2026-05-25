@@ -14,8 +14,7 @@ use windows::Win32::System::WinRT::IMemoryBufferByteAccess;
 use crate::core::errors::ForepawError;
 use crate::core::ocr_result::{OCROutput, OCRResult};
 use crate::core::types::Rect;
-use crate::platform::AppTarget;
-use crate::platform::ScreenshotOptions;
+use crate::platform::{AppTarget, ScreenshotOptions, WindowTarget};
 
 /// Run OCR on an app window (or full screen).
 ///
@@ -28,7 +27,7 @@ use crate::platform::ScreenshotOptions;
 /// or [`ForepawError::AppNotFound`] if the target application is not found.
 pub fn ocr(
     app: Option<&AppTarget>,
-    window: Option<&str>,
+    window: Option<&WindowTarget>,
     find: Option<&str>,
     screenshot_options: Option<&ScreenshotOptions>,
 ) -> Result<OCROutput, ForepawError> {

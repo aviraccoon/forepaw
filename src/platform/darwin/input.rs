@@ -12,7 +12,7 @@ use crate::platform::darwin::app::{self, ResolvedWindow};
 use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI};
 use crate::platform::darwin::key_code;
 use crate::platform::darwin::snapshot;
-use crate::platform::{ActionResult, AppTarget};
+use crate::platform::{ActionResult, AppTarget, WindowTarget};
 
 use objc2::rc::Retained;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication};
@@ -39,7 +39,7 @@ pub fn activate_app(
 /// Activate an app and resolve its main window.
 fn activate_and_resolve_window(
     app: &AppTarget,
-    window: Option<&str>,
+    window: Option<&WindowTarget>,
 ) -> Result<(Retained<NSRunningApplication>, i32, ResolvedWindow), ForepawError> {
     let (running_app, pid) = activate_app(app)?;
     let resolved = app::find_window(pid, window)?;
@@ -766,7 +766,7 @@ pub fn click_at_point(
 pub fn click_region(
     region: crate::core::types::Rect,
     app: &AppTarget,
-    window: Option<&str>,
+    window: Option<&WindowTarget>,
     options: &ClickOptions,
 ) -> Result<ActionResult, ForepawError> {
     let (_, pid, _resolved) = activate_and_resolve_window(app, window)?;
@@ -869,7 +869,7 @@ pub fn hover_at_point(
 pub fn hover_region(
     region: crate::core::types::Rect,
     app: &AppTarget,
-    _window: Option<&str>,
+    _window: Option<&WindowTarget>,
     smooth: bool,
 ) -> Result<ActionResult, ForepawError> {
     let center = Point::new(
@@ -933,7 +933,7 @@ pub fn scroll(
     direction: &str,
     amount: u32,
     app: &AppTarget,
-    window: Option<&str>,
+    window: Option<&WindowTarget>,
     r#ref: Option<crate::core::element_tree::ElementRef>,
     at: Option<Point>,
 ) -> Result<ActionResult, ForepawError> {

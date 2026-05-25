@@ -13,7 +13,7 @@ use crate::core::errors::ForepawError;
 use crate::core::icon_class_parser::IconClassParser;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::types::{Point, Rect};
-use crate::platform::{AppTarget, SnapshotOptions};
+use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
 
 use super::app::{
     cf_string_from_str, electron_tree_is_populated, enable_electron_accessibility,
@@ -161,7 +161,11 @@ const GENERIC_ROLE_DESCRIPTIONS: &[&str] = &[
 ///
 /// Returns [`ForepawError::AppNotFound`] if the application is not running,
 /// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
-pub fn snapshot(app: &AppTarget, options: &SnapshotOptions) -> Result<ElementTree, ForepawError> {
+pub fn snapshot(
+    app: &AppTarget,
+    window: Option<&WindowTarget>,
+    options: &SnapshotOptions,
+) -> Result<ElementTree, ForepawError> {
     let running_app = find_app_by_target(app)?;
 
     // Activate the app so the AX tree matches what action commands will see.
@@ -200,7 +204,7 @@ pub fn snapshot(app: &AppTarget, options: &SnapshotOptions) -> Result<ElementTre
     let app_element = unsafe { AXUIElementCreateApplication(pid) };
 
     // Window bounds for offscreen pruning and coordinate display.
-    let window_bounds = find_window(pid, None).ok().map(|w| w.bounds);
+    let window_bounds = find_window(pid, window).ok().map(|w| w.bounds);
 
     let pruning = TreePruning {
         skip_menu_bar: options.skip_menu_bar,

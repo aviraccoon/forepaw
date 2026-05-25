@@ -25,7 +25,7 @@ pub mod screenshot;
 pub mod snapshot;
 
 use crate::core::errors::ForepawError;
-use crate::platform::{AppTarget, DesktopProvider};
+use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
 
 /// macOS implementation of `DesktopProvider`.
 pub struct DarwinProvider;
@@ -58,9 +58,10 @@ impl DesktopProvider for DarwinProvider {
     fn snapshot(
         &self,
         app: &AppTarget,
+        window: Option<&WindowTarget>,
         options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
-        snapshot::snapshot(app, options)
+        snapshot::snapshot(app, window, options)
     }
 
     fn screenshot(
@@ -73,7 +74,7 @@ impl DesktopProvider for DarwinProvider {
     fn ocr(
         &self,
         app: Option<&AppTarget>,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         find: Option<&str>,
         screenshot_options: Option<&crate::platform::ScreenshotOptions>,
     ) -> Result<crate::core::ocr_result::OCROutput, ForepawError> {
@@ -102,7 +103,7 @@ impl DesktopProvider for DarwinProvider {
         &self,
         region: crate::core::types::Rect,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::click_region(region, app, window, options)
@@ -129,7 +130,7 @@ impl DesktopProvider for DarwinProvider {
         &self,
         region: crate::core::types::Rect,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         input::hover_region(region, app, window, smooth)
@@ -139,7 +140,7 @@ impl DesktopProvider for DarwinProvider {
         &self,
         text: &str,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         index: Option<usize>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         ocr::ocr_hover(text, app, window, index)
@@ -175,7 +176,7 @@ impl DesktopProvider for DarwinProvider {
         direction: &str,
         amount: u32,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         r#ref: Option<crate::core::element_tree::ElementRef>,
         at: Option<crate::core::types::Point>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -205,7 +206,7 @@ impl DesktopProvider for DarwinProvider {
         &self,
         text: &str,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         options: &crate::core::key_combo::ClickOptions,
         index: Option<usize>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
@@ -216,7 +217,7 @@ impl DesktopProvider for DarwinProvider {
         &self,
         text: &str,
         app: &AppTarget,
-        window: Option<&str>,
+        window: Option<&WindowTarget>,
         timeout: f64,
         interval: f64,
     ) -> Result<crate::platform::ActionResult, ForepawError> {

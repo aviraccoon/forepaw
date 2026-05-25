@@ -18,7 +18,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::core::errors::ForepawError;
 use crate::core::types::Rect;
 use crate::platform::AppTarget;
-use crate::platform::{AppInfo, WindowInfo};
+use crate::platform::{AppInfo, WindowInfo, WindowTarget};
 
 /// List running GUI applications.
 ///
@@ -233,7 +233,10 @@ unsafe extern "system" fn enum_window_callback(hwnd: HWND, lparam: LPARAM) -> BO
 /// # Errors
 ///
 /// Returns [`ForepawError::AppNotFound`] if no window matches the query.
-pub fn find_app_hwnd(app: &AppTarget) -> Result<(HWND, Rect), ForepawError> {
+pub fn find_app_hwnd(
+    app: &AppTarget,
+    window: Option<&WindowTarget>,
+) -> Result<(HWND, Rect), ForepawError> {
     let entries = collect_visible_windows();
 
     let matching: Vec<&WindowEntry> = match app {
@@ -258,47 +261,49 @@ pub fn find_app_hwnd(app: &AppTarget) -> Result<(HWND, Rect), ForepawError> {
         return Err(ForepawError::AppNotFound(app.display()));
     }
 
-    // Score each candidate: prefer title match > non-desktop > titled > largest area
-    let best = match app {
-        AppTarget::Name(name) => {
-            let filter_lower = name.to_lowercase();
-            matching.iter().max_by_key(|e| {
-                let title_match = e.title.to_lowercase().contains(&filter_lower);
-                let is_desktop = e.title == "Program Manager";
-                let has_title = !e.title.is_empty();
-                let area = e.bounds.as_ref().map_or(0_u64, |b| {
-                    #[expect(
-                        clippy::cast_possible_truncation,
-                        reason = "screen dimensions fit in u64"
-                    )]
-                    #[expect(clippy::cast_sign_loss, reason = "window area is always positive")]
-                    let area = (b.width * b.height) as u64;
-                    area
-                });
-                (title_match, !is_desktop, has_title, area)
-            })
-        }
-        AppTarget::Pid(_) => {
-            // PID match is unambiguous, just pick the best window
-            matching.iter().max_by_key(|e| {
-                let is_desktop = e.title == "Program Manager";
-                let has_title = !e.title.is_empty();
-                let area = e.bounds.as_ref().map_or(0_u64, |b| {
-                    #[expect(
-                        clippy::cast_possible_truncation,
-                        reason = "screen dimensions fit in u64"
-                    )]
-                    #[expect(clippy::cast_sign_loss, reason = "window area is always positive")]
-                    let area = (b.width * b.height) as u64;
-                    area
-                });
-                (!is_desktop, has_title, area)
-            })
-        }
-    };
-
-    let Some(best) = best else {
-        return Err(ForepawError::AppNotFound(app.display()));
+    // If a window target is specified, use it to narrow down the match
+    let best: &WindowEntry = if let Some(target) = window {
+        find_window(&matching, target)?
+    } else {
+        // Score each candidate: prefer title match > non-desktop > titled > largest area
+        let scored = match app {
+            AppTarget::Name(name) => {
+                let filter_lower = name.to_lowercase();
+                matching.iter().max_by_key(|e| {
+                    let title_match = e.title.to_lowercase().contains(&filter_lower);
+                    let is_desktop = e.title == "Program Manager";
+                    let has_title = !e.title.is_empty();
+                    let area = e.bounds.as_ref().map_or(0_u64, |b| {
+                        #[expect(
+                            clippy::cast_possible_truncation,
+                            reason = "screen dimensions fit in u64"
+                        )]
+                        #[expect(clippy::cast_sign_loss, reason = "window area is always positive")]
+                        let area = (b.width * b.height) as u64;
+                        area
+                    });
+                    (title_match, !is_desktop, has_title, area)
+                })
+            }
+            AppTarget::Pid(_) => {
+                // PID match is unambiguous, just pick the best window
+                matching.iter().max_by_key(|e| {
+                    let is_desktop = e.title == "Program Manager";
+                    let has_title = !e.title.is_empty();
+                    let area = e.bounds.as_ref().map_or(0_u64, |b| {
+                        #[expect(
+                            clippy::cast_possible_truncation,
+                            reason = "screen dimensions fit in u64"
+                        )]
+                        #[expect(clippy::cast_sign_loss, reason = "window area is always positive")]
+                        let area = (b.width * b.height) as u64;
+                        area
+                    });
+                    (!is_desktop, has_title, area)
+                })
+            }
+        };
+        scored.ok_or_else(|| ForepawError::AppNotFound(app.display()))?
     };
 
     let bounds = best
@@ -315,6 +320,78 @@ pub fn activate_app(hwnd: HWND) {
         SetForegroundWindow(hwnd).ok().unwrap_or_default();
     }
     std::thread::sleep(std::time::Duration::from_millis(300));
+}
+
+/// Find a window within an app's windows by ID (exact HWND match).
+///
+/// The ID string is the raw numeric HWND value (e.g. "131238" from `list-windows` w-131238).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::WindowNotFound`] if no window matches.
+fn match_window_by_id<'a>(
+    windows: &[&'a WindowEntry],
+    id: &str,
+) -> Result<&'a WindowEntry, ForepawError> {
+    // Validate as numeric (HWND is an isize pointer value)
+    if let Ok(target_hwnd) = id.parse::<isize>() {
+        if let Some(&w) = windows.iter().find(|w| w.hwnd == target_hwnd) {
+            return Ok(w);
+        }
+    }
+    Err(ForepawError::WindowNotFound(id.to_owned()))
+}
+
+/// Find a window within an app's windows by title substring.
+///
+/// Case-insensitive substring match. Returns `AmbiguousWindow` if multiple match.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::WindowNotFound`] if no window matches,
+/// or [`ForepawError::AmbiguousWindow`] if multiple windows match.
+fn match_window_by_title<'a>(
+    windows: &[&'a WindowEntry],
+    pattern: &str,
+) -> Result<&'a WindowEntry, ForepawError> {
+    let pattern_lower = pattern.to_lowercase();
+    let matches: Vec<&WindowEntry> = windows
+        .iter()
+        .copied()
+        .filter(|w| w.title.to_lowercase().contains(&pattern_lower))
+        .collect();
+
+    match matches.len() {
+        1 => Ok(matches.into_iter().next().expect("len == 1 checked")),
+        2.. => {
+            let titles = matches
+                .iter()
+                .map(|m| format!("  w-{}  {}", m.hwnd, m.title))
+                .collect::<Vec<_>>()
+                .join("\n");
+            Err(ForepawError::AmbiguousWindow {
+                query: pattern.to_owned(),
+                matches: titles,
+            })
+        }
+        0 => Err(ForepawError::WindowNotFound(pattern.to_owned())),
+    }
+}
+
+/// Find a specific window within an app's windows using a window target.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::WindowNotFound`] or [`ForepawError::AmbiguousWindow`]
+/// from the underlying match functions.
+fn find_window<'a>(
+    windows: &[&'a WindowEntry],
+    target: &WindowTarget,
+) -> Result<&'a WindowEntry, ForepawError> {
+    match target {
+        WindowTarget::Id(id) => match_window_by_id(windows, id),
+        WindowTarget::Title(title) => match_window_by_title(windows, title),
+    }
 }
 
 // ---------------------------------------------------------------------------
