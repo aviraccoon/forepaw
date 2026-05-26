@@ -17,8 +17,8 @@
 //! then connecting to that address for all subsequent AT-SPI2 calls.
 
 pub mod app;
-pub mod atspi_roles;
 pub mod hit_test;
+pub mod role;
 pub mod snapshot;
 
 use crate::core::errors::ForepawError;

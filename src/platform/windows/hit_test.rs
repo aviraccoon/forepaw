@@ -17,7 +17,8 @@ use crate::core::errors::ForepawError;
 use crate::core::types::Point;
 use crate::platform::{AncestorInfo, AppTarget, HitTestResult};
 
-use super::snapshot::{control_type_to_role, get_element_bounds};
+use super::role::control_type_to_role;
+use super::snapshot::get_element_bounds;
 
 /// Performs a hit test at the given screen coordinates.
 ///
@@ -61,7 +62,7 @@ pub fn element_at_point(
     };
 
     // 4. Get basic properties
-    let role = control_type_to_role(get_control_type_id(&hit_element)).to_owned();
+    let role = control_type_to_role(get_control_type_id(&hit_element));
     // SAFETY: CurrentName on a valid UIA element from ElementFromPoint.
     let name = get_bstr_property(&hit_element, |e| unsafe { e.CurrentName() });
     let bounds = get_element_bounds(&hit_element);
@@ -84,14 +85,14 @@ pub fn element_at_point(
     let mut current = unsafe { walker.GetParentElement(&hit_element).ok() };
 
     while let Some(ref element) = current {
-        let parent_role = control_type_to_role(get_control_type_id(element)).to_owned();
+        let parent_role = control_type_to_role(get_control_type_id(element));
         // SAFETY: CurrentName on a valid UIA element from GetParentElement chain.
         let parent_name =
             get_bstr_property(element, |e| unsafe { e.CurrentName() }).filter(|s| !s.is_empty());
         let parent_bounds = get_element_bounds(element);
 
         ancestors.push(AncestorInfo {
-            role: parent_role.clone(),
+            role: parent_role,
             name: parent_name,
             bounds: parent_bounds,
         });

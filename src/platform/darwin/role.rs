@@ -1,0 +1,66 @@
+//! Darwin AX role string to cross-platform `Role` mapping.
+
+use crate::core::role::Role;
+
+/// Map a macOS `AXRole` string to a cross-platform [`Role`].
+///
+/// Unknown roles fall back to [`Role::Unknown`].
+#[must_use]
+pub fn ax_role_to_role(s: &str) -> Role {
+    match s {
+        "AXButton" => Role::Button,
+        "AXTextField" => Role::TextField,
+        "AXTextArea" => Role::TextArea,
+        "AXSecureTextField" => Role::SecureTextField,
+        "AXCheckBox" => Role::CheckBox,
+        "AXRadioButton" => Role::RadioButton,
+        "AXSlider" => Role::Slider,
+        "AXComboBox" => Role::ComboBox,
+        "AXPopUpButton" => Role::PopUpButton,
+        "AXMenuButton" => Role::MenuButton,
+        "AXLink" => Role::Link,
+        "AXMenuItem" => Role::MenuItem,
+        "AXTab" => Role::Tab,
+        "AXSwitch" => Role::Switch,
+        "AXIncrementor" => Role::Incrementor,
+        "AXColorWell" => Role::ColorWell,
+        "AXTreeItem" => Role::TreeItem,
+        "AXCell" => Role::Cell,
+        "AXDockItem" => Role::DockItem,
+        "AXScrollBar" => Role::ScrollBar,
+        "AXWindow" => Role::Window,
+        "AXApplication" => Role::Application,
+        "AXGroup" => Role::Group,
+        "AXStaticText" => Role::StaticText,
+        "AXImage" => Role::Image,
+        "AXMenu" => Role::Menu,
+        "AXMenuBar" => Role::MenuBar,
+        "AXToolbar" | "AXToolBar" => Role::Toolbar,
+        "AXTable" => Role::Table,
+        "AXList" => Role::List,
+        "AXOutline" => Role::Outline,
+        "AXTabGroup" => Role::TabGroup,
+        "AXScrollArea" => Role::ScrollArea,
+        "AXSplitGroup" => Role::SplitGroup,
+        "AXRow" => Role::Row,
+        "AXColumn" => Role::Column,
+        "AXColumnHeader" => Role::ColumnHeader,
+        "AXRowHeader" => Role::RowHeader,
+        "AXHeading" => Role::Heading,
+        "AXParagraph" => Role::Paragraph,
+        "AXSeparator" => Role::Separator,
+        "AXStatusBar" => Role::StatusBar,
+        "AXDialog" => Role::Dialog,
+        "AXAlert" => Role::Alert,
+        "AXFrame" => Role::Frame,
+        "AXWebArea" => Role::WebArea,
+        "AXUserInterfaceTooltip" => Role::Tooltip,
+        "AXCalendar" => Role::Calendar,
+        "AXDatePicker" => Role::DatePicker,
+        "AXColorChooser" => Role::ColorChooser,
+        "AXIcon" => Role::Icon,
+        "AXLabel" => Role::Label,
+        "AXProgressIndicator" | "AXProgressBar" => Role::ProgressIndicator,
+        _ => Role::Unknown,
+    }
+}

@@ -27,12 +27,8 @@ impl TreeRenderer {
         let prefix = "  ".repeat(indent);
         let mut parts: Vec<String> = Vec::new();
 
-        // Role (strip AX prefix, lowercase)
-        let role = if let Some(stripped) = node.role.strip_prefix("AX") {
-            stripped.to_lowercase()
-        } else {
-            node.role.clone()
-        };
+        // Role (lowercase via Display)
+        let role = node.role.to_string();
         parts.push(role);
 
         // Ref
@@ -101,17 +97,19 @@ mod tests {
     use crate::core::element_tree::{ElementNode, ElementRef, ElementTree};
     use crate::core::types::Rect;
 
+    use crate::core::role::Role;
+
     #[test]
     fn simple_tree() {
         let tree = ElementTree::new(
             "TestApp",
-            ElementNode::new("AXWindow")
+            ElementNode::new(Role::Window)
                 .with_name("Main Window")
                 .with_children(vec![
-                    ElementNode::new("AXButton")
+                    ElementNode::new(Role::Button)
                         .with_name("OK")
                         .with_ref(ElementRef::new(1)),
-                    ElementNode::new("AXTextField")
+                    ElementNode::new(Role::TextField)
                         .with_name("Name")
                         .with_value("hello")
                         .with_ref(ElementRef::new(2)),
@@ -129,14 +127,14 @@ mod tests {
     }
 
     #[test]
-    fn strips_ax_prefix() {
-        let tree = ElementTree::new("App", ElementNode::new("AXSplitGroup"));
+    fn display_is_lowercase() {
+        let tree = ElementTree::new("App", ElementNode::new(Role::SplitGroup));
 
         let renderer = TreeRenderer::new();
         let output = renderer.render(&tree);
 
         assert!(output.contains("splitgroup"));
-        assert!(!output.contains("AXSplitGroup"));
+        assert!(!output.contains("SplitGroup"));
     }
 
     #[test]
@@ -144,7 +142,7 @@ mod tests {
         let long_value: String = "x".repeat(100);
         let tree = ElementTree::new(
             "App",
-            ElementNode::new("AXTextField").with_value(&long_value),
+            ElementNode::new(Role::TextField).with_value(&long_value),
         );
 
         let renderer = TreeRenderer::new();
@@ -158,8 +156,8 @@ mod tests {
     fn nested_indentation() {
         let tree = ElementTree::new(
             "App",
-            ElementNode::new("AXWindow").with_children(vec![ElementNode::new("AXGroup")
-                .with_children(vec![ElementNode::new("AXButton").with_name("Deep")])]),
+            ElementNode::new(Role::Window).with_children(vec![ElementNode::new(Role::Group)
+                .with_children(vec![ElementNode::new(Role::Button).with_name("Deep")])]),
         );
 
         let renderer = TreeRenderer::new();
@@ -173,7 +171,7 @@ mod tests {
 
     #[test]
     fn omits_empty_name_and_value() {
-        let tree = ElementTree::new("App", ElementNode::new("AXGroup"));
+        let tree = ElementTree::new("App", ElementNode::new(Role::Group));
 
         let renderer = TreeRenderer::new();
         let output = renderer.render(&tree);
@@ -185,10 +183,10 @@ mod tests {
     fn renders_bounds_relative() {
         let tree = ElementTree::new(
             "App",
-            ElementNode::new("AXWindow")
+            ElementNode::new(Role::Window)
                 .with_name("Main")
                 .with_bounds(Rect::new(100.0, 200.0, 800.0, 600.0))
-                .with_children(vec![ElementNode::new("AXButton")
+                .with_children(vec![ElementNode::new(Role::Button)
                     .with_name("OK")
                     .with_ref(ElementRef::new(1))
                     .with_bounds(Rect::new(150.0, 250.0, 80.0, 30.0))]),
@@ -209,10 +207,10 @@ mod tests {
     fn renders_bounds_absolute() {
         let tree = ElementTree::new(
             "App",
-            ElementNode::new("AXWindow")
+            ElementNode::new(Role::Window)
                 .with_name("Main")
                 .with_bounds(Rect::new(100.0, 200.0, 800.0, 600.0))
-                .with_children(vec![ElementNode::new("AXButton")
+                .with_children(vec![ElementNode::new(Role::Button)
                     .with_name("OK")
                     .with_ref(ElementRef::new(1))
                     .with_bounds(Rect::new(150.0, 250.0, 80.0, 30.0))]),
@@ -231,7 +229,7 @@ mod tests {
     fn omits_missing_bounds() {
         let tree = ElementTree::new(
             "App",
-            ElementNode::new("AXButton")
+            ElementNode::new(Role::Button)
                 .with_name("OK")
                 .with_ref(ElementRef::new(1)),
         );

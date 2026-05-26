@@ -6,7 +6,8 @@
 use std::ffi::CString;
 use std::ptr;
 
-use crate::core::annotation::{Annotation, AnnotationCategory, AnnotationStyle};
+use crate::core::annotation::{Annotation, AnnotationStyle};
+use crate::core::role::AnnotationCategory;
 use crate::platform::darwin::app;
 use crate::platform::darwin::ffi::{
     self, CFAttributedStringRef, CGColorRef, CGColorSpaceRef, CGContextRef, CGPointFFI, CGRectFFI,
@@ -261,10 +262,7 @@ fn render_badges(
             },
         };
 
-        let color = category_color(
-            color_space,
-            &AnnotationCategory::from_role(&annotation.role),
-        );
+        let color = category_color(color_space, &annotation.role.annotation_category());
 
         // Background pill
         // SAFETY: FFI call with valid arguments.
@@ -322,10 +320,7 @@ fn render_labeled(
     let image_height = unsafe { ffi::CGBitmapContextGetHeight(ctx) } as f64;
 
     for annotation in annotations {
-        let color = category_color(
-            color_space,
-            &AnnotationCategory::from_role(&annotation.role),
-        );
+        let color = category_color(color_space, &annotation.role.annotation_category());
 
         // Draw bounding box -- border only, no fill
         let box_rect = CGRectFFI {

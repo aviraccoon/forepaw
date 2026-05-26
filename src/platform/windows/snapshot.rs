@@ -1,7 +1,7 @@
 //! UI Automation tree snapshot: walk the UIA tree and build an `ElementTree`.
 //!
 //! Uses `IUIAutomation` + `ControlView` `TreeWalker` for tree navigation.
-//! Maps UIA `ControlType` IDs to AX-prefixed role names so the core
+//! Maps UIA `ControlType` IDs to `Role` variants so the core
 //! ref assigner and tree renderer work unchanged across platforms.
 //!
 //! Control type IDs from:
@@ -16,53 +16,12 @@ use windows::Win32::UI::Accessibility::{
 use crate::core::element_tree::{ElementNode, ElementTree, SnapshotTiming};
 use crate::core::errors::ForepawError;
 use crate::core::ref_assigner::RefAssigner;
+use crate::core::role::Role;
 use crate::core::types::Rect;
 use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
 
 use super::app;
-
-/// UIA `ControlType` IDs mapped to AX-style role names.
-///
-/// Names follow macOS convention so `is_interactive_role()` and the
-/// tree renderer work cross-platform. UIA types without a close AX
-/// equivalent map to the nearest structural equivalent or `AXUnknown`.
-///
-/// Source: <https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-controltype-ids>
-pub(super) fn control_type_to_role(control_type: i32) -> &'static str {
-    match control_type {
-        50000 => "AXButton",                             // Button
-        50001 => "AXCalendar",                           // Calendar
-        50002 => "AXCheckBox",                           // CheckBox
-        50003 => "AXComboBox",                           // ComboBox
-        50004 => "AXTextField",                          // Edit
-        50005 => "AXLink",                               // Hyperlink
-        50006 => "AXImage",                              // Image
-        50007 | 50029 => "AXCell",                       // ListItem, DataItem
-        50008 => "AXList",                               // List
-        50009 => "AXMenu",                               // Menu
-        50010 => "AXMenuBar",                            // MenuBar
-        50011 => "AXMenuItem",                           // MenuItem
-        50012 => "AXProgressIndicator",                  // ProgressBar
-        50013 => "AXRadioButton",                        // RadioButton
-        50014 => "AXScrollBar",                          // ScrollBar
-        50015 => "AXSlider",                             // Slider
-        50016 => "AXIncrementor",                        // Spinner
-        50017 | 50020 | 50035 | 50037 => "AXStaticText", // StatusBar, Text, HeaderItem, TitleBar
-        50018 => "AXTabGroup",                           // Tab (container)
-        50019 => "AXTab",                                // TabItem
-        50021 => "AXToolbar",                            // ToolBar
-        50023 => "AXOutline",                            // Tree
-        50024 => "AXTreeItem",                           // TreeItem
-        50026 | 50033 | 50034 | 50041 => "AXGroup",      // Group, Pane, Header, Pane (dup)
-        50028 | 50036 => "AXTable",                      // DataGrid, Table
-        50030 => "AXTextArea",                           // Document
-        50031 => "AXMenuButton",                         // SplitButton
-        50032 => "AXWindow",                             // Window
-        // ToolTip(50022), Custom(50025), Thumb(50027), Separator(50038),
-        // SemanticZoom(50039), AppBar(50040), and anything else
-        _ => "AXUnknown",
-    }
-}
+use super::role::control_type_to_role;
 
 /// Initialize COM for UIA calls.
 ///
@@ -180,7 +139,7 @@ fn build_tree(
     pruning: &TreePruning,
 ) -> ElementNode {
     if depth >= max_depth {
-        return ElementNode::new("AXGroup");
+        return ElementNode::new(Role::Group);
     }
 
     // Read properties via direct accessors (no VARIANT/SAFEARRAY)
@@ -298,9 +257,9 @@ fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Opt
         return Some(h);
     }
 
-    // 2. First child that looks like a text label (AXStaticText with a name)
+    // 2. First child that looks like a text label (`StaticText` with a name)
     for child in children {
-        if child.role == "AXStaticText" {
+        if child.role == Role::StaticText {
             if let Some(ref name) = child.name {
                 if !name.is_empty() {
                     return Some(name.clone());
@@ -316,11 +275,11 @@ fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Opt
 // Property accessors
 // ---------------------------------------------------------------------------
 
-/// Get the element's `ControlType`, mapped to an AX-style role name.
-fn get_control_type(element: &IUIAutomationElement) -> String {
+/// Get the element's `ControlType`, mapped to a `Role` variant.
+fn get_control_type(element: &IUIAutomationElement) -> Role {
     // SAFETY: Win32/WinRT FFI call with valid arguments.
     let ct = unsafe { element.CurrentControlType().map_or(0, |ct| ct.0) };
-    control_type_to_role(ct).to_owned()
+    control_type_to_role(ct)
 }
 
 /// Get a BSTR-returning property from a UIA element.
@@ -378,24 +337,24 @@ mod tests {
 
     #[test]
     fn control_type_mapping_covers_common_types() {
-        assert_eq!(control_type_to_role(50000), "AXButton");
-        assert_eq!(control_type_to_role(50004), "AXTextField");
-        assert_eq!(control_type_to_role(50002), "AXCheckBox");
-        assert_eq!(control_type_to_role(50003), "AXComboBox");
-        assert_eq!(control_type_to_role(50011), "AXMenuItem");
-        assert_eq!(control_type_to_role(50013), "AXRadioButton");
-        assert_eq!(control_type_to_role(50015), "AXSlider");
-        assert_eq!(control_type_to_role(50032), "AXWindow");
-        assert_eq!(control_type_to_role(50026), "AXGroup");
-        assert_eq!(control_type_to_role(50020), "AXStaticText");
-        assert_eq!(control_type_to_role(50008), "AXList");
-        assert_eq!(control_type_to_role(50036), "AXTable");
+        assert_eq!(control_type_to_role(50000), Role::Button);
+        assert_eq!(control_type_to_role(50004), Role::TextField);
+        assert_eq!(control_type_to_role(50002), Role::CheckBox);
+        assert_eq!(control_type_to_role(50003), Role::ComboBox);
+        assert_eq!(control_type_to_role(50011), Role::MenuItem);
+        assert_eq!(control_type_to_role(50013), Role::RadioButton);
+        assert_eq!(control_type_to_role(50015), Role::Slider);
+        assert_eq!(control_type_to_role(50032), Role::Window);
+        assert_eq!(control_type_to_role(50026), Role::Group);
+        assert_eq!(control_type_to_role(50020), Role::StaticText);
+        assert_eq!(control_type_to_role(50008), Role::List);
+        assert_eq!(control_type_to_role(50036), Role::Table);
     }
 
     #[test]
-    fn unknown_control_type_maps_to_ax_unknown() {
-        assert_eq!(control_type_to_role(0), "AXUnknown");
-        assert_eq!(control_type_to_role(99999), "AXUnknown");
+    fn unknown_control_type_maps_to_unknown() {
+        assert_eq!(control_type_to_role(0), Role::Unknown);
+        assert_eq!(control_type_to_role(99999), Role::Unknown);
     }
 
     #[test]
@@ -410,26 +369,21 @@ mod tests {
 
     #[test]
     fn interactive_roles_mapped_correctly() {
-        // All UIA types that map to interactive AX roles should be detected
-        use crate::core::element_tree::is_interactive_role;
-
-        assert!(is_interactive_role(control_type_to_role(50000))); // Button
-        assert!(is_interactive_role(control_type_to_role(50004))); // Edit/TextField
-        assert!(is_interactive_role(control_type_to_role(50002))); // CheckBox
-        assert!(is_interactive_role(control_type_to_role(50003))); // ComboBox
-        assert!(is_interactive_role(control_type_to_role(50011))); // MenuItem
-        assert!(is_interactive_role(control_type_to_role(50013))); // RadioButton
-        assert!(is_interactive_role(control_type_to_role(50015))); // Slider
-        assert!(is_interactive_role(control_type_to_role(50024))); // TreeItem
+        assert!(control_type_to_role(50000).is_interactive()); // Button
+        assert!(control_type_to_role(50004).is_interactive()); // Edit/TextField
+        assert!(control_type_to_role(50002).is_interactive()); // CheckBox
+        assert!(control_type_to_role(50003).is_interactive()); // ComboBox
+        assert!(control_type_to_role(50011).is_interactive()); // MenuItem
+        assert!(control_type_to_role(50013).is_interactive()); // RadioButton
+        assert!(control_type_to_role(50015).is_interactive()); // Slider
+        assert!(control_type_to_role(50024).is_interactive()); // TreeItem
     }
 
     #[test]
     fn structural_roles_not_interactive() {
-        use crate::core::element_tree::is_interactive_role;
-
-        assert!(!is_interactive_role(control_type_to_role(50032))); // Window
-        assert!(!is_interactive_role(control_type_to_role(50026))); // Group
-        assert!(!is_interactive_role(control_type_to_role(50020))); // Text
-        assert!(!is_interactive_role(control_type_to_role(50006))); // Image
+        assert!(!control_type_to_role(50032).is_interactive()); // Window
+        assert!(!control_type_to_role(50026).is_interactive()); // Group
+        assert!(!control_type_to_role(50020).is_interactive()); // Text
+        assert!(!control_type_to_role(50006).is_interactive()); // Image
     }
 }

@@ -10,6 +10,7 @@ pub mod key_combo;
 pub mod ocr_result;
 pub mod output_formatter;
 pub mod ref_assigner;
+pub mod role;
 pub mod snapshot_cache;
 pub mod snapshot_diff;
 pub mod temp;

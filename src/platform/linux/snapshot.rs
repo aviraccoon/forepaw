@@ -2,14 +2,15 @@
 //!
 //! Connects to the AT-SPI2 bus, finds the target application, and walks its
 //! accessible tree using `GetChildren` + property reads via D-Bus.
-//! Maps AT-SPI2 role constants to AX-prefixed role names so the core
+//! Maps AT-SPI2 role constants to `Role` variants so the core
 //! ref assigner and tree renderer work unchanged across platforms.
 
 use zbus::blocking::Connection;
 
-use crate::core::element_tree::{is_interactive_role, ElementNode, ElementTree, SnapshotTiming};
+use crate::core::element_tree::{ElementNode, ElementTree, SnapshotTiming};
 use crate::core::errors::ForepawError;
 use crate::core::ref_assigner::RefAssigner;
+use crate::core::role::Role;
 use crate::core::types::Rect;
 use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
 
@@ -17,10 +18,10 @@ use super::app::{
     connect_atspi_bus, find_app_bus, find_child_window, get_bounds, get_children, get_property,
     get_role, get_value,
 };
-use super::atspi_roles::atspi_role_to_role;
+use super::role::atspi_role_to_role;
 
 // AT-SPI2 role mapping is generated from res/atspi-constants.h.
-// See src/platform/linux/atspi_roles.rs.
+// See src/platform/linux/role.rs.
 
 // ---------------------------------------------------------------------------
 // Name resolution helpers
@@ -121,7 +122,7 @@ fn build_tree(
     pruning: &TreePruning,
 ) -> ElementNode {
     if depth >= max_depth {
-        return ElementNode::new("AXGroup");
+        return ElementNode::new(Role::Group);
     }
 
     let role_num = get_role(conn, app_bus, path);
@@ -137,7 +138,7 @@ fn build_tree(
         if let Some(b) = &bounds {
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
                 return ElementNode {
-                    role: role.to_owned(),
+                    role,
                     name: name.clone(),
                     value: None,
                     r#ref: None,
@@ -156,7 +157,7 @@ fn build_tree(
             let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
             if no_horizontal || no_vertical {
                 return ElementNode {
-                    role: role.to_owned(),
+                    role,
                     name: name.clone(),
                     value: None,
                     r#ref: None,
@@ -213,7 +214,7 @@ fn build_tree(
     }
 
     ElementNode {
-        role: role.to_owned(),
+        role,
         name: final_name,
         value,
         r#ref: None,
@@ -226,7 +227,7 @@ fn build_tree(
 /// Get the first child that looks like a text label.
 fn first_text_child_name(children: &[ElementNode]) -> Option<String> {
     for child in children {
-        if child.role == "AXStaticText" {
+        if child.role == Role::StaticText {
             if let Some(ref name) = child.name {
                 if !name.is_empty() {
                     return Some(name.clone());
@@ -313,7 +314,7 @@ fn ref_exists_recursive(
     let role_num = get_role(conn, app_bus, path);
     let role = atspi_role_to_role(role_num);
 
-    if is_interactive_role(role) {
+    if role.is_interactive() {
         if *counter == target {
             return true;
         }
@@ -347,51 +348,47 @@ mod tests {
 
     #[test]
     fn role_mapping_covers_interactive_types() {
-        assert_eq!(atspi_role_to_role(43), "AXButton");
-        assert_eq!(atspi_role_to_role(79), "AXTextField");
-        assert_eq!(atspi_role_to_role(44), "AXCheckBox");
-        assert_eq!(atspi_role_to_role(45), "AXRadioButton");
-        assert_eq!(atspi_role_to_role(11), "AXComboBox");
-        assert_eq!(atspi_role_to_role(51), "AXSlider");
-        assert_eq!(atspi_role_to_role(91), "AXTreeItem");
-        assert_eq!(atspi_role_to_role(88), "AXLink");
+        assert_eq!(atspi_role_to_role(43), Role::Button);
+        assert_eq!(atspi_role_to_role(79), Role::TextField);
+        assert_eq!(atspi_role_to_role(44), Role::CheckBox);
+        assert_eq!(atspi_role_to_role(45), Role::RadioButton);
+        assert_eq!(atspi_role_to_role(11), Role::ComboBox);
+        assert_eq!(atspi_role_to_role(51), Role::Slider);
+        assert_eq!(atspi_role_to_role(91), Role::TreeItem);
+        assert_eq!(atspi_role_to_role(88), Role::Link);
     }
 
     #[test]
     fn role_mapping_covers_structural_types() {
-        assert_eq!(atspi_role_to_role(116), "AXStaticText");
-        assert_eq!(atspi_role_to_role(34), "AXMenuBar");
-        assert_eq!(atspi_role_to_role(39), "AXGroup");
-        assert_eq!(atspi_role_to_role(55), "AXTable");
-        assert_eq!(atspi_role_to_role(23), "AXFrame");
-        assert_eq!(atspi_role_to_role(69), "AXWindow");
+        assert_eq!(atspi_role_to_role(116), Role::StaticText);
+        assert_eq!(atspi_role_to_role(34), Role::MenuBar);
+        assert_eq!(atspi_role_to_role(39), Role::Group);
+        assert_eq!(atspi_role_to_role(55), Role::Table);
+        assert_eq!(atspi_role_to_role(23), Role::Frame);
+        assert_eq!(atspi_role_to_role(69), Role::Window);
     }
 
     #[test]
-    fn unknown_role_maps_to_ax_unknown() {
-        assert_eq!(atspi_role_to_role(0), "AXUnknown");
-        assert_eq!(atspi_role_to_role(999), "AXUnknown");
+    fn unknown_role_maps_to_unknown() {
+        assert_eq!(atspi_role_to_role(0), Role::Unknown);
+        assert_eq!(atspi_role_to_role(999), Role::Unknown);
     }
 
     #[test]
     fn interactive_roles_mapped_correctly() {
-        use crate::core::element_tree::is_interactive_role;
-
-        assert!(is_interactive_role(atspi_role_to_role(43))); // Button
-        assert!(is_interactive_role(atspi_role_to_role(79))); // TextField
-        assert!(is_interactive_role(atspi_role_to_role(44))); // CheckBox
-        assert!(is_interactive_role(atspi_role_to_role(11))); // ComboBox
-        assert!(is_interactive_role(atspi_role_to_role(91))); // TreeItem
-        assert!(is_interactive_role(atspi_role_to_role(88))); // Link
+        assert!(atspi_role_to_role(43).is_interactive()); // Button
+        assert!(atspi_role_to_role(79).is_interactive()); // TextField
+        assert!(atspi_role_to_role(44).is_interactive()); // CheckBox
+        assert!(atspi_role_to_role(11).is_interactive()); // ComboBox
+        assert!(atspi_role_to_role(91).is_interactive()); // TreeItem
+        assert!(atspi_role_to_role(88).is_interactive()); // Link
     }
 
     #[test]
     fn structural_roles_not_interactive() {
-        use crate::core::element_tree::is_interactive_role;
-
-        assert!(!is_interactive_role(atspi_role_to_role(23))); // Frame
-        assert!(!is_interactive_role(atspi_role_to_role(39))); // Group
-        assert!(!is_interactive_role(atspi_role_to_role(116))); // StaticText
-        assert!(!is_interactive_role(atspi_role_to_role(27))); // Image
+        assert!(!atspi_role_to_role(23).is_interactive()); // Frame
+        assert!(!atspi_role_to_role(39).is_interactive()); // Group
+        assert!(!atspi_role_to_role(116).is_interactive()); // StaticText
+        assert!(!atspi_role_to_role(27).is_interactive()); // Image
     }
 }

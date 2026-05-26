@@ -1,5 +1,6 @@
 /// Data model for screenshot annotations.
 use crate::core::element_tree::{ElementNode, ElementRef};
+use crate::core::role::Role;
 use crate::core::types::Rect;
 
 /// A single element annotation: a labeled marker on a screenshot.
@@ -7,36 +8,33 @@ use crate::core::types::Rect;
 pub struct Annotation {
     pub r#ref: ElementRef,
     pub display_number: usize,
-    pub role: String,
+    pub role: Role,
     pub name: Option<String>,
     pub bounds: Rect,
 }
 
 impl Annotation {
+    #[must_use]
     pub fn new(
         r#ref: ElementRef,
         display_number: usize,
-        role: impl Into<String>,
+        role: Role,
         name: Option<String>,
         bounds: Rect,
     ) -> Self {
         Self {
             r#ref,
             display_number,
-            role: role.into(),
+            role,
             name,
             bounds,
         }
     }
 
-    /// Short role label for display (strips "AX" prefix).
+    /// Short role label for display (title-case, no prefix).
     #[must_use]
-    pub fn short_role(&self) -> &str {
-        if let Some(stripped) = self.role.strip_prefix("AX") {
-            stripped
-        } else {
-            &self.role
-        }
+    pub fn short_role(&self) -> &'static str {
+        self.role.short_name()
     }
 }
 
@@ -68,30 +66,6 @@ impl AnnotationStyle {
     #[must_use]
     pub fn all() -> &'static [Self] {
         &[Self::Badges, Self::Labeled, Self::Spotlight]
-    }
-}
-
-/// Category for color-coding elements by type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AnnotationCategory {
-    Button,
-    TextInput,
-    Selection,
-    Navigation,
-    Other,
-}
-
-impl AnnotationCategory {
-    #[must_use]
-    pub fn from_role(role: &str) -> Self {
-        match role {
-            "AXButton" | "AXMenuButton" | "AXDockItem" | "AXIncrementor" => Self::Button,
-            "AXTextField" | "AXTextArea" => Self::TextInput,
-            "AXCheckBox" | "AXRadioButton" | "AXSwitch" | "AXComboBox" | "AXPopUpButton"
-            | "AXSlider" | "AXColorWell" => Self::Selection,
-            "AXLink" | "AXTab" | "AXMenuItem" | "AXTreeItem" => Self::Navigation,
-            _ => Self::Other,
-        }
     }
 }
 
@@ -139,7 +113,7 @@ impl AnnotationCollector {
                         annotations.push(Annotation::new(
                             *r,
                             *display_number,
-                            &node.role,
+                            node.role,
                             node.name.clone(),
                             rel,
                         ));
@@ -210,23 +184,24 @@ impl Default for AnnotationLegend {
 mod tests {
     use super::*;
     use crate::core::element_tree::ElementRef;
+    use crate::core::role::AnnotationCategory;
 
     #[test]
     fn button_roles() {
         assert_eq!(
-            AnnotationCategory::from_role("AXButton"),
+            Role::Button.annotation_category(),
             AnnotationCategory::Button
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXMenuButton"),
+            Role::MenuButton.annotation_category(),
             AnnotationCategory::Button
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXDockItem"),
+            Role::DockItem.annotation_category(),
             AnnotationCategory::Button
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXIncrementor"),
+            Role::Incrementor.annotation_category(),
             AnnotationCategory::Button
         );
     }
@@ -234,11 +209,11 @@ mod tests {
     #[test]
     fn text_input_roles() {
         assert_eq!(
-            AnnotationCategory::from_role("AXTextField"),
+            Role::TextField.annotation_category(),
             AnnotationCategory::TextInput
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXTextArea"),
+            Role::TextArea.annotation_category(),
             AnnotationCategory::TextInput
         );
     }
@@ -246,31 +221,31 @@ mod tests {
     #[test]
     fn selection_roles() {
         assert_eq!(
-            AnnotationCategory::from_role("AXCheckBox"),
+            Role::CheckBox.annotation_category(),
             AnnotationCategory::Selection
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXRadioButton"),
+            Role::RadioButton.annotation_category(),
             AnnotationCategory::Selection
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXSlider"),
+            Role::Slider.annotation_category(),
             AnnotationCategory::Selection
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXComboBox"),
+            Role::ComboBox.annotation_category(),
             AnnotationCategory::Selection
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXPopUpButton"),
+            Role::PopUpButton.annotation_category(),
             AnnotationCategory::Selection
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXSwitch"),
+            Role::Switch.annotation_category(),
             AnnotationCategory::Selection
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXColorWell"),
+            Role::ColorWell.annotation_category(),
             AnnotationCategory::Selection
         );
     }
@@ -278,61 +253,43 @@ mod tests {
     #[test]
     fn navigation_roles() {
         assert_eq!(
-            AnnotationCategory::from_role("AXLink"),
+            Role::Link.annotation_category(),
             AnnotationCategory::Navigation
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXTab"),
+            Role::Tab.annotation_category(),
             AnnotationCategory::Navigation
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXMenuItem"),
+            Role::MenuItem.annotation_category(),
             AnnotationCategory::Navigation
         );
         assert_eq!(
-            AnnotationCategory::from_role("AXTreeItem"),
+            Role::TreeItem.annotation_category(),
             AnnotationCategory::Navigation
         );
     }
 
     #[test]
     fn unknown_roles() {
+        assert_eq!(Role::Group.annotation_category(), AnnotationCategory::Other);
+        assert_eq!(Role::Image.annotation_category(), AnnotationCategory::Other);
         assert_eq!(
-            AnnotationCategory::from_role("AXGroup"),
-            AnnotationCategory::Other
-        );
-        assert_eq!(
-            AnnotationCategory::from_role("AXImage"),
-            AnnotationCategory::Other
-        );
-        assert_eq!(
-            AnnotationCategory::from_role("AXUnknown"),
+            Role::Unknown.annotation_category(),
             AnnotationCategory::Other
         );
     }
 
     #[test]
-    fn short_role_strips_prefix() {
+    fn short_role_returns_name() {
         let a = Annotation::new(
             ElementRef::new(5),
             1,
-            "AXButton",
+            Role::Button,
             Some("Save".into()),
             Rect::new(0.0, 0.0, 100.0, 30.0),
         );
         assert_eq!(a.short_role(), "Button");
-    }
-
-    #[test]
-    fn short_role_preserves_non_ax() {
-        let a = Annotation::new(
-            ElementRef::new(1),
-            1,
-            "CustomRole",
-            None,
-            Rect::new(0.0, 0.0, 50.0, 50.0),
-        );
-        assert_eq!(a.short_role(), "CustomRole");
     }
 
     #[test]
@@ -346,12 +303,12 @@ mod tests {
     #[test]
     fn collects_interactive() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
-        let root = ElementNode::new("AXWindow").with_children(vec![
-            ElementNode::new("AXButton")
+        let root = ElementNode::new(Role::Window).with_children(vec![
+            ElementNode::new(Role::Button)
                 .with_name("Save")
                 .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
                 .with_ref(ElementRef::new(1)),
-            ElementNode::new("AXTextField")
+            ElementNode::new(Role::TextField)
                 .with_name("Search")
                 .with_bounds(Rect::new(300.0, 100.0, 200.0, 25.0))
                 .with_ref(ElementRef::new(2)),
@@ -371,10 +328,11 @@ mod tests {
     #[test]
     fn window_relative_coords() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
-        let root = ElementNode::new("AXWindow").with_children(vec![ElementNode::new("AXButton")
-            .with_name("OK")
-            .with_bounds(Rect::new(250.0, 150.0, 60.0, 30.0))
-            .with_ref(ElementRef::new(1))]);
+        let root =
+            ElementNode::new(Role::Window).with_children(vec![ElementNode::new(Role::Button)
+                .with_name("OK")
+                .with_bounds(Rect::new(250.0, 150.0, 60.0, 30.0))
+                .with_ref(ElementRef::new(1))]);
 
         let collector = AnnotationCollector::new();
         let annotations = collector.collect(&root, window_bounds);
@@ -388,9 +346,10 @@ mod tests {
     #[test]
     fn skips_no_bounds() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
-        let root = ElementNode::new("AXWindow").with_children(vec![ElementNode::new("AXButton")
-            .with_name("Ghost")
-            .with_ref(ElementRef::new(1))]);
+        let root =
+            ElementNode::new(Role::Window).with_children(vec![ElementNode::new(Role::Button)
+                .with_name("Ghost")
+                .with_ref(ElementRef::new(1))]);
 
         let collector = AnnotationCollector::new();
         let annotations = collector.collect(&root, window_bounds);
@@ -401,7 +360,7 @@ mod tests {
     fn skips_non_interactive() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
         let root =
-            ElementNode::new("AXWindow").with_children(vec![ElementNode::new("AXStaticText")
+            ElementNode::new(Role::Window).with_children(vec![ElementNode::new(Role::StaticText)
                 .with_name("Label")
                 .with_bounds(Rect::new(200.0, 100.0, 80.0, 20.0))]);
 
@@ -413,19 +372,19 @@ mod tests {
     #[test]
     fn skips_off_screen() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
-        let root = ElementNode::new("AXWindow").with_children(vec![
+        let root = ElementNode::new(Role::Window).with_children(vec![
             // Entirely to the left
-            ElementNode::new("AXButton")
+            ElementNode::new(Role::Button)
                 .with_name("Hidden")
                 .with_bounds(Rect::new(0.0, 100.0, 50.0, 30.0))
                 .with_ref(ElementRef::new(1)),
             // Entirely below
-            ElementNode::new("AXButton")
+            ElementNode::new(Role::Button)
                 .with_name("Below")
                 .with_bounds(Rect::new(200.0, 700.0, 80.0, 30.0))
                 .with_ref(ElementRef::new(2)),
             // Visible
-            ElementNode::new("AXButton")
+            ElementNode::new(Role::Button)
                 .with_name("Visible")
                 .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
                 .with_ref(ElementRef::new(3)),
@@ -441,12 +400,12 @@ mod tests {
     #[test]
     fn sequential_display_numbers() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
-        let root = ElementNode::new("AXWindow").with_children(vec![
-            ElementNode::new("AXButton")
+        let root = ElementNode::new(Role::Window).with_children(vec![
+            ElementNode::new(Role::Button)
                 .with_name("A")
                 .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
                 .with_ref(ElementRef::new(5)),
-            ElementNode::new("AXButton")
+            ElementNode::new(Role::Button)
                 .with_name("B")
                 .with_bounds(Rect::new(300.0, 100.0, 80.0, 30.0))
                 .with_ref(ElementRef::new(10)),
@@ -467,14 +426,14 @@ mod tests {
             Annotation::new(
                 ElementRef::new(5),
                 1,
-                "AXButton",
+                Role::Button,
                 Some("Save".into()),
                 Rect::new(0.0, 0.0, 80.0, 30.0),
             ),
             Annotation::new(
                 ElementRef::new(8),
                 2,
-                "AXTextField",
+                Role::TextField,
                 Some("Search".into()),
                 Rect::new(0.0, 0.0, 200.0, 25.0),
             ),
@@ -492,14 +451,14 @@ mod tests {
             Annotation::new(
                 ElementRef::new(1),
                 1,
-                "AXButton",
+                Role::Button,
                 None,
                 Rect::new(0.0, 0.0, 80.0, 30.0),
             ),
             Annotation::new(
                 ElementRef::new(2),
                 2,
-                "AXButton",
+                Role::Button,
                 Some(String::new()),
                 Rect::new(0.0, 0.0, 80.0, 30.0),
             ),

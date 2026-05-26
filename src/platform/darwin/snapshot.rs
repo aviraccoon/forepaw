@@ -6,12 +6,11 @@
 
 use std::collections::HashMap;
 
-use crate::core::element_tree::{
-    is_interactive_role, ElementNode, ElementRef, ElementTree, SnapshotTiming,
-};
+use crate::core::element_tree::{ElementNode, ElementRef, ElementTree, SnapshotTiming};
 use crate::core::errors::ForepawError;
 use crate::core::icon_class_parser::IconClassParser;
 use crate::core::ref_assigner::RefAssigner;
+use crate::core::role::Role;
 use crate::core::types::{Point, Rect};
 use crate::debug;
 use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
@@ -29,6 +28,7 @@ use super::ffi::{
     CFStringGetTypeID, CFStringRef, CFTypeRef, CGPointFFI, CGSizeFFI, K_CF_NUMBER_DOUBLE_TYPE,
     K_CF_STRING_ENCODING_UTF8,
 };
+use super::role::ax_role_to_role;
 
 const DEFAULT_DEPTH: usize = 15;
 const ELECTRON_DEPTH: usize = 25;
@@ -531,19 +531,20 @@ fn build_tree(
     pruning: &TreePruning,
 ) -> ElementNode {
     if depth >= max_depth {
-        return ElementNode::new("AXGroup");
+        return ElementNode::new(Role::Group);
     }
 
     let Some(attrs) = fetch_batch_attributes(element) else {
-        return ElementNode::new("AXUnknown");
+        return ElementNode::new(Role::Unknown);
     };
 
-    let role = attrs
+    let role_str = attrs
         .string(ATTR_ROLE)
         .unwrap_or_else(|| "AXUnknown".to_owned());
+    let role = ax_role_to_role(&role_str);
 
     // Skip menu bar subtree if requested.
-    if pruning.skip_menu_bar && role == "AXMenuBar" {
+    if pruning.skip_menu_bar && role == Role::MenuBar {
         return ElementNode::new(role);
     }
 
@@ -656,14 +657,14 @@ fn computed_name(
 
     // 2. First AXStaticText child's value, or AXImage child with a name.
     for child in children {
-        if child.role == "AXStaticText" {
+        if child.role == Role::StaticText {
             if let Some(ref val) = child.value {
                 if !val.is_empty() {
                     return Some(val.clone());
                 }
             }
         }
-        if child.role == "AXImage" {
+        if child.role == Role::Image {
             if let Some(ref name) = child.name {
                 if !name.is_empty() {
                     return Some(name.clone());
@@ -750,9 +751,10 @@ fn collect_ax_elements(
         return;
     }
 
-    let role = get_ax_string_attr(element, "AXRole").unwrap_or_default();
+    let role_str = get_ax_string_attr(element, "AXRole").unwrap_or_default();
+    let role = ax_role_to_role(&role_str);
 
-    if is_interactive_role(&role) {
+    if role.is_interactive() {
         elements.insert(*counter, element);
         *counter += 1;
     }

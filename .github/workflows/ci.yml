@@ -106,7 +106,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Check generated AT-SPI roles
-        run: diff <(bash res/generate_atspi_roles.sh) src/platform/linux/atspi_roles.rs
+        run: diff <(bash res/generate_atspi_roles.sh) src/platform/linux/role.rs
 
       - name: Check musl x86_64
         run: nix develop .# --command cargo zigbuild --target x86_64-unknown-linux-musl --lib

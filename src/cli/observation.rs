@@ -410,7 +410,7 @@ impl HitTest {
                 .map_or((0.0, 0.0, 0.0, 0.0), |b| (b.x, b.y, b.width, b.height));
             println!(
                 "{{ \"role\": \"{}\", \"name\": \"{}\", \"value\": \"{}\", \"bounds\": [{:.0}, {:.0}, {:.0}, {:.0}], \"pid\": {}, \"actions\": [{}], \"ancestors\": [{}] }}",
-                result.role,
+                result.role.short_name(),
                 name.escape_default(),
                 value.escape_default(),
                 bx, by, bw, bh,
@@ -426,7 +426,7 @@ impl HitTest {
                     .iter()
                     .map(|a| {
                         let an = truncate(a.name.as_deref().unwrap_or(""));
-                        format!("{{ \"role\": \"{}\", \"name\": \"{}\" }}", a.role, an.escape_default())
+                        format!("{{ \"role\": \"{}\", \"name\": \"{}\" }}", a.role.short_name(), an.escape_default())
                     })
                     .collect::<Vec<_>>()
                     .join(", "),
@@ -435,7 +435,7 @@ impl HitTest {
         }
 
         println!("Element at ({:.0}, {:.0}):", point.x, point.y);
-        println!("  Role:      {}", result.role);
+        println!("  Role:      {}", result.role.short_name());
         if let Some(ref name) = result.name {
             println!("  Name:      {}", truncate(name));
         }
@@ -463,7 +463,7 @@ impl HitTest {
                     .as_ref()
                     .map(|n| format!(" \"{}\"", truncate(n)))
                     .unwrap_or_default();
-                println!("    {}. {} {label}", i + 1, ancestor.role);
+                println!("    {}. {} {label}", i + 1, ancestor.role.short_name());
             }
         }
 

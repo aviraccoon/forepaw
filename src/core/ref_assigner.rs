@@ -44,7 +44,7 @@ impl RefAssigner {
             new_ref = Some(element_ref);
             refs.insert(
                 element_ref,
-                ElementRefInfo::new(node.role.clone(), node.name.clone()),
+                ElementRefInfo::new(node.role, node.name.clone()),
             );
             *counter += 1;
         }
@@ -68,7 +68,7 @@ impl RefAssigner {
                 .collect()
         };
 
-        let mut new_node = ElementNode::new(&node.role);
+        let mut new_node = ElementNode::new(node.role);
         new_node.name.clone_from(&node.name);
         new_node.value.clone_from(&node.value);
         new_node.r#ref = new_ref.or(node.r#ref);
@@ -88,16 +88,17 @@ impl Default for RefAssigner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::role::Role;
 
     fn make_tree() -> ElementNode {
-        ElementNode::new("AXWindow")
+        ElementNode::new(Role::Window)
             .with_name("Test Window")
             .with_children(vec![
-                ElementNode::new("AXGroup").with_children(vec![
-                    ElementNode::new("AXButton").with_name("OK"),
-                    ElementNode::new("AXButton").with_name("Cancel"),
+                ElementNode::new(Role::Group).with_children(vec![
+                    ElementNode::new(Role::Button).with_name("OK"),
+                    ElementNode::new(Role::Button).with_name("Cancel"),
                 ]),
-                ElementNode::new("AXTextField").with_name("Name"),
+                ElementNode::new(Role::TextField).with_name("Name"),
             ])
     }
 
@@ -121,12 +122,12 @@ mod tests {
 
     #[test]
     fn interactive_only_prunes() {
-        let tree = ElementNode::new("AXWindow").with_children(vec![
-            ElementNode::new("AXGroup").with_children(vec![
-                ElementNode::new("AXStaticText").with_name("Label"),
-                ElementNode::new("AXButton").with_name("OK"),
+        let tree = ElementNode::new(Role::Window).with_children(vec![
+            ElementNode::new(Role::Group).with_children(vec![
+                ElementNode::new(Role::StaticText).with_name("Label"),
+                ElementNode::new(Role::Button).with_name("OK"),
             ]),
-            ElementNode::new("AXStaticText").with_name("Footer"),
+            ElementNode::new(Role::StaticText).with_name("Footer"),
         ]);
 
         let assigner = RefAssigner::new();

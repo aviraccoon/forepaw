@@ -10,6 +10,7 @@
 pub mod app;
 pub mod hit_test;
 pub mod ocr;
+pub mod role;
 pub mod screenshot;
 pub mod snapshot;
 

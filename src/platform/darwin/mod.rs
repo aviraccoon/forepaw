@@ -20,6 +20,7 @@ pub mod hit_test;
 pub mod input;
 pub mod key_code;
 pub mod ocr;
+pub mod role;
 pub mod saliency;
 pub mod screenshot;
 pub mod snapshot;

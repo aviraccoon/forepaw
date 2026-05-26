@@ -15,12 +15,13 @@ use zbus::blocking::Connection;
 use zbus::zvariant::{ObjectPath, Value};
 
 use crate::core::errors::ForepawError;
+use crate::core::role::Role;
 use crate::core::types::Point;
 use crate::platform::{AncestorInfo, AppTarget, HitTestResult};
 
 use super::app::connect_atspi_bus;
 use super::app::{find_app_bus, get_bounds, get_children, get_property, get_role, get_value};
-use super::atspi_roles::atspi_role_to_role;
+use super::role::atspi_role_to_role;
 
 /// Performs a hit test at the given screen coordinates.
 ///
@@ -117,7 +118,7 @@ fn query_app_at_point(
 /// Build a `HitTestResult` from a found element.
 fn build_hit_result(conn: &Connection, hit_bus: &str, hit_path: &str) -> HitTestResult {
     let role_num = get_role(conn, hit_bus, hit_path);
-    let role = atspi_role_to_role(role_num).to_owned();
+    let role = atspi_role_to_role(role_num);
     let name = get_property(conn, hit_bus, hit_path, "Name");
     let value = get_value(conn, hit_bus, hit_path);
     let bounds = get_bounds(conn, hit_bus, hit_path);
@@ -187,17 +188,17 @@ fn walk_parents(conn: &Connection, hit_bus: &str, hit_path: &str) -> Vec<Ancesto
         };
         let path_str = parent_path.into_owned().to_string();
 
-        let parent_role = atspi_role_to_role(get_role(conn, &bus, &path_str)).to_owned();
+        let parent_role = atspi_role_to_role(get_role(conn, &bus, &path_str));
         let parent_name = get_property(conn, &bus, &path_str, "Name");
         let parent_bounds = get_bounds(conn, &bus, &path_str);
 
         ancestors.push(AncestorInfo {
-            role: parent_role.clone(),
+            role: parent_role,
             name: parent_name.filter(|s| !s.is_empty()),
             bounds: parent_bounds,
         });
 
-        if parent_role == "AXApplication" || parent_role == "AXFrame" {
+        if parent_role == Role::Application || parent_role == Role::Frame {
             break;
         }
 

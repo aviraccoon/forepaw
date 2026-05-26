@@ -8,6 +8,7 @@
 //! `Float32` x/y parameters of `AXUIElementCopyElementAtPosition`.
 
 use crate::core::errors::ForepawError;
+use crate::core::role::Role;
 use crate::core::types::{Point, Rect};
 use crate::platform::{AncestorInfo, AppTarget, HitTestResult};
 
@@ -81,7 +82,7 @@ pub fn element_at_point(
     let role = attrs
         .as_ref()
         .and_then(|a| a.string(ATTR_ROLE))
-        .unwrap_or_else(|| "AXUnknown".to_owned());
+        .map_or(Role::Unknown, |s| super::role::ax_role_to_role(&s));
     let name = attrs
         .as_ref()
         .and_then(|a| non_empty(a.string(ATTR_TITLE).as_ref()))
@@ -102,20 +103,21 @@ pub fn element_at_point(
     let mut ancestors: Vec<AncestorInfo> = Vec::new();
     let mut current = hit_element;
     while let Some(parent_element) = get_ax_parent_element(current) {
-        let parent_role = get_ax_string_attr(parent_element, "AXRole").unwrap_or_default();
+        let parent_role_str = get_ax_string_attr(parent_element, "AXRole").unwrap_or_default();
+        let parent_role = super::role::ax_role_to_role(&parent_role_str);
         let parent_name = get_ax_string_attr(parent_element, "AXTitle").filter(|s| !s.is_empty());
         let parent_bounds = get_element_position(parent_element).and_then(|pos| {
             get_element_size(parent_element).map(|(w, h)| Rect::new(pos.x, pos.y, w, h))
         });
 
         ancestors.push(AncestorInfo {
-            role: parent_role.clone(),
+            role: parent_role,
             name: parent_name,
             bounds: parent_bounds,
         });
 
         // Stop at the application root (no meaningful ancestors above it)
-        if parent_role == "AXApplication" {
+        if parent_role == Role::Application {
             break;
         }
         current = parent_element;

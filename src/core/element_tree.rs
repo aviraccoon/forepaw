@@ -1,41 +1,14 @@
 /// Element tree types: nodes, refs, and tree structure.
 use std::fmt;
 
+use crate::core::role::Role;
 use crate::core::types::Rect;
-
-/// Roles that are considered interactive and should receive refs.
-pub const INTERACTIVE_ROLES: &[&str] = &[
-    "AXButton",
-    "AXTextField",
-    "AXTextArea",
-    "AXCheckBox",
-    "AXRadioButton",
-    "AXSlider",
-    "AXComboBox",
-    "AXPopUpButton",
-    "AXMenuButton",
-    "AXLink",
-    "AXMenuItem",
-    "AXTab",
-    "AXSwitch",
-    "AXIncrementor",
-    "AXColorWell",
-    "AXTreeItem",
-    "AXCell",
-    "AXDockItem",
-];
-
-/// Check if a role is interactive (should receive a ref).
-#[must_use]
-pub fn is_interactive_role(role: &str) -> bool {
-    INTERACTIVE_ROLES.contains(&role)
-}
 
 /// A node in the accessibility element tree.
 #[derive(Debug, Clone)]
 #[must_use]
 pub struct ElementNode {
-    pub role: String,
+    pub role: Role,
     pub name: Option<String>,
     pub value: Option<String>,
     pub r#ref: Option<ElementRef>,
@@ -45,9 +18,9 @@ pub struct ElementNode {
 }
 
 impl ElementNode {
-    pub fn new(role: impl Into<String>) -> Self {
+    pub fn new(role: Role) -> Self {
         Self {
-            role: role.into(),
+            role,
             name: None,
             value: None,
             r#ref: None,
@@ -94,7 +67,7 @@ impl ElementNode {
     /// Whether this element is interactive (should receive a ref).
     #[must_use]
     pub fn is_interactive(&self) -> bool {
-        is_interactive_role(&self.role)
+        self.role.is_interactive()
     }
 }
 
@@ -239,7 +212,10 @@ impl SnapshotTiming {
             .name
             .as_ref()
             .and_then(|n| if n.is_empty() { None } else { Some(n.as_str()) });
-        let label = name.map_or_else(|| node.role.clone(), |n| format!("{} \"{}\"", node.role, n));
+        let label = name.map_or_else(
+            || node.role.short_name().to_owned(),
+            |n| format!("{} \"{}\"", node.role.short_name(), n),
+        );
         let truncated: String = label.chars().take(40).collect();
         truncated
     }
@@ -278,16 +254,14 @@ impl fmt::Display for ElementRef {
 /// Info stored alongside a ref for action dispatch.
 #[derive(Debug, Clone)]
 pub struct ElementRefInfo {
-    pub role: String,
+    pub role: Role,
     pub name: Option<String>,
 }
 
 impl ElementRefInfo {
-    pub fn new(role: impl Into<String>, name: Option<String>) -> Self {
-        Self {
-            role: role.into(),
-            name,
-        }
+    #[must_use]
+    pub fn new(role: Role, name: Option<String>) -> Self {
+        Self { role, name }
     }
 }
 
@@ -296,32 +270,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn interactive_roles_identified() {
-        assert!(is_interactive_role("AXButton"));
-        assert!(is_interactive_role("AXTextField"));
-        assert!(is_interactive_role("AXCheckBox"));
-        assert!(is_interactive_role("AXLink"));
-        assert!(is_interactive_role("AXMenuItem"));
-        assert!(is_interactive_role("AXSlider"));
-        assert!(is_interactive_role("AXPopUpButton"));
-        assert!(is_interactive_role("AXSwitch"));
-    }
-
-    #[test]
-    fn non_interactive_roles_identified() {
-        assert!(!is_interactive_role("AXGroup"));
-        assert!(!is_interactive_role("AXWindow"));
-        assert!(!is_interactive_role("AXStaticText"));
-        assert!(!is_interactive_role("AXImage"));
-        assert!(!is_interactive_role("AXScrollArea"));
-        assert!(!is_interactive_role("AXUnknown"));
-        assert!(!is_interactive_role(""));
-    }
-
-    #[test]
     fn node_is_interactive() {
-        let button = ElementNode::new("AXButton").with_name("OK");
-        let group = ElementNode::new("AXGroup");
+        let button = ElementNode::new(Role::Button).with_name("OK");
+        let group = ElementNode::new(Role::Group);
         assert!(button.is_interactive());
         assert!(!group.is_interactive());
     }

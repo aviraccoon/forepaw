@@ -16,6 +16,7 @@ use crate::core::element_tree::ElementRef;
 use crate::core::errors::ForepawError;
 use crate::core::key_combo::{ClickOptions, DragOptions, KeyCombo};
 use crate::core::ocr_result::OCROutput;
+use crate::core::role::Role;
 use crate::core::types::{Point, Rect};
 
 /// Identifies a target application unambiguously.
@@ -174,8 +175,8 @@ impl ActionResult {
 /// An element in the ancestor chain of a hit-test result.
 #[derive(Debug, Clone)]
 pub struct AncestorInfo {
-    /// The AX role (e.g. `AXWindow`, `AXGroup`, `AXButton`).
-    pub role: String,
+    /// The element role.
+    pub role: Role,
     /// The element's accessible name, if any.
     pub name: Option<String>,
     /// Bounds in screen coordinates.
@@ -190,7 +191,7 @@ pub struct AncestorInfo {
 /// (e.g. `AXUIElementCopyElementAtPosition` returns the deepest child).
 #[derive(Debug, Clone)]
 pub struct HitTestResult {
-    pub role: String,
+    pub role: Role,
     pub name: Option<String>,
     pub value: Option<String>,
     pub bounds: Option<Rect>,
@@ -276,7 +277,7 @@ pub struct ScreenshotResult {
     pub legend: Option<String>,
 }
 
-/// Options for snapshot (AX tree walk).
+/// Options for snapshot (accessibility tree walk).
 #[derive(Debug, Clone)]
 #[expect(
     clippy::struct_excessive_bools,
