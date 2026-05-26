@@ -345,7 +345,8 @@ impl ListApps {
                     .as_deref()
                     .map(|b| format!(" ({b})"))
                     .unwrap_or_default();
-                println!("{}{} [pid: {}]", app.name, bundle, app.pid);
+                let active = if app.is_active { " *" } else { "" };
+                println!("{}{}{} [pid: {}]", app.name, bundle, active, app.pid);
             }
         }
         Ok(())
@@ -382,7 +383,12 @@ impl ListWindows {
                     .as_ref()
                     .map(|b| format!("  [{:.0},{:.0} {:.0}x{:.0}]", b.x, b.y, b.width, b.height))
                     .unwrap_or_default();
-                println!("{}  {}  \"{}\"{}", w.id, w.app, w.title, bounds);
+                let state = w
+                    .state
+                    .filter(|s| *s != crate::platform::WindowState::Normal)
+                    .map(|s| format!("  {s}"))
+                    .unwrap_or_default();
+                println!("{}  {}  \"{}\"{}{}", w.id, w.app, w.title, bounds, state);
             }
         }
         Ok(())

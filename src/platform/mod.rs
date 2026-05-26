@@ -99,6 +99,8 @@ pub struct AppInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bundle_id: Option<String>,
     pub pid: i32,
+    /// Whether this is the currently active (frontmost) application.
+    pub is_active: bool,
 }
 
 /// How to target a specific window within an app.
@@ -141,6 +143,33 @@ pub struct WindowInfo {
     pub app: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
+    /// Window display state.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<WindowState>,
+}
+
+/// Visual state of a window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum WindowState {
+    /// Normal windowed mode.
+    Normal,
+    /// Minimized to taskbar/dock.
+    Minimized,
+    /// Maximized to fill the screen (but not fullscreen).
+    Maximized,
+    /// Full-screen mode (covers dock/taskbar, menubar).
+    Fullscreen,
+}
+
+impl std::fmt::Display for WindowState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Normal => write!(f, "normal"),
+            Self::Minimized => write!(f, "minimized"),
+            Self::Maximized => write!(f, "maximized"),
+            Self::Fullscreen => write!(f, "fullscreen"),
+        }
+    }
 }
 
 /// Result of an action (click, type, press, etc.).

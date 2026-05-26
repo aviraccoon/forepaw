@@ -60,6 +60,8 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
                         // (the actual exe name is unhelpful)
                         bundle_id: Some(entry.title.clone()),
                         pid: pid_i32,
+                        // TODO: use GetForegroundWindow() + GetWindowThreadProcessId()
+                        is_active: false,
                     });
                 }
             }
@@ -79,6 +81,8 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
             // Use executable name as "bundle ID" on Windows (no real bundle IDs)
             bundle_id: Some(process_name),
             pid: pid_i32,
+            // TODO: use GetForegroundWindow() + GetWindowThreadProcessId()
+            is_active: false,
         });
     }
 
@@ -142,6 +146,7 @@ impl From<WindowEntry> for WindowInfo {
             title: e.title,
             app: e.process_name,
             bounds: e.bounds,
+            state: None,
         }
     }
 }

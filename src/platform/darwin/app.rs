@@ -115,10 +115,12 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
         };
         let bundle_id = app.bundleIdentifier().map(|s| s.to_string());
         let pid = app.processIdentifier();
+        let is_active = app.isActive();
         result.push(AppInfo {
             name,
             bundle_id,
             pid,
+            is_active,
         });
     }
 
@@ -305,6 +307,7 @@ pub fn list_windows(
                 title,
                 app: owner,
                 bounds: Some(bounds),
+                state: None,
             });
         }
     }

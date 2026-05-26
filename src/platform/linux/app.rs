@@ -313,6 +313,8 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
             name,
             bundle_id: None,
             pid: pid_i32,
+            // TODO: use _NET_ACTIVE_WINDOW to determine frontmost app
+            is_active: false,
         });
     }
 
@@ -386,6 +388,7 @@ pub fn list_windows(app: Option<&AppTarget>) -> Result<Vec<WindowInfo>, ForepawE
                 title,
                 app: app_name_val.clone(),
                 bounds,
+                state: None,
             });
         }
     }
