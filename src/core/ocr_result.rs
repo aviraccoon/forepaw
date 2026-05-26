@@ -2,7 +2,7 @@
 use crate::core::types::Rect;
 
 /// Recognized text with its bounding box.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct OCRResult {
     pub text: String,
     pub bounds: Rect,
@@ -27,9 +27,10 @@ impl OCRResult {
 }
 
 /// Combined OCR output: recognized text results plus optional display screenshot.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct OCROutput {
     pub results: Vec<OCRResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub screenshot_path: Option<String>,
 }
 

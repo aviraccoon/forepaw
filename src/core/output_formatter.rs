@@ -1,11 +1,12 @@
 /// Output formatting: plain text or JSON.
 ///
 /// Error with code, message, and optional suggestion.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
 pub struct OutputError {
     pub code: &'static str,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub suggestion: Option<String>,
 }
 
@@ -31,14 +32,45 @@ impl OutputError {
     pub const INVALID_ARGS: &'static str = "INVALID_ARGS";
 }
 
+/// Output format for CLI commands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OutputFormat {
+    /// Human-readable text (default).
+    #[default]
+    Text,
+    /// Machine-readable JSON.
+    Json,
+}
+
+impl std::str::FromStr for OutputFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "text" => Ok(Self::Text),
+            "json" => Ok(Self::Json),
+            _ => Err(format!("unknown format: {s} (expected: text, json)")),
+        }
+    }
+}
+
+impl std::fmt::Display for OutputFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text => write!(f, "text"),
+            Self::Json => write!(f, "json"),
+        }
+    }
+}
+
 pub struct OutputFormatter {
-    pub json: bool,
+    pub format: OutputFormat,
 }
 
 impl OutputFormatter {
     #[must_use]
-    pub fn new(json: bool) -> Self {
-        Self { json }
+    pub fn new(format: OutputFormat) -> Self {
+        Self { format }
     }
 
     #[must_use]
@@ -49,7 +81,7 @@ impl OutputFormatter {
         data: &[(&str, &str)],
         error: Option<&OutputError>,
     ) -> String {
-        if self.json {
+        if self.format == OutputFormat::Json {
             return Self::format_json(success, command, data, error);
         }
         if let Some(err) = error {
@@ -76,32 +108,32 @@ impl OutputFormatter {
         data: &[(&str, &str)],
         error: Option<&OutputError>,
     ) -> String {
-        let mut pairs: Vec<String> = vec![
-            format!("\"ok\": {success}"),
-            format!("\"command\": \"{command}\""),
-        ];
-        if let Some(err) = error {
-            let mut error_pairs = vec![
-                format!("\"code\": \"{}\"", err.code),
-                format!("\"message\": \"{}\"", escape_json(&err.message)),
-            ];
-            if let Some(suggestion) = &err.suggestion {
-                error_pairs.push(format!("\"suggestion\": \"{}\"", escape_json(suggestion)));
-            }
-            pairs.push(format!("\"error\": {{{}}}", error_pairs.join(", ")));
+        #[derive(serde::Serialize)]
+        struct Output<'a> {
+            ok: bool,
+            command: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            error: Option<&'a OutputError>,
+            #[serde(flatten)]
+            data: std::collections::BTreeMap<&'a str, &'a str>,
         }
-        for (key, val) in data {
-            pairs.push(format!("\"{key}\": \"{}\"", escape_json(val)));
-        }
-        format!("{{{}}}", pairs.join(", "))
-    }
-}
 
-fn escape_json(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\t', "\\t")
+        let data_map: std::collections::BTreeMap<&str, &str> =
+            data.iter().map(|(k, v)| (*k, *v)).collect();
+
+        let output = Output {
+            ok: success,
+            command,
+            error,
+            data: data_map,
+        };
+
+        serde_json::to_string(&output).unwrap_or_else(|e| {
+            format!(
+                "{{\"ok\":false,\"error\":{{\"code\":\"SERIALIZE_ERROR\",\"message\":\"{e}\"}}}}"
+            )
+        })
+    }
 }
 
 #[cfg(test)]
@@ -110,7 +142,7 @@ mod tests {
 
     #[test]
     fn plain_text_success_with_text() {
-        let f = OutputFormatter::new(false);
+        let f = OutputFormatter::new(OutputFormat::Text);
         assert_eq!(
             f.format(true, "click", &[("text", "clicked")], None),
             "clicked"
@@ -119,19 +151,19 @@ mod tests {
 
     #[test]
     fn plain_text_success_no_data() {
-        let f = OutputFormatter::new(false);
+        let f = OutputFormatter::new(OutputFormat::Text);
         assert_eq!(f.format(true, "click", &[], None), "ok");
     }
 
     #[test]
     fn plain_text_failure() {
-        let f = OutputFormatter::new(false);
+        let f = OutputFormatter::new(OutputFormat::Text);
         assert_eq!(f.format(false, "click", &[], None), "failed");
     }
 
     #[test]
     fn plain_text_error_with_suggestion() {
-        let f = OutputFormatter::new(false);
+        let f = OutputFormatter::new(OutputFormat::Text);
         let err =
             OutputError::new("STALE_REF", "Ref expired").with_suggestion("Run snapshot again");
         let output = f.format(false, "click", &[], Some(&err));
@@ -141,29 +173,42 @@ mod tests {
 
     #[test]
     fn json_success() {
-        let f = OutputFormatter::new(true);
+        let f = OutputFormatter::new(OutputFormat::Json);
         let output = f.format(true, "click", &[], None);
-        assert!(output.contains("\"ok\": true"));
-        assert!(output.contains("\"command\": \"click\""));
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["command"], "click");
     }
 
     #[test]
     fn json_error() {
-        let f = OutputFormatter::new(true);
+        let f = OutputFormatter::new(OutputFormat::Json);
         let err = OutputError::new("APP_NOT_FOUND", "No such app");
         let output = f.format(false, "click", &[], Some(&err));
-        assert!(output.contains("\"ok\": false"));
-        assert!(output.contains("\"code\": \"APP_NOT_FOUND\""));
-        assert!(output.contains("\"message\": \"No such app\""));
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["ok"], false);
+        assert_eq!(parsed["error"]["code"], "APP_NOT_FOUND");
+        assert_eq!(parsed["error"]["message"], "No such app");
     }
 
     #[test]
     fn json_escapes_special() {
-        let f = OutputFormatter::new(true);
+        let f = OutputFormatter::new(OutputFormat::Json);
         let err = OutputError::new("ERR", "line1\nline2\twith \"quotes\"");
         let output = f.format(false, "test", &[], Some(&err));
-        assert!(output.contains("\\n"));
-        assert!(output.contains("\\t"));
-        assert!(output.contains("\\\"quotes\\\""));
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["error"]["message"], "line1\nline2\twith \"quotes\"");
+    }
+
+    #[test]
+    fn format_enum_from_str() {
+        assert_eq!("text".parse::<OutputFormat>(), Ok(OutputFormat::Text));
+        assert_eq!("json".parse::<OutputFormat>(), Ok(OutputFormat::Json));
+        assert!("xml".parse::<OutputFormat>().is_err());
+    }
+
+    #[test]
+    fn format_enum_default() {
+        assert_eq!(OutputFormat::default(), OutputFormat::Text);
     }
 }

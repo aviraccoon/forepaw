@@ -1,6 +1,7 @@
 use crate::cli::parse::{parse_coordinate, parse_region, resolve_text, shell_split};
 /// CLI subcommands: actions (click, type, press, scroll, drag, hover, wait, batch, ocr-click).
 use crate::cli::AppTargetArgs;
+use crate::cli::GlobalArgs;
 use crate::core::element_tree::ElementRef;
 use crate::core::key_combo::{ClickOptions, DragOptions, KeyCombo, MouseButton};
 use crate::core::output_formatter::OutputFormatter;
@@ -59,9 +60,6 @@ pub struct Click {
 
     #[arg(long, help = "Double-click")]
     pub double: bool,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 impl Click {
@@ -72,7 +70,7 @@ impl Click {
     /// Returns an error if `--app` is missing for ref/coordinate targets,
     /// or if the underlying provider call fails (app not found, stale ref,
     /// point outside window, etc.).
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let options = ClickOptions::new(
             if self.right {
                 MouseButton::Right
@@ -99,7 +97,7 @@ impl Click {
             ));
         };
 
-        let formatter = OutputFormatter::new(self.json);
+        let formatter = OutputFormatter::new(globals.format);
         print!(
             "{}",
             formatter.format(
@@ -131,9 +129,6 @@ pub struct Type {
 
     #[command(flatten)]
     pub app_target: AppTargetArgs,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 impl Type {
@@ -143,7 +138,7 @@ impl Type {
     ///
     /// Returns an error if the ref format is invalid, `--app` is missing,
     /// or the element does not support text input.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
             self.text_option.as_deref(),
@@ -158,7 +153,7 @@ impl Type {
         let app = self.app_target.require("type")?;
         let result = provider.type_ref(element_ref, text, &app)?;
 
-        let formatter = OutputFormatter::new(self.json);
+        let formatter = OutputFormatter::new(globals.format);
         print!(
             "{}",
             formatter.format(
@@ -190,9 +185,6 @@ pub struct KeyboardType {
 
     #[command(flatten)]
     pub app_target: AppTargetArgs,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 impl KeyboardType {
@@ -201,7 +193,7 @@ impl KeyboardType {
     /// # Errors
     ///
     /// Returns an error if no text is provided, or the platform input API fails.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
             self.text_option.as_deref(),
@@ -210,7 +202,7 @@ impl KeyboardType {
         let app_target = self.app_target.resolve()?;
         let result = provider.keyboard_type(text, app_target.as_ref())?;
 
-        let formatter = OutputFormatter::new(self.json);
+        let formatter = OutputFormatter::new(globals.format);
         print!(
             "{}",
             formatter.format(
@@ -235,9 +227,6 @@ pub struct Press {
 
     #[command(flatten)]
     pub app_target: AppTargetArgs,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 impl Press {
@@ -246,12 +235,12 @@ impl Press {
     /// # Errors
     ///
     /// Returns an error if the key combination is invalid or the platform input API fails.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let key_combo = KeyCombo::parse(&self.combo);
         let app_target = self.app_target.resolve()?;
         let result = provider.press(&key_combo, app_target.as_ref())?;
 
-        let formatter = OutputFormatter::new(self.json);
+        let formatter = OutputFormatter::new(globals.format);
         print!(
             "{}",
             formatter.format(
@@ -292,9 +281,6 @@ pub struct OcrClick {
 
     #[arg(long, help = "Which match to click (1-based) when multiple found")]
     pub index: Option<usize>,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 impl OcrClick {
@@ -304,7 +290,7 @@ impl OcrClick {
     ///
     /// Returns an error if no text is provided, the text is not found,
     /// or multiple matches exist without `--index`.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
             self.text_option.as_deref(),
@@ -323,7 +309,7 @@ impl OcrClick {
         let result =
             provider.ocr_click(text, &app, window_target.as_ref(), &options, self.index)?;
 
-        let formatter = OutputFormatter::new(self.json);
+        let formatter = OutputFormatter::new(globals.format);
         print!(
             "{}",
             formatter.format(
@@ -354,9 +340,6 @@ pub struct Hover {
 
     #[arg(long, help = "Smooth mouse movement")]
     pub smooth: bool,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 impl Hover {
@@ -366,7 +349,7 @@ impl Hover {
     ///
     /// Returns an error if `--app` is missing for ref/region targets,
     /// or the underlying provider call fails.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let window_target = self.window_target.resolve();
         let result = if let Some(element_ref) = ElementRef::parse(&self.target) {
             let app = self.app_target.require("ref-based hover")?;
@@ -382,7 +365,7 @@ impl Hover {
             provider.ocr_hover(&self.target, &app, window_target.as_ref(), None)?
         };
 
-        let formatter = OutputFormatter::new(self.json);
+        let formatter = OutputFormatter::new(globals.format);
         print!(
             "{}",
             formatter.format(
@@ -420,9 +403,6 @@ pub struct Wait {
 
     #[arg(long, help = "Seconds between polls (default 1)")]
     pub interval: Option<f64>,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 impl Wait {
@@ -432,7 +412,7 @@ impl Wait {
     ///
     /// Returns an error if `--app` is missing, the text is not found before
     /// the timeout, or screen recording permission is denied.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
             self.text_option.as_deref(),
@@ -448,7 +428,7 @@ impl Wait {
             self.interval.unwrap_or(1.0),
         )?;
 
-        let formatter = OutputFormatter::new(self.json);
+        let formatter = OutputFormatter::new(globals.format);
         print!(
             "{}",
             formatter.format(
@@ -483,9 +463,6 @@ pub struct Scroll {
 
     #[arg(long, help = "Window-relative coordinates to scroll at")]
     pub at: Option<String>,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 impl Scroll {
@@ -495,7 +472,7 @@ impl Scroll {
     ///
     /// Returns an error if `--app` is missing, the direction is invalid,
     /// or a ref/coordinate target cannot be resolved.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let valid = ["up", "down", "left", "right"];
         if !valid.contains(&self.direction.as_str()) {
             anyhow::bail!(
@@ -538,7 +515,7 @@ impl Scroll {
             scroll_point,
         )?;
 
-        let formatter = OutputFormatter::new(self.json);
+        let formatter = OutputFormatter::new(globals.format);
         print!(
             "{}",
             formatter.format(
@@ -554,10 +531,6 @@ impl Scroll {
 
 /// Drag from one point to another.
 #[derive(clap::Args)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "CLI flags accumulate booleans"
-)]
 #[command(about = "Drag from one point to another (for drawing, moving, resizing)")]
 pub struct Drag {
     #[arg(
@@ -589,9 +562,6 @@ pub struct Drag {
 
     #[arg(long, help = "Read coordinates from stdin")]
     pub stdin: bool,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 impl Drag {
@@ -601,7 +571,7 @@ impl Drag {
     ///
     /// Returns an error if `--app` is missing for ref-based drag,
     /// coordinate arguments are malformed, or the underlying provider call fails.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let options = DragOptions {
             steps: self.steps.unwrap_or(30),
             duration: self.duration.unwrap_or(0.3),
@@ -654,7 +624,7 @@ impl Drag {
             }
         };
 
-        let formatter = OutputFormatter::new(self.json);
+        let formatter = OutputFormatter::new(globals.format);
         print!(
             "{}",
             formatter.format(
@@ -722,9 +692,6 @@ pub struct Batch {
 
     #[arg(long, help = "Delay in milliseconds between actions (default 100)")]
     pub delay: Option<u64>,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 impl Batch {
@@ -734,7 +701,7 @@ impl Batch {
     ///
     /// Returns an error on the first subcommand that fails. Earlier subcommands'
     /// side effects are not rolled back.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let joined = self.args.join(" ");
         let actions: Vec<&str> = joined
             .split(";;")
@@ -747,7 +714,7 @@ impl Batch {
         }
 
         let delay_ms = self.delay.unwrap_or(100);
-        let formatter = OutputFormatter::new(self.json);
+        let formatter = OutputFormatter::new(globals.format);
 
         for (i, action) in actions.iter().enumerate() {
             let window_target = self.window_target.resolve();

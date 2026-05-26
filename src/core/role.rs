@@ -212,6 +212,12 @@ impl Role {
 // Display (lowercase for tree output)
 // ---------------------------------------------------------------------------
 
+impl serde::Serialize for Role {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 impl fmt::Display for Role {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // "Button" → "button", "TextField" → "textfield"

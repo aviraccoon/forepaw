@@ -4,7 +4,7 @@
 /// crate stays dependency-free. Platform backends convert to/from their
 /// native types at the boundary.
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
@@ -17,7 +17,7 @@ impl Point {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
 pub struct Rect {
     pub x: f64,
     pub y: f64,

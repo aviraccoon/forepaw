@@ -2,13 +2,16 @@
 use clap::Args;
 
 use crate::cli::parse::{parse_coordinate, parse_region};
+use crate::cli::GlobalArgs;
 use crate::core::annotation::AnnotationStyle;
 use crate::core::crop_region::CropRegion;
 use crate::core::element_tree::ElementRef;
 use crate::core::snapshot_cache::SnapshotCache;
 use crate::core::snapshot_diff::SnapshotDiffer;
 use crate::core::tree_renderer::TreeRenderer;
-use crate::platform::{DesktopProvider, ImageFormat, ScreenshotOptions, SnapshotOptions};
+use crate::platform::{
+    AncestorInfo, DesktopProvider, HitTestResult, ImageFormat, ScreenshotOptions, SnapshotOptions,
+};
 
 /// Maximum length for a displayed value or name in hit-test output.
 /// Terminal content, web page text, and large text fields can be
@@ -25,7 +28,7 @@ fn truncate_display(s: &str) -> String {
     }
 }
 
-/// Shared global options (app/pid, window, json).
+/// Shared global options (app/pid, window).
 #[derive(Args, Clone)]
 pub struct GlobalOptions {
     #[command(flatten)]
@@ -33,9 +36,6 @@ pub struct GlobalOptions {
 
     #[command(flatten)]
     pub window_target: crate::cli::WindowTargetArgs,
-
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
 }
 
 /// Accessibility tree with element refs.
@@ -91,7 +91,7 @@ impl Snapshot {
     ///
     /// Returns an error if `--app` is missing, the application is not running,
     /// or accessibility permission is denied.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let app = self
             .global
             .app_target
@@ -116,13 +116,18 @@ impl Snapshot {
         let window_target = self.global.window_target.resolve();
 
         let tree = provider.snapshot(&app, window_target.as_ref(), &options)?;
-        let tree_renderer = TreeRenderer::new();
-        let rendered = tree_renderer.render(&tree);
 
         let cache = SnapshotCache::new();
         let cache_key = app.cache_key();
 
-        if self.diff {
+        if globals.json() {
+            println!(
+                "{}",
+                serde_json::to_string(&tree).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+            );
+        } else if self.diff {
+            let tree_renderer = TreeRenderer::new();
+            let rendered = tree_renderer.render(&tree);
             if let Some(previous) = cache.load(&cache_key) {
                 let differ = SnapshotDiffer::new();
                 let result = differ.diff(&previous, &rendered);
@@ -132,6 +137,8 @@ impl Snapshot {
                 println!("{rendered}");
             }
         } else {
+            let tree_renderer = TreeRenderer::new();
+            let rendered = tree_renderer.render(&tree);
             println!("{rendered}");
         }
 
@@ -140,7 +147,9 @@ impl Snapshot {
             eprintln!("{report}");
         }
 
-        // Always cache for future diffs
+        // Always cache text rendering for future diffs
+        let tree_renderer = TreeRenderer::new();
+        let rendered = tree_renderer.render(&tree);
         cache.save(&cache_key, &rendered).ok();
 
         Ok(())
@@ -167,7 +176,7 @@ pub struct Screenshot {
     pub only: Vec<String>,
 
     #[arg(long, help = "Image format: jpeg, png, or webp")]
-    pub format: Option<String>,
+    pub image_format: Option<String>,
 
     #[arg(long, help = "JPEG quality 1-100 (default 85)")]
     pub quality: Option<u32>,
@@ -201,7 +210,7 @@ impl Screenshot {
     ///
     /// Returns an error if `--ref` is given without `--app`, the ref is invalid,
     /// or the provider fails to capture (permission denied, app not found).
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let annotation_style = self.resolve_annotation_style();
         let ref_filter: Option<Vec<ElementRef>> = if self.only.is_empty() {
             None
@@ -230,9 +239,26 @@ impl Screenshot {
         };
         let result = provider.screenshot(&params)?;
 
-        println!("{}", result.path);
-        if let Some(legend) = &result.legend {
-            println!("{legend}");
+        if globals.json() {
+            #[derive(serde::Serialize)]
+            struct ScreenshotResult {
+                path: String,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                legend: Option<String>,
+            }
+            let output = ScreenshotResult {
+                path: result.path,
+                legend: result.legend,
+            };
+            println!(
+                "{}",
+                serde_json::to_string(&output).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+            );
+        } else {
+            println!("{}", result.path);
+            if let Some(legend) = &result.legend {
+                println!("{legend}");
+            }
         }
 
         Ok(())
@@ -250,7 +276,7 @@ impl Screenshot {
 
     fn build_screenshot_options(&self) -> ScreenshotOptions {
         let fmt = self
-            .format
+            .image_format
             .as_deref()
             .and_then(|s| s.parse().ok())
             .unwrap_or(ImageFormat::BestAvailable);
@@ -295,10 +321,7 @@ impl Screenshot {
 /// List running GUI applications.
 #[derive(clap::Args)]
 #[command(about = "List running GUI applications")]
-pub struct ListApps {
-    #[arg(long, help = "JSON output")]
-    pub json: bool,
-}
+pub struct ListApps;
 
 impl ListApps {
     /// Lists running GUI applications.
@@ -306,26 +329,16 @@ impl ListApps {
     /// # Errors
     ///
     /// Returns an error if accessibility permission is denied.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let apps = provider.list_apps()?;
-        if self.json {
-            // Simple JSON output
-            print!("[");
-            let items: Vec<String> = apps
-                .iter()
-                .map(|a| {
-                    let bundle = a
-                        .bundle_id
-                        .as_deref()
-                        .map(|b| format!(", \"bundleID\": \"{b}\""))
-                        .unwrap_or_default();
-                    format!("{{\"name\": \"{}\"{}, \"pid\": {}}}", a.name, bundle, a.pid)
-                })
-                .collect();
-            println!("{}]", items.join(", "));
+        let mut sorted = apps;
+        sorted.sort_by(|a, b| a.name.cmp(&b.name));
+        if globals.json() {
+            println!(
+                "{}",
+                serde_json::to_string(&sorted).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+            );
         } else {
-            let mut sorted = apps;
-            sorted.sort_by(|a, b| a.name.cmp(&b.name));
             for app in sorted {
                 let bundle = app
                     .bundle_id
@@ -353,11 +366,19 @@ impl ListWindows {
     /// # Errors
     ///
     /// Returns an error if the specified application is not found.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let app_target = self.global.app_target.resolve()?;
         let windows = provider.list_windows(app_target.as_ref())?;
-        for w in windows {
-            println!("{}  {}  \"{}\"", w.id, w.app, w.title);
+        if globals.json() {
+            println!(
+                "{}",
+                serde_json::to_string(&windows)
+                    .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+            );
+        } else {
+            for w in windows {
+                println!("{}  {}  \"{}\"", w.id, w.app, w.title);
+            }
         }
         Ok(())
     }
@@ -385,7 +406,7 @@ impl HitTest {
     ///
     /// Returns an error if the coordinates are invalid, or the hit test fails
     /// (no element at point, permission denied, etc).
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let point = parse_coordinate(&self.point)
             .ok_or_else(|| anyhow::anyhow!("Invalid coordinates: {}. Expected x,y", self.point))?;
 
@@ -402,35 +423,33 @@ impl HitTest {
 
         let value_display = result.value.as_ref().map(|v| truncate(v));
 
-        if self.global.json {
-            let name = truncate(result.name.as_deref().unwrap_or(""));
-            let value = truncate(result.value.as_deref().unwrap_or(""));
-            let (bx, by, bw, bh) = result
-                .bounds
-                .map_or((0.0, 0.0, 0.0, 0.0), |b| (b.x, b.y, b.width, b.height));
-            println!(
-                "{{ \"role\": \"{}\", \"name\": \"{}\", \"value\": \"{}\", \"bounds\": [{:.0}, {:.0}, {:.0}, {:.0}], \"pid\": {}, \"actions\": [{}], \"ancestors\": [{}] }}",
-                result.role.short_name(),
-                name.escape_default(),
-                value.escape_default(),
-                bx, by, bw, bh,
-                result.pid,
-                result
-                    .actions
-                    .iter()
-                    .map(|a| format!("\"{a}\""))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                result
-                    .ancestors
-                    .iter()
-                    .map(|a| {
-                        let an = truncate(a.name.as_deref().unwrap_or(""));
-                        format!("{{ \"role\": \"{}\", \"name\": \"{}\" }}", a.role.short_name(), an.escape_default())
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            );
+        if globals.json() {
+            if self.full_values {
+                println!(
+                    "{}",
+                    serde_json::to_string(&result)
+                        .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+                );
+            } else {
+                let truncated = HitTestResult {
+                    name: result.name.as_ref().map(|n| truncate_display(n)),
+                    value: result.value.as_ref().map(|v| truncate_display(v)),
+                    ancestors: result
+                        .ancestors
+                        .iter()
+                        .map(|a| AncestorInfo {
+                            name: a.name.as_ref().map(|n| truncate_display(n)),
+                            ..a.clone()
+                        })
+                        .collect(),
+                    ..result.clone()
+                };
+                println!(
+                    "{}",
+                    serde_json::to_string(&truncated)
+                        .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+                );
+            }
             return Ok(());
         }
 
@@ -488,7 +507,7 @@ pub struct Ocr {
     pub no_screenshot: bool,
 
     #[arg(long, help = "Image format for screenshot: jpeg, png, or webp")]
-    pub format: Option<String>,
+    pub image_format: Option<String>,
 
     #[arg(long, help = "JPEG quality 1-100 (default 85)")]
     pub quality: Option<u32>,
@@ -507,7 +526,7 @@ impl Ocr {
     ///
     /// Returns an error if screen recording permission is denied,
     /// or the target app/window is not found.
-    pub fn run(&self, provider: &dyn DesktopProvider) -> anyhow::Result<()> {
+    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
         let ss_options: Option<ScreenshotOptions> = if self.no_screenshot {
             None
         } else {
@@ -523,34 +542,25 @@ impl Ocr {
             ss_options.as_ref(),
         )?;
 
-        // Print screenshot path first
-        if let Some(ref path) = output.screenshot_path {
-            println!("{path}");
-        }
-
-        if self.global.json {
-            for r in &output.results {
-                let (cx, cy) = r.center();
-                println!(
-                    "{{\"text\": \"{}\", \"x\": {:.0}, \"y\": {:.0}, \"bounds\": {{\"x\": {:.0}, \"y\": {:.0}, \"w\": {:.0}, \"h\": {:.0}}}}}",
-                    r.text,
-                    cx, cy,
-                    r.bounds.x, r.bounds.y,
-                    r.bounds.width, r.bounds.height
-                );
-            }
+        if globals.json() {
+            println!(
+                "{}",
+                serde_json::to_string(&output).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+            );
         } else {
+            if let Some(ref path) = output.screenshot_path {
+                println!("{path}");
+            }
             for r in &output.results {
                 let (cx, cy) = r.center();
                 println!("{}  [{:.0},{:.0}]", r.text, cx, cy);
             }
-        }
-
-        if output.results.is_empty() {
-            if let Some(ref find) = self.find {
-                println!("No text matching '{find}' found");
-            } else {
-                println!("No text recognized");
+            if output.results.is_empty() {
+                if let Some(ref find) = self.find {
+                    println!("No text matching '{find}' found");
+                } else {
+                    println!("No text recognized");
+                }
             }
         }
 
@@ -559,7 +569,7 @@ impl Ocr {
 
     fn build_screenshot_options(&self) -> ScreenshotOptions {
         let fmt = self
-            .format
+            .image_format
             .as_deref()
             .and_then(|s| s.parse().ok())
             .unwrap_or(ImageFormat::BestAvailable);

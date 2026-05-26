@@ -5,15 +5,21 @@ use crate::core::role::Role;
 use crate::core::types::Rect;
 
 /// A node in the accessibility element tree.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
 pub struct ElementNode {
     pub role: Role,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    #[serde(rename = "ref", skip_serializing_if = "Option::is_none")]
     pub r#ref: Option<ElementRef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub attributes: Vec<(String, String)>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Self>,
 }
 
@@ -72,16 +78,19 @@ impl ElementNode {
 }
 
 /// The full accessibility tree for a window/app.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
 pub struct ElementTree {
     pub app: String,
     pub root: ElementNode,
     /// All refs assigned in this snapshot, in order.
+    #[serde(skip_serializing)]
     pub refs: std::collections::HashMap<ElementRef, ElementRefInfo>,
     /// Window bounds in screen coordinates.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub window_bounds: Option<Rect>,
     /// Performance timing breakdown.
+    #[serde(skip_serializing)]
     pub timing: Option<SnapshotTiming>,
 }
 
@@ -245,6 +254,12 @@ impl ElementRef {
     }
 }
 
+impl serde::Serialize for ElementRef {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 impl fmt::Display for ElementRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "@e{}", self.id)
@@ -252,9 +267,10 @@ impl fmt::Display for ElementRef {
 }
 
 /// Info stored alongside a ref for action dispatch.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ElementRefInfo {
     pub role: Role,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 

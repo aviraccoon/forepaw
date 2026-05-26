@@ -93,9 +93,10 @@ impl std::fmt::Display for AppTarget {
 }
 
 /// Info about a running application.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct AppInfo {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bundle_id: Option<String>,
     pub pid: i32,
 }
@@ -133,11 +134,12 @@ impl WindowTarget {
 }
 
 /// Info about a visible window.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct WindowInfo {
     pub id: String,
     pub title: String,
     pub app: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
 }
 
@@ -173,13 +175,15 @@ impl ActionResult {
 }
 
 /// An element in the ancestor chain of a hit-test result.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct AncestorInfo {
     /// The element role.
     pub role: Role,
     /// The element's accessible name, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// Bounds in screen coordinates.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
 }
 
@@ -189,17 +193,22 @@ pub struct AncestorInfo {
 /// ordered root-first (index 0 = root application element).
 /// The element is the leaf hit by the platform hit-test API
 /// (e.g. `AXUIElementCopyElementAtPosition` returns the deepest child).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct HitTestResult {
     pub role: Role,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
     /// Available actions on this element (e.g. `Press`, `ShowMenu`).
     /// Platform-specific: `AXActionNames` on macOS, Control Patterns on Windows,
     /// Action names on AT-SPI2.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<String>,
     /// Ancestor chain from root to parent, ordered root-first.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub ancestors: Vec<AncestorInfo>,
     /// PID of the owning application.
     pub pid: i32,

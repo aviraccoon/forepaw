@@ -4,7 +4,28 @@ pub mod observation;
 pub mod parse;
 pub mod system;
 
+use crate::core::output_formatter::OutputFormat;
 use crate::platform::{AppTarget, WindowTarget};
+
+/// Global options parsed from the top-level `forepaw` command.
+///
+/// Passed to every subcommand's `run()` method.
+#[derive(Debug, Clone, Copy)]
+pub struct GlobalArgs {
+    pub format: OutputFormat,
+}
+
+impl GlobalArgs {
+    #[must_use]
+    pub fn new(format: OutputFormat) -> Self {
+        Self { format }
+    }
+
+    #[must_use]
+    pub fn json(&self) -> bool {
+        self.format == OutputFormat::Json
+    }
+}
 
 /// `--app` and `--pid` flags (mutually exclusive).
 ///
