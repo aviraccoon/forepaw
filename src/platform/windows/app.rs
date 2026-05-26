@@ -141,6 +141,8 @@ struct WindowEntry {
 
 impl From<WindowEntry> for WindowInfo {
     fn from(e: WindowEntry) -> Self {
+        // TODO: populate state via IsIconic (Minimized), IsZoomed (Maximized),
+        // and bounds comparison for fullscreen. Needs VM testing.
         Self {
             id: format!("w-{}", e.hwnd),
             title: e.title,

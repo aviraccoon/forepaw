@@ -388,6 +388,8 @@ pub fn list_windows(app: Option<&AppTarget>) -> Result<Vec<WindowInfo>, ForepawE
                 title,
                 app: app_name_val.clone(),
                 bounds,
+                // TODO: populate state via _NET_WM_STATE X11 property
+                // (fullscreen, maximized, minimized). Needs VM testing.
                 state: None,
             });
         }

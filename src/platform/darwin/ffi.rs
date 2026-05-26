@@ -228,6 +228,12 @@ extern "C" {
     pub(super) fn CGPreflightScreenCaptureAccess() -> Boolean;
     pub(super) fn CGRequestScreenCaptureAccess() -> Boolean;
     pub(super) fn CGMainDisplayID() -> u32;
+    pub(super) fn CGGetOnlineDisplayList(
+        max_displays: u32,
+        online_displays: *mut u32,
+        display_count: *mut u32,
+    ) -> i32;
+    pub(super) fn CGDisplayBounds(display: u32) -> CGRectFFI;
 }
 
 // ---------------------------------------------------------------------------
@@ -535,6 +541,7 @@ extern "C" {
     pub(super) static kCGWindowOwnerPID: CFStringRef;
     pub(super) static kCGWindowName: CFStringRef;
     pub(super) static kCGWindowBounds: CFStringRef;
+    pub(super) static kCGWindowLayer: CFStringRef;
 
     // CFDictionary callback globals
     pub(super) static kCFTypeDictionaryKeyCallBacks: CFDictionaryKeyCallBacks;

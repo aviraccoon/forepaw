@@ -15,17 +15,18 @@ use objc2_foundation::NSString;
 use crate::core::errors::ForepawError;
 use crate::core::types::{Point, Rect};
 use crate::platform::darwin::ffi::{
-    kCGWindowBounds, kCGWindowName, kCGWindowNumber, kCGWindowOwnerName, kCGWindowOwnerPID,
-    AXIsProcessTrusted, AXUIElementCreateApplication, AXUIElementRef, AXUIElementSetAttributeValue,
-    CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef, CFDictionaryGetTypeID,
-    CFDictionaryGetValue, CFDictionaryRef, CFGetTypeID, CFIndex, CFNumberGetTypeID,
-    CFNumberGetValue, CFNumberRef, CFRelease, CFStringGetCString, CFStringGetCStringPtr,
-    CFStringGetTypeID, CFStringRef, CFTypeRef, CGWindowListCopyWindowInfo,
-    CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY, K_CF_NUMBER_DOUBLE_TYPE, K_CF_NUMBER_SINT32_TYPE,
-    K_CF_STRING_ENCODING_UTF8, K_CG_NULL_WINDOW_ID,
+    kCGWindowBounds, kCGWindowLayer, kCGWindowName, kCGWindowNumber, kCGWindowOwnerName,
+    kCGWindowOwnerPID, AXIsProcessTrusted, AXUIElementCreateApplication, AXUIElementRef,
+    AXUIElementSetAttributeValue, CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef,
+    CFDictionaryGetTypeID, CFDictionaryGetValue, CFDictionaryRef, CFGetTypeID, CFIndex,
+    CFNumberGetTypeID, CFNumberGetValue, CFNumberRef, CFRelease, CFStringGetCString,
+    CFStringGetCStringPtr, CFStringGetTypeID, CFStringRef, CFTypeRef, CGDisplayBounds,
+    CGGetOnlineDisplayList, CGWindowListCopyWindowInfo, CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY,
+    K_CF_NUMBER_DOUBLE_TYPE, K_CF_NUMBER_SINT32_TYPE, K_CF_STRING_ENCODING_UTF8,
+    K_CG_NULL_WINDOW_ID,
 };
 use crate::platform::darwin::snapshot::{fetch_batch_attributes, ATTR_CHILDREN, ATTR_ROLE};
-use crate::platform::{AppInfo, WindowInfo, WindowTarget};
+use crate::platform::{AppInfo, WindowInfo, WindowState, WindowTarget};
 
 // ---------------------------------------------------------------------------
 // Permission gating
@@ -39,6 +40,68 @@ fn require_accessibility() -> Result<(), ForepawError> {
     } else {
         Ok(())
     }
+}
+
+// ---------------------------------------------------------------------------
+// Window state detection
+// ---------------------------------------------------------------------------
+
+/// Collect bounding rects of all online displays.
+///
+/// Returns empty vec if the CG call fails (shouldn't happen in practice).
+fn screen_rects() -> Vec<Rect> {
+    let max_displays = 16_u32;
+    let mut display_ids = [0u32; 16];
+    let mut display_count = 0_u32;
+    // SAFETY: CGGetOnlineDisplayList writes to caller-provided buffers.
+    let result = unsafe {
+        CGGetOnlineDisplayList(
+            max_displays,
+            display_ids.as_mut_ptr(),
+            &raw mut display_count,
+        )
+    };
+    if result != 0 {
+        return Vec::new();
+    }
+    let count = usize::try_from(display_count).unwrap_or(0);
+    let mut rects = Vec::with_capacity(count);
+    for &display_id in display_ids.iter().take(count) {
+        // SAFETY: CGDisplayBounds returns a CGRectFFI for a valid display ID.
+        let cg_rect = unsafe { CGDisplayBounds(display_id) };
+        rects.push(Rect::new(
+            cg_rect.origin.x,
+            cg_rect.origin.y,
+            cg_rect.size.width,
+            cg_rect.size.height,
+        ));
+    }
+    rects
+}
+
+/// Detect window state by comparing bounds to screen rects.
+///
+/// macOS `CGWindowListCopyWindowInfo` with `ON_SCREEN_ONLY` excludes
+/// minimized windows, so we only distinguish Normal vs Fullscreen.
+/// A window is fullscreen if its bounds cover an entire screen.
+fn detect_window_state(bounds: &Rect, layer: Option<i32>) -> WindowState {
+    // Only layer-0 windows (normal app windows) can be fullscreen.
+    // Other layers are system chrome (menu bar, Dock), floating panels,
+    // overlays, or background windows that happen to be screen-sized.
+    if layer != Some(0) {
+        return WindowState::Normal;
+    }
+    for screen in &screen_rects() {
+        // Allow 2px tolerance for rounding / decoration edge cases
+        let covers_x = (bounds.x - screen.x).abs() <= 2.0;
+        let covers_y = (bounds.y - screen.y).abs() <= 2.0;
+        let covers_w = (bounds.width - screen.width).abs() <= 2.0;
+        let covers_h = (bounds.height - screen.height).abs() <= 2.0;
+        if covers_x && covers_y && covers_w && covers_h {
+            return WindowState::Fullscreen;
+        }
+    }
+    WindowState::Normal
 }
 
 // ---------------------------------------------------------------------------
@@ -302,12 +365,15 @@ pub fn list_windows(
             if bounds.width < 10.0 || bounds.height < 10.0 {
                 continue;
             }
+            // SAFETY: dict accessor on valid CFDictionary.
+            let layer = unsafe { get_dict_i32(info, kCGWindowLayer) };
+            let state = detect_window_state(&bounds, layer);
             result.push(WindowInfo {
                 id: format!("w-{id_num}"),
                 title,
                 app: owner,
                 bounds: Some(bounds),
-                state: None,
+                state: Some(state),
             });
         }
     }
