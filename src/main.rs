@@ -31,6 +31,14 @@ struct App {
     )]
     format: OutputFormat,
 
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Show additional detail (native roles, attributes, identifiers)"
+    )]
+    verbose: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -77,7 +85,7 @@ fn main() -> anyhow::Result<()> {
     let provider = forepaw::platform::linux::LinuxProvider::new();
 
     let provider = &provider as &dyn DesktopProvider;
-    let globals = GlobalArgs::new(app.format);
+    let globals = GlobalArgs::new(app.format, app.verbose);
 
     match app.command {
         Commands::Snapshot(cmd) => cmd.run(provider, &globals),

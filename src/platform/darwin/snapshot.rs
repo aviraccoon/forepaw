@@ -23,9 +23,10 @@ use super::ffi::{
     kCFNull, kCFTypeArrayCallBacks, AXError, AXUIElementCopyAttributeValue,
     AXUIElementCopyMultipleAttributeValues, AXUIElementCreateApplication, AXUIElementRef,
     AXValueGetValue, AXValueRef, AXValueType, CFArrayCreate, CFArrayGetCount, CFArrayGetTypeID,
-    CFArrayGetValueAtIndex, CFArrayRef, CFGetTypeID, CFIndex, CFNumberGetTypeID, CFNumberGetValue,
-    CFNumberRef, CFRelease, CFRetain, CFStringGetCString, CFStringGetCStringPtr, CFStringGetLength,
-    CFStringGetTypeID, CFStringRef, CFTypeRef, CGPointFFI, CGSizeFFI, K_CF_NUMBER_DOUBLE_TYPE,
+    CFArrayGetValueAtIndex, CFArrayRef, CFBooleanGetTypeID, CFBooleanGetValue, CFBooleanRef,
+    CFGetTypeID, CFIndex, CFNumberGetTypeID, CFNumberGetValue, CFNumberRef, CFRelease, CFRetain,
+    CFStringGetCString, CFStringGetCStringPtr, CFStringGetLength, CFStringGetTypeID, CFStringRef,
+    CFTypeRef, CGPointFFI, CGSizeFFI, K_CF_NUMBER_DOUBLE_TYPE, K_CF_NUMBER_SINT32_TYPE,
     K_CF_STRING_ENCODING_UTF8,
 };
 use super::role::ax_role_to_role;
@@ -47,7 +48,10 @@ const ATTR_HELP: usize = 9;
 const ATTR_PLACEHOLDER_VALUE: usize = 10;
 const ATTR_DOM_CLASS_LIST: usize = 11;
 const ATTR_ROLE_DESCRIPTION: usize = 12;
-const ATTR_COUNT: usize = 13;
+const ATTR_ENABLED: usize = 13;
+const ATTR_FOCUSED: usize = 14;
+const ATTR_SELECTED: usize = 15;
+const ATTR_COUNT: usize = 16;
 
 /// Attribute names for batch fetching.
 const BATCH_ATTR_NAMES: [&str; ATTR_COUNT] = [
@@ -64,6 +68,9 @@ const BATCH_ATTR_NAMES: [&str; ATTR_COUNT] = [
     "AXPlaceholderValue", // 10
     "AXDOMClassList",     // 11
     "AXRoleDescription",  // 12
+    "AXEnabled",          // 13
+    "AXFocused",          // 14
+    "AXSelected",         // 15
 ];
 
 /// Cached `CFArray` of attribute name strings for batch fetching.
@@ -418,6 +425,37 @@ impl BatchAttrs {
         Some(Rect::new(pt.x, pt.y, w, h))
     }
 
+    /// Extract a bool from a `CFBoolean` attribute.
+    fn bool_val(&self, idx: usize) -> Option<bool> {
+        let val = self.raw(idx)?;
+        #[expect(
+            clippy::multiple_unsafe_ops_per_block,
+            reason = "type check + bool conversion"
+        )]
+        // SAFETY: CFBoolean is toll-free bridged with NSNumber.
+        // CFGetTypeID and CFBooleanGetValue are read-only type checks
+        // on valid CFTypeRef values returned from BatchAttrs::raw().
+        unsafe {
+            // CFBoolean has its own type ID
+            let type_id = CFGetTypeID(val);
+            if type_id == CFBooleanGetTypeID() {
+                // CFBooleanGetValue returns true for kCFBooleanTrue
+                Some(CFBooleanGetValue(val as CFBooleanRef) != 0)
+            } else if type_id == CFNumberGetTypeID() {
+                // Fallback: NSNumber with 0/1
+                let mut result: i32 = 0;
+                CFNumberGetValue(
+                    val as CFNumberRef,
+                    K_CF_NUMBER_SINT32_TYPE,
+                    (&raw mut result).cast::<std::ffi::c_void>(),
+                );
+                Some(result != 0)
+            } else {
+                None
+            }
+        }
+    }
+
     /// Extract child `AXUIElement` refs from the `AXChildren` attribute.
     pub(super) fn children(&self, idx: usize) -> Vec<AXUIElementRef> {
         let Some(val) = self.raw(idx) else {
@@ -572,6 +610,10 @@ fn build_tree(
                     value,
                     r#ref: None,
                     bounds,
+                    enabled: None,
+                    focused: None,
+                    selected: None,
+                    description: None,
                     attributes,
                     children: Vec::new(),
                 };
@@ -592,6 +634,10 @@ fn build_tree(
                     value: None,
                     r#ref: None,
                     bounds: Some(*b),
+                    enabled: None,
+                    focused: None,
+                    selected: None,
+                    description: None,
                     attributes,
                     children: Vec::new(),
                 };
@@ -612,12 +658,30 @@ fn build_tree(
         .or_else(|| non_empty(attrs.string(ATTR_DESCRIPTION).as_ref()))
         .or_else(|| computed_name(&attrs, &children, element));
 
+    let enabled = attrs.bool_val(ATTR_ENABLED);
+    // Note: AXFocused conflates focusable and focused on macOS (W3C Core-AAM).
+    // The actual focused element is AXFocusedUIElement on the app (separate IPC).
+    let focused = attrs.bool_val(ATTR_FOCUSED);
+    let selected = attrs.bool_val(ATTR_SELECTED);
+
+    // Description: use AXDescription if it wasn't already used as the name.
+    // (computed_name already falls back to AXDescription, so only show it
+    // if it's different from the title and wasn't consumed by name resolution.)
+    let description = attrs
+        .string(ATTR_DESCRIPTION)
+        .and_then(|d| if d.is_empty() { None } else { Some(d) })
+        .filter(|d| name.as_ref() != Some(d));
+
     ElementNode {
         role,
         name,
         value,
         r#ref: None,
         bounds,
+        enabled,
+        focused,
+        selected,
+        description,
         attributes,
         children,
     }

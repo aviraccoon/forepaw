@@ -73,6 +73,10 @@ impl RefAssigner {
         new_node.value.clone_from(&node.value);
         new_node.r#ref = new_ref.or(node.r#ref);
         new_node.bounds = node.bounds;
+        new_node.enabled = node.enabled;
+        new_node.focused = node.focused;
+        new_node.selected = node.selected;
+        new_node.description.clone_from(&node.description);
         new_node.attributes.clone_from(&node.attributes);
         new_node.children = children;
         new_node

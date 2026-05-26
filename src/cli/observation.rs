@@ -126,7 +126,7 @@ impl Snapshot {
                 serde_json::to_string(&tree).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
             );
         } else if self.diff {
-            let tree_renderer = TreeRenderer::new();
+            let tree_renderer = TreeRenderer::new(false);
             let rendered = tree_renderer.render(&tree);
             if let Some(previous) = cache.load(&cache_key) {
                 let differ = SnapshotDiffer::new();
@@ -137,7 +137,7 @@ impl Snapshot {
                 println!("{rendered}");
             }
         } else {
-            let tree_renderer = TreeRenderer::new();
+            let tree_renderer = TreeRenderer::new(globals.verbose);
             let rendered = tree_renderer.render(&tree);
             println!("{rendered}");
         }
@@ -148,7 +148,7 @@ impl Snapshot {
         }
 
         // Always cache text rendering for future diffs
-        let tree_renderer = TreeRenderer::new();
+        let tree_renderer = TreeRenderer::new(false);
         let rendered = tree_renderer.render(&tree);
         cache.save(&cache_key, &rendered).ok();
 
@@ -377,7 +377,12 @@ impl ListWindows {
             );
         } else {
             for w in windows {
-                println!("{}  {}  \"{}\"", w.id, w.app, w.title);
+                let bounds = w
+                    .bounds
+                    .as_ref()
+                    .map(|b| format!("  [{:.0},{:.0} {:.0}x{:.0}]", b.x, b.y, b.width, b.height))
+                    .unwrap_or_default();
+                println!("{}  {}  \"{}\"{}", w.id, w.app, w.title, bounds);
             }
         }
         Ok(())

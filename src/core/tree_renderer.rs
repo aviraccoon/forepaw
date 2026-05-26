@@ -2,19 +2,37 @@
 use crate::core::element_tree::ElementTree;
 use crate::core::types::Rect;
 
-pub struct TreeRenderer;
+pub struct TreeRenderer {
+    verbose: bool,
+}
 
 impl TreeRenderer {
     #[must_use]
-    pub fn new() -> Self {
-        Self
+    pub fn new(verbose: bool) -> Self {
+        Self { verbose }
     }
 
     #[must_use]
     pub fn render(&self, tree: &ElementTree) -> String {
         let mut lines: Vec<String> = Vec::new();
-        lines.push(format!("app: {}", tree.app));
-        Self::render_node(&tree.root, 0, tree.window_bounds.as_ref(), &mut lines);
+
+        // Header: app name and window bounds
+        if let Some(wb) = &tree.window_bounds {
+            lines.push(format!(
+                "app: {}  window: [{:.0},{:.0} {:.0}x{:.0}]",
+                tree.app, wb.x, wb.y, wb.width, wb.height
+            ));
+        } else {
+            lines.push(format!("app: {}", tree.app));
+        }
+
+        Self::render_node(
+            &tree.root,
+            0,
+            tree.window_bounds.as_ref(),
+            self.verbose,
+            &mut lines,
+        );
         lines.join("\n")
     }
 
@@ -22,6 +40,7 @@ impl TreeRenderer {
         node: &crate::core::element_tree::ElementNode,
         indent: usize,
         window_origin: Option<&Rect>,
+        verbose: bool,
         lines: &mut Vec<String>,
     ) {
         let prefix = "  ".repeat(indent);
@@ -56,6 +75,21 @@ impl TreeRenderer {
             }
         }
 
+        // Element state
+        let mut state_parts: Vec<&'static str> = Vec::new();
+        if let Some(false) = node.enabled {
+            state_parts.push("disabled");
+        }
+        if node.focused == Some(true) {
+            state_parts.push("focused");
+        }
+        if node.selected == Some(true) {
+            state_parts.push("selected");
+        }
+        if !state_parts.is_empty() {
+            parts.push(state_parts.join(" "));
+        }
+
         // Bounds (window-relative when window bounds are available)
         if let Some(b) = &node.bounds {
             let (display_x, display_y) = if let Some(w) = window_origin {
@@ -70,6 +104,15 @@ impl TreeRenderer {
             ));
         }
 
+        // Verbose: description
+        if verbose {
+            if let Some(desc) = &node.description {
+                if !desc.is_empty() {
+                    parts.push(format!("desc=\"{desc}\""));
+                }
+            }
+        }
+
         // Extra attributes (sorted by key)
         let mut sorted_attrs = node.attributes.clone();
         sorted_attrs.sort_by(|a, b| a.0.cmp(&b.0));
@@ -80,14 +123,14 @@ impl TreeRenderer {
         lines.push(format!("{prefix}{}", parts.join(" ")));
 
         for child in &node.children {
-            Self::render_node(child, indent + 1, window_origin, lines);
+            Self::render_node(child, indent + 1, window_origin, verbose, lines);
         }
     }
 }
 
 impl Default for TreeRenderer {
     fn default() -> Self {
-        Self::new()
+        Self::new(false)
     }
 }
 
@@ -116,7 +159,7 @@ mod tests {
                 ]),
         );
 
-        let renderer = TreeRenderer::new();
+        let renderer = TreeRenderer::new(false);
         let output = renderer.render(&tree);
         let lines: Vec<&str> = output.lines().collect();
 
@@ -130,7 +173,7 @@ mod tests {
     fn display_is_lowercase() {
         let tree = ElementTree::new("App", ElementNode::new(Role::SplitGroup));
 
-        let renderer = TreeRenderer::new();
+        let renderer = TreeRenderer::new(false);
         let output = renderer.render(&tree);
 
         assert!(output.contains("splitgroup"));
@@ -145,7 +188,7 @@ mod tests {
             ElementNode::new(Role::TextField).with_value(&long_value),
         );
 
-        let renderer = TreeRenderer::new();
+        let renderer = TreeRenderer::new(false);
         let output = renderer.render(&tree);
 
         assert!(output.contains("..."));
@@ -160,7 +203,7 @@ mod tests {
                 .with_children(vec![ElementNode::new(Role::Button).with_name("Deep")])]),
         );
 
-        let renderer = TreeRenderer::new();
+        let renderer = TreeRenderer::new(false);
         let output = renderer.render(&tree);
         let lines: Vec<&str> = output.lines().collect();
 
@@ -173,7 +216,7 @@ mod tests {
     fn omits_empty_name_and_value() {
         let tree = ElementTree::new("App", ElementNode::new(Role::Group));
 
-        let renderer = TreeRenderer::new();
+        let renderer = TreeRenderer::new(false);
         let output = renderer.render(&tree);
 
         assert_eq!(output, "app: App\ngroup");
@@ -193,10 +236,12 @@ mod tests {
         )
         .with_window_bounds(Rect::new(100.0, 200.0, 800.0, 600.0));
 
-        let renderer = TreeRenderer::new();
+        let renderer = TreeRenderer::new(false);
         let output = renderer.render(&tree);
         let lines: Vec<&str> = output.lines().collect();
 
+        // Header includes window bounds
+        assert_eq!(lines[0], "app: App  window: [100,200 800x600]");
         // Window itself should be at 0,0 relative to itself
         assert_eq!(lines[1], "window \"Main\" (0,0 800x600)");
         // Button at 150,250 screen -> 50,50 window-relative
@@ -216,7 +261,7 @@ mod tests {
                     .with_bounds(Rect::new(150.0, 250.0, 80.0, 30.0))]),
         );
 
-        let renderer = TreeRenderer::new();
+        let renderer = TreeRenderer::new(false);
         let output = renderer.render(&tree);
         let lines: Vec<&str> = output.lines().collect();
 
@@ -234,10 +279,80 @@ mod tests {
                 .with_ref(ElementRef::new(1)),
         );
 
-        let renderer = TreeRenderer::new();
+        let renderer = TreeRenderer::new(false);
         let output = renderer.render(&tree);
 
         assert!(!output.contains('('));
         assert!(output.contains("button @e1 \"OK\""));
+    }
+
+    #[test]
+    fn shows_disabled_state() {
+        let tree = ElementTree::new(
+            "App",
+            ElementNode::new(Role::Button)
+                .with_name("OK")
+                .with_ref(ElementRef::new(1))
+                .with_enabled(false),
+        );
+
+        let renderer = TreeRenderer::new(false);
+        let output = renderer.render(&tree);
+
+        assert!(output.contains("disabled"));
+        assert!(output.contains("button @e1 \"OK\" disabled"));
+    }
+
+    #[test]
+    fn shows_focused_and_selected() {
+        let tree = ElementTree::new(
+            "App",
+            ElementNode::new(Role::TextField)
+                .with_name("Name")
+                .with_ref(ElementRef::new(1))
+                .with_focused(true)
+                .with_selected(true),
+        );
+
+        let renderer = TreeRenderer::new(false);
+        let output = renderer.render(&tree);
+
+        assert!(output.contains("focused selected"));
+    }
+
+    #[test]
+    fn enabled_true_is_not_shown() {
+        let tree = ElementTree::new(
+            "App",
+            ElementNode::new(Role::Button)
+                .with_name("OK")
+                .with_ref(ElementRef::new(1))
+                .with_enabled(true),
+        );
+
+        let renderer = TreeRenderer::new(false);
+        let output = renderer.render(&tree);
+
+        assert!(!output.contains("enabled"));
+        assert!(output.contains("button @e1 \"OK\""));
+    }
+
+    #[test]
+    fn verbose_shows_description() {
+        let tree = ElementTree::new(
+            "App",
+            ElementNode::new(Role::Button)
+                .with_name("OK")
+                .with_ref(ElementRef::new(1))
+                .with_description("Confirms the action"),
+        );
+
+        let renderer = TreeRenderer::new(false);
+        let output = renderer.render(&tree);
+        assert!(!output.contains("desc="));
+
+        let renderer = TreeRenderer::new(true);
+        let output = renderer.render(&tree);
+        assert!(output.contains("desc=\"Confirms the action\""));
     }
 }

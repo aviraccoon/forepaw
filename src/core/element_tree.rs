@@ -17,6 +17,20 @@ pub struct ElementNode {
     pub r#ref: Option<ElementRef>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
+    /// Whether the element is enabled (interactive). `None` if the platform
+    /// doesn't report this state (e.g. structural containers).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// Whether the element currently has keyboard focus.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focused: Option<bool>,
+    /// Whether the element is selected (e.g. tab, list item, table row).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected: Option<bool>,
+    /// Accessible description (tooltip text, help text, or detailed label).
+    /// Distinct from `name` -- description provides additional context.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub attributes: Vec<(String, String)>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -31,6 +45,10 @@ impl ElementNode {
             value: None,
             r#ref: None,
             bounds: None,
+            enabled: None,
+            focused: None,
+            selected: None,
+            description: None,
             attributes: Vec::new(),
             children: Vec::new(),
         }
@@ -53,6 +71,26 @@ impl ElementNode {
 
     pub fn with_bounds(mut self, bounds: Rect) -> Self {
         self.bounds = Some(bounds);
+        self
+    }
+
+    pub fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = Some(enabled);
+        self
+    }
+
+    pub fn with_focused(mut self, focused: bool) -> Self {
+        self.focused = Some(focused);
+        self
+    }
+
+    pub fn with_selected(mut self, selected: bool) -> Self {
+        self.selected = Some(selected);
+        self
+    }
+
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
         self
     }
 

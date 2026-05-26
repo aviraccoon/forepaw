@@ -13,12 +13,13 @@ use crate::platform::{AppTarget, WindowTarget};
 #[derive(Debug, Clone, Copy)]
 pub struct GlobalArgs {
     pub format: OutputFormat,
+    pub verbose: bool,
 }
 
 impl GlobalArgs {
     #[must_use]
-    pub fn new(format: OutputFormat) -> Self {
-        Self { format }
+    pub fn new(format: OutputFormat, verbose: bool) -> Self {
+        Self { format, verbose }
     }
 
     #[must_use]

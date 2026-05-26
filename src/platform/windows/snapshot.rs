@@ -158,6 +158,10 @@ fn build_tree(
                     value: None,
                     r#ref: None,
                     bounds,
+                    enabled: None,
+                    focused: None,
+                    selected: None,
+                    description: None,
                     attributes: Vec::new(),
                     children: Vec::new(),
                 };
@@ -173,6 +177,10 @@ fn build_tree(
             value: None,
             r#ref: None,
             bounds,
+            enabled: None,
+            focused: None,
+            selected: None,
+            description: None,
             attributes: Vec::new(),
             children: Vec::new(),
         };
@@ -196,6 +204,11 @@ fn build_tree(
         value: None, // TODO: UIA Value pattern for element values
         r#ref: None,
         bounds,
+        // TODO: populate from UIA (IsEnabled, HasKeyboardFocus, IsSelected, HelpText)
+        enabled: None,
+        focused: None,
+        selected: None,
+        description: None,
         attributes: Vec::new(),
         children,
     }

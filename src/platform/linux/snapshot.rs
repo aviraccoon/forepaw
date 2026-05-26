@@ -143,6 +143,10 @@ fn build_tree(
                     value: None,
                     r#ref: None,
                     bounds,
+                    enabled: None,
+                    focused: None,
+                    selected: None,
+                    description: None,
                     attributes: Vec::new(),
                     children: Vec::new(),
                 };
@@ -162,6 +166,10 @@ fn build_tree(
                     value: None,
                     r#ref: None,
                     bounds,
+                    enabled: None,
+                    focused: None,
+                    selected: None,
+                    description: None,
                     attributes: Vec::new(),
                     children: Vec::new(),
                 };
@@ -219,6 +227,11 @@ fn build_tree(
         value,
         r#ref: None,
         bounds,
+        // TODO: populate from AT-SPI2 StateSet (ENABLED, FOCUSED, SELECTED) and Description
+        enabled: None,
+        focused: None,
+        selected: None,
+        description: None,
         attributes,
         children,
     }
