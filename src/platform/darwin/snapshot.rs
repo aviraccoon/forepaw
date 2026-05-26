@@ -13,6 +13,7 @@ use crate::core::errors::ForepawError;
 use crate::core::icon_class_parser::IconClassParser;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::types::{Point, Rect};
+use crate::debug;
 use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
 
 use super::app::{
@@ -182,8 +183,15 @@ pub fn snapshot(
     // Electron apps need AXManualAccessibility + polling for tree population.
     let is_electron = is_electron_app(&running_app);
     let pid = running_app.processIdentifier();
+    debug!(
+        "snapshot: app={} pid={} is_electron={}",
+        app.display(),
+        pid,
+        is_electron
+    );
     if is_electron {
         enable_electron_accessibility(pid);
+        let poll_start = std::time::Instant::now();
         if !electron_tree_is_populated(pid) {
             for _ in 0..6 {
                 std::thread::sleep(std::time::Duration::from_millis(500));
@@ -192,6 +200,10 @@ pub fn snapshot(
                 }
             }
         }
+        debug!(
+            "snapshot: electron poll took {:.0}ms",
+            poll_start.elapsed().as_secs_f64() * 1000.0
+        );
     }
 
     let effective_depth = if is_electron {

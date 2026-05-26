@@ -22,6 +22,7 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 |------|----------|
 | Add/modify CLI commands | `src/cli/action.rs`, `src/cli/observation.rs`, `src/cli/system.rs` |
 | Platform-agnostic types & logic | `src/core/` |
+| Logging (FOREPAW_LOG env var) | `src/log.rs` |
 | Platform abstraction (DesktopProvider trait) | `src/platform/mod.rs` |
 | macOS backend (AX, OCR, input, screenshots) | `src/platform/darwin/` |
 | Test apps (SwiftUI, manual testing) | `TestApps/` |
@@ -70,3 +71,4 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 - Use `anyhow::Result` in CLI command methods; use `Result<_, ForepawError>` in platform/trait methods.
 - **Per-site `#[expect]` for cast lints, never fn-wide.** Fn-wide `#[expect(clippy::cast_*)]` silently suppresses new casts added later. Always annotate the specific `as` expression with `#[expect(clippy::cast_X, reason = "why this is safe")]`. For display-only casts (format strings), prefer eliminating the cast entirely by formatting f64 directly with `{:.0}` instead of casting to `i32`/`i64` first.
 - `forepaw-audit` and other companion tools depend on this crate as a library dependency (not subprocess/JSON). Keep the lib surface clean.
+- **Debug logging**: `FOREPAW_LOG=debug` or `FOREPAW_LOG=snapshot=debug`. Zero-deps, uses `RUST_LOG` as fallback. See `src/log.rs`.

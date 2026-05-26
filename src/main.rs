@@ -51,6 +51,8 @@ enum Commands {
 }
 
 fn main() -> anyhow::Result<()> {
+    forepaw::log::init();
+
     let app = App::parse();
 
     #[cfg(target_os = "macos")]
