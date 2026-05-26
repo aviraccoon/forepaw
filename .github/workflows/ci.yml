@@ -6,17 +6,23 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   macos:
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rustfmt
 
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: |
             ~/.cargo/registry
@@ -25,23 +31,28 @@ jobs:
           key: cargo-macos-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-macos-
 
-      - name: Lint + test
-        run: |
-          cargo clippy -- -D warnings
-          cargo test
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Lint
+        run: cargo clippy -- -D warnings
+
+      - name: Test
+        run: cargo test
 
   windows:
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: aarch64-pc-windows-msvc,x86_64-pc-windows-msvc
+          components: rustfmt
 
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: |
             ~/.cargo/registry
@@ -50,8 +61,14 @@ jobs:
           key: cargo-windows-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-windows-
 
+      - name: Check formatting
+        run: cargo fmt --check
+
       - name: Check ARM64
         run: cargo check --target aarch64-pc-windows-msvc
+
+      - name: Lint ARM64
+        run: cargo clippy --target aarch64-pc-windows-msvc -- -D warnings
 
       - name: Check x86_64
         run: cargo check --target x86_64-pc-windows-msvc
@@ -62,23 +79,21 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: x86_64-unknown-linux-musl
+          components: rustfmt
 
-      - name: Install zig
-        uses: mlugg/setup-zig@v2
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31
         with:
-          version: 0.13.0
-
-      - name: Install cargo-zigbuild
-        run: cargo install cargo-zigbuild
+          extra_nix_config: experimental-features = nix-command flakes
 
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: |
             ~/.cargo/registry
@@ -87,12 +102,14 @@ jobs:
           key: cargo-linux-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-linux-
 
+      - name: Check formatting
+        run: cargo fmt --check
+
       - name: Check generated AT-SPI roles
-        run: |
-          diff <(bash res/generate_atspi_roles.sh) src/platform/linux/atspi_roles.rs
+        run: diff <(bash res/generate_atspi_roles.sh) src/platform/linux/atspi_roles.rs
 
       - name: Check musl x86_64
-        run: cargo zigbuild --target x86_64-unknown-linux-musl --lib
+        run: nix develop .# --command cargo zigbuild --target x86_64-unknown-linux-musl --lib
 
       - name: Lint musl x86_64
-        run: cargo clippy --target x86_64-unknown-linux-musl -- -D warnings
+        run: nix develop .# --command cargo clippy --target x86_64-unknown-linux-musl -- -D warnings
