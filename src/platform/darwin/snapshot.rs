@@ -407,7 +407,7 @@ impl BatchAttrs {
     }
 
     /// Extract child `AXUIElement` refs from the `AXChildren` attribute.
-    fn children(&self, idx: usize) -> Vec<AXUIElementRef> {
+    pub(super) fn children(&self, idx: usize) -> Vec<AXUIElementRef> {
         let Some(val) = self.raw(idx) else {
             return Vec::new();
         };

@@ -12,20 +12,19 @@ use objc2::Message;
 use objc2_app_kit::NSRunningApplication;
 use objc2_foundation::NSString;
 
-use crate::core::element_tree::is_interactive_role;
 use crate::core::errors::ForepawError;
 use crate::core::types::{Point, Rect};
 use crate::platform::darwin::ffi::{
     kCGWindowBounds, kCGWindowName, kCGWindowNumber, kCGWindowOwnerName, kCGWindowOwnerPID,
-    AXError, AXIsProcessTrusted, AXUIElementCopyAttributeValue, AXUIElementCreateApplication,
-    AXUIElementRef, AXUIElementSetAttributeValue, CFArrayGetCount, CFArrayGetTypeID,
-    CFArrayGetValueAtIndex, CFArrayRef, CFDictionaryGetTypeID, CFDictionaryGetValue,
-    CFDictionaryRef, CFGetTypeID, CFIndex, CFNumberGetTypeID, CFNumberGetValue, CFNumberRef,
-    CFRelease, CFRetain, CFStringGetCString, CFStringGetCStringPtr, CFStringGetTypeID, CFStringRef,
-    CFTypeRef, CGWindowListCopyWindowInfo, CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY,
-    K_CF_NUMBER_DOUBLE_TYPE, K_CF_NUMBER_SINT32_TYPE, K_CF_STRING_ENCODING_UTF8,
-    K_CG_NULL_WINDOW_ID,
+    AXIsProcessTrusted, AXUIElementCreateApplication, AXUIElementRef, AXUIElementSetAttributeValue,
+    CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef, CFDictionaryGetTypeID,
+    CFDictionaryGetValue, CFDictionaryRef, CFGetTypeID, CFIndex, CFNumberGetTypeID,
+    CFNumberGetValue, CFNumberRef, CFRelease, CFStringGetCString, CFStringGetCStringPtr,
+    CFStringGetTypeID, CFStringRef, CFTypeRef, CGWindowListCopyWindowInfo,
+    CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY, K_CF_NUMBER_DOUBLE_TYPE, K_CF_NUMBER_SINT32_TYPE,
+    K_CF_STRING_ENCODING_UTF8, K_CG_NULL_WINDOW_ID,
 };
+use crate::platform::darwin::snapshot::{fetch_batch_attributes, ATTR_CHILDREN, ATTR_ROLE};
 use crate::platform::{AppInfo, WindowInfo, WindowTarget};
 
 // ---------------------------------------------------------------------------
@@ -390,12 +389,12 @@ pub fn enable_electron_accessibility(pid: i32) {
 }
 
 /// Check if an Electron app's web content tree is populated.
-/// Looks for an `AXWebArea` with interactive children.
+/// Looks for an `AXWebArea` with any child elements.
 #[must_use]
 pub fn electron_tree_is_populated(pid: i32) -> bool {
     // SAFETY: AXUIElementCreateApplication is a system call, no preconditions.
     let app_element = unsafe { AXUIElementCreateApplication(pid) };
-    has_populated_web_area(app_element, 0, 10)
+    has_populated_web_area(app_element, 0, 25)
 }
 
 // ---------------------------------------------------------------------------
@@ -765,29 +764,21 @@ fn has_populated_web_area(element: AXUIElementRef, depth: usize, max_depth: usiz
         return false;
     }
 
-    let role = get_ax_string(element, "AXRole");
+    // Use batched attribute fetching instead of individual `get_ax_string` calls.
+    // Individual AX calls can return errors for children of Electron apps during
+    // tree building, but `AXUIElementCopyMultipleAttributeValues` handles them correctly.
+    let Some(attrs) = fetch_batch_attributes(element) else {
+        return false;
+    };
+
+    let role = attrs.string(ATTR_ROLE);
 
     if role.as_deref() == Some("AXWebArea") {
-        // Check for interactive children
-        let children = get_ax_children(element);
-        for child in &children {
-            let child_role = get_ax_string(*child, "AXRole").unwrap_or_default();
-            if is_interactive_role(&child_role) {
-                return true;
-            }
-            // Check one level deeper for interactive content inside groups
-            let grandchildren = get_ax_children(*child);
-            for gc in &grandchildren {
-                let gc_role = get_ax_string(*gc, "AXRole").unwrap_or_default();
-                if is_interactive_role(&gc_role) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        let children = attrs.children(ATTR_CHILDREN);
+        return !children.is_empty();
     }
 
-    let children = get_ax_children(element);
+    let children = attrs.children(ATTR_CHILDREN);
     for child in &children {
         if has_populated_web_area(*child, depth + 1, max_depth) {
             return true;
@@ -795,70 +786,6 @@ fn has_populated_web_area(element: AXUIElementRef, depth: usize, max_depth: usiz
     }
 
     false
-}
-
-/// Get a string attribute from an `AXUIElement`.
-fn get_ax_string(element: AXUIElementRef, attribute: &str) -> Option<String> {
-    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
-    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
-    unsafe {
-        let attr_cf = cf_string_from_str(attribute);
-        let mut value: CFTypeRef = std::ptr::null();
-        let result = AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value);
-        CFRelease(attr_cf as CFTypeRef);
-        if result != AXError::Success || value.is_null() {
-            return None;
-        }
-        if CFGetTypeID(value) != CFStringGetTypeID() {
-            CFRelease(value);
-            return None;
-        }
-        let ptr = CFStringGetCStringPtr(value as CFStringRef, K_CF_STRING_ENCODING_UTF8);
-        let s = if ptr.is_null() {
-            None
-        } else {
-            std::ffi::CStr::from_ptr(ptr)
-                .to_str()
-                .ok()
-                .map(String::from)
-        };
-        CFRelease(value);
-        s
-    }
-}
-
-/// Get the `AXChildren` attribute as a Vec of `AXUIElementRef`.
-fn get_ax_children(element: AXUIElementRef) -> Vec<AXUIElementRef> {
-    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
-    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
-    unsafe {
-        let attr_cf = cf_string_from_str("AXChildren");
-        let mut value: CFTypeRef = std::ptr::null();
-        let result = AXUIElementCopyAttributeValue(element, attr_cf, &raw mut value);
-        CFRelease(attr_cf as CFTypeRef);
-        if result != AXError::Success || value.is_null() {
-            return Vec::new();
-        }
-        if CFGetTypeID(value) != CFArrayGetTypeID() {
-            CFRelease(value);
-            return Vec::new();
-        }
-        let count = CFArrayGetCount(value as CFArrayRef);
-        #[expect(clippy::cast_sign_loss, reason = "CFArray count is non-negative")]
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "CFArray count fits in usize"
-        )]
-        let count_usize = count as usize;
-        let mut children = Vec::with_capacity(count_usize);
-        for i in 0..count {
-            let child = CFArrayGetValueAtIndex(value as CFArrayRef, i);
-            CFRetain(child as CFTypeRef);
-            children.push(AXUIElementRef::from_raw(child));
-        }
-        CFRelease(value);
-        children
-    }
 }
 
 #[cfg(test)]
