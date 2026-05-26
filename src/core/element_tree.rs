@@ -31,6 +31,16 @@ pub struct ElementNode {
     /// Distinct from `name` -- description provides additional context.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// The raw platform role string (e.g. `"AXButton"`, `"UIA 50000"`,
+    /// `"ATSPI 28"`). Useful for debugging when a role maps to `Unknown`.
+    /// Shown only in verbose text output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_role: Option<String>,
+    /// Platform element identifier (`AXIdentifier` on macOS, `AutomationId` on
+    /// Windows). Stable across launches -- useful for targeting elements.
+    /// Shown only in verbose text output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identifier: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub attributes: Vec<(String, String)>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -49,6 +59,8 @@ impl ElementNode {
             focused: None,
             selected: None,
             description: None,
+            native_role: None,
+            identifier: None,
             attributes: Vec::new(),
             children: Vec::new(),
         }
@@ -56,6 +68,11 @@ impl ElementNode {
 
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
+        self
+    }
+
+    pub fn with_name_opt(mut self, name: Option<String>) -> Self {
+        self.name = name;
         self
     }
 
@@ -71,6 +88,11 @@ impl ElementNode {
 
     pub fn with_bounds(mut self, bounds: Rect) -> Self {
         self.bounds = Some(bounds);
+        self
+    }
+
+    pub fn with_bounds_opt(mut self, bounds: Option<Rect>) -> Self {
+        self.bounds = bounds;
         self
     }
 
@@ -91,6 +113,16 @@ impl ElementNode {
 
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
+        self
+    }
+
+    pub fn with_native_role(mut self, native_role: impl Into<String>) -> Self {
+        self.native_role = Some(native_role.into());
+        self
+    }
+
+    pub fn with_identifier(mut self, identifier: impl Into<String>) -> Self {
+        self.identifier = Some(identifier.into());
         self
     }
 

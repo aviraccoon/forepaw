@@ -104,12 +104,18 @@ impl TreeRenderer {
             ));
         }
 
-        // Verbose: description
+        // Verbose: extra detail not shown by default
         if verbose {
             if let Some(desc) = &node.description {
                 if !desc.is_empty() {
                     parts.push(format!("desc=\"{desc}\""));
                 }
+            }
+            if let Some(nr) = &node.native_role {
+                parts.push(format!("native_role={nr}"));
+            }
+            if let Some(id) = &node.identifier {
+                parts.push(format!("id=\"{id}\""));
             }
         }
 
@@ -354,5 +360,27 @@ mod tests {
         let renderer = TreeRenderer::new(true);
         let output = renderer.render(&tree);
         assert!(output.contains("desc=\"Confirms the action\""));
+    }
+
+    #[test]
+    fn verbose_shows_native_role_and_identifier() {
+        let tree = ElementTree::new(
+            "App",
+            ElementNode::new(Role::Button)
+                .with_name("OK")
+                .with_ref(ElementRef::new(1))
+                .with_native_role("AXButton")
+                .with_identifier("submit-btn"),
+        );
+
+        let renderer = TreeRenderer::new(false);
+        let output = renderer.render(&tree);
+        assert!(!output.contains("native_role="));
+        assert!(!output.contains("id="));
+
+        let renderer = TreeRenderer::new(true);
+        let output = renderer.render(&tree);
+        assert!(output.contains("native_role=AXButton"));
+        assert!(output.contains("id=\"submit-btn\""));
     }
 }

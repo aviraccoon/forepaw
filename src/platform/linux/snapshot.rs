@@ -133,48 +133,9 @@ fn build_tree(
     let value = get_value(conn, app_bus, path);
     let bounds = get_bounds(conn, app_bus, path);
 
-    // Prune zero-size subtrees
-    if pruning.skip_zero_size {
-        if let Some(b) = &bounds {
-            if b.width == 0.0 && b.height == 0.0 && depth > 1 {
-                return ElementNode {
-                    role,
-                    name: name.clone(),
-                    value: None,
-                    r#ref: None,
-                    bounds,
-                    enabled: None,
-                    focused: None,
-                    selected: None,
-                    description: None,
-                    attributes: Vec::new(),
-                    children: Vec::new(),
-                };
-            }
-        }
-    }
-
-    // Prune offscreen elements
-    if pruning.skip_offscreen && depth > 1 {
-        if let (Some(wb), Some(b)) = (&pruning.window_bounds, &bounds) {
-            let no_horizontal = b.x + b.width <= wb.x || b.x >= wb.x + wb.width;
-            let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
-            if no_horizontal || no_vertical {
-                return ElementNode {
-                    role,
-                    name: name.clone(),
-                    value: None,
-                    r#ref: None,
-                    bounds,
-                    enabled: None,
-                    focused: None,
-                    selected: None,
-                    description: None,
-                    attributes: Vec::new(),
-                    children: Vec::new(),
-                };
-            }
-        }
+    // Check pruning conditions (zero-size and offscreen).
+    if let Some(pruned) = check_pruned(role, name.as_ref(), bounds.as_ref(), depth, pruning) {
+        return pruned;
     }
 
     // Build children first (so name resolution can use them)
@@ -232,9 +193,51 @@ fn build_tree(
         focused: None,
         selected: None,
         description: None,
+        native_role: None,
+        identifier: None,
         attributes,
         children,
     }
+}
+
+/// Check if this element should be pruned (zero-size or offscreen).
+/// Returns `Some(pruned_node)` if the element should be skipped.
+fn check_pruned(
+    role: Role,
+    name: Option<&String>,
+    bounds: Option<&Rect>,
+    depth: usize,
+    pruning: &TreePruning,
+) -> Option<ElementNode> {
+    // Prune zero-size subtrees
+    if pruning.skip_zero_size {
+        if let Some(b) = bounds {
+            if b.width == 0.0 && b.height == 0.0 && depth > 1 {
+                return Some(
+                    ElementNode::new(role)
+                        .with_name_opt(name.cloned())
+                        .with_bounds(*b),
+                );
+            }
+        }
+    }
+
+    // Prune offscreen elements
+    if pruning.skip_offscreen && depth > 1 {
+        if let (Some(wb), Some(b)) = (&pruning.window_bounds, bounds) {
+            let no_horizontal = b.x + b.width <= wb.x || b.x >= wb.x + wb.width;
+            let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
+            if no_horizontal || no_vertical {
+                return Some(
+                    ElementNode::new(role)
+                        .with_name_opt(name.cloned())
+                        .with_bounds(*b),
+                );
+            }
+        }
+    }
+
+    None
 }
 
 /// Get the first child that looks like a text label.

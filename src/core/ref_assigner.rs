@@ -77,6 +77,8 @@ impl RefAssigner {
         new_node.focused = node.focused;
         new_node.selected = node.selected;
         new_node.description.clone_from(&node.description);
+        new_node.native_role.clone_from(&node.native_role);
+        new_node.identifier.clone_from(&node.identifier);
         new_node.attributes.clone_from(&node.attributes);
         new_node.children = children;
         new_node

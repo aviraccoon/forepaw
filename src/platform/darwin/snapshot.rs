@@ -51,7 +51,8 @@ const ATTR_ROLE_DESCRIPTION: usize = 12;
 const ATTR_ENABLED: usize = 13;
 const ATTR_FOCUSED: usize = 14;
 const ATTR_SELECTED: usize = 15;
-const ATTR_COUNT: usize = 16;
+const ATTR_IDENTIFIER: usize = 16;
+const ATTR_COUNT: usize = 17;
 
 /// Attribute names for batch fetching.
 const BATCH_ATTR_NAMES: [&str; ATTR_COUNT] = [
@@ -71,6 +72,7 @@ const BATCH_ATTR_NAMES: [&str; ATTR_COUNT] = [
     "AXEnabled",          // 13
     "AXFocused",          // 14
     "AXSelected",         // 15
+    "AXIdentifier",       // 16
 ];
 
 /// Cached `CFArray` of attribute name strings for batch fetching.
@@ -581,6 +583,14 @@ fn build_tree(
         .unwrap_or_else(|| "AXUnknown".to_owned());
     let role = ax_role_to_role(&role_str);
 
+    // Native role: the raw AX string (e.g. "AXButton"). Useful for
+    // debugging, especially when mapping to Unknown.
+    let native_role = Some(role_str);
+    let identifier =
+        attrs
+            .string(ATTR_IDENTIFIER)
+            .and_then(|id| if id.is_empty() { None } else { Some(id) });
+
     // Skip menu bar subtree if requested.
     if pruning.skip_menu_bar && role == Role::MenuBar {
         return ElementNode::new(role);
@@ -597,52 +607,17 @@ fn build_tree(
         }
     }
 
-    // Skip zero-size subtrees (collapsed menus, hidden panels).
-    if pruning.skip_zero_size {
-        if let Some(b) = &bounds {
-            if b.width == 0.0 && b.height == 0.0 && depth > 1 {
-                let name = non_empty(attrs.string(ATTR_TITLE).as_ref())
-                    .or_else(|| non_empty(attrs.string(ATTR_DESCRIPTION).as_ref()))
-                    .or_else(|| computed_name(&attrs, &[], element));
-                return ElementNode {
-                    role,
-                    name,
-                    value,
-                    r#ref: None,
-                    bounds,
-                    enabled: None,
-                    focused: None,
-                    selected: None,
-                    description: None,
-                    attributes,
-                    children: Vec::new(),
-                };
-            }
-        }
-    }
-
-    // Skip offscreen subtrees.
-    if let (Some(wb), Some(b)) = (&pruning.window_bounds, &bounds) {
-        if depth > 2 && b.width > 0.0 && b.height > 0.0 {
-            let no_horizontal = b.x + b.width <= wb.x || b.x >= wb.x + wb.width;
-            let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
-            if no_horizontal || no_vertical {
-                let name = non_empty(attrs.string(ATTR_TITLE).as_ref());
-                return ElementNode {
-                    role,
-                    name,
-                    value: None,
-                    r#ref: None,
-                    bounds: Some(*b),
-                    enabled: None,
-                    focused: None,
-                    selected: None,
-                    description: None,
-                    attributes,
-                    children: Vec::new(),
-                };
-            }
-        }
+    // Check pruning conditions (zero-size and offscreen).
+    if let Some(pruned) = check_pruned(
+        &attrs,
+        role,
+        value.as_ref(),
+        bounds.as_ref(),
+        depth,
+        pruning,
+        element,
+    ) {
+        return pruned;
     }
 
     // Build children BEFORE computing name. This lets computedName read
@@ -682,9 +657,53 @@ fn build_tree(
         focused,
         selected,
         description,
+        native_role,
+        identifier,
         attributes,
         children,
     }
+}
+
+/// Check if this element should be pruned (zero-size or offscreen).
+/// Returns `Some(pruned_node)` if the element should be skipped.
+fn check_pruned(
+    attrs: &BatchAttrs,
+    role: Role,
+    value: Option<&String>,
+    bounds: Option<&Rect>,
+    depth: usize,
+    pruning: &TreePruning,
+    element: AXUIElementRef,
+) -> Option<ElementNode> {
+    // Skip zero-size subtrees (collapsed menus, hidden panels).
+    if pruning.skip_zero_size {
+        if let Some(b) = bounds {
+            if b.width == 0.0 && b.height == 0.0 && depth > 1 {
+                let name = non_empty(attrs.string(ATTR_TITLE).as_ref())
+                    .or_else(|| non_empty(attrs.string(ATTR_DESCRIPTION).as_ref()))
+                    .or_else(|| computed_name(attrs, &[], element));
+                let mut node = ElementNode::new(role).with_name_opt(name).with_bounds(*b);
+                if let Some(v) = value {
+                    node = node.with_value(v.as_str());
+                }
+                return Some(node);
+            }
+        }
+    }
+
+    // Skip offscreen subtrees.
+    if let (Some(wb), Some(b)) = (&pruning.window_bounds, bounds) {
+        if depth > 2 && b.width > 0.0 && b.height > 0.0 {
+            let no_horizontal = b.x + b.width <= wb.x || b.x >= wb.x + wb.width;
+            let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
+            if no_horizontal || no_vertical {
+                let name = non_empty(attrs.string(ATTR_TITLE).as_ref());
+                return Some(ElementNode::new(role).with_name_opt(name).with_bounds(*b));
+            }
+        }
+    }
+
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -1189,6 +1208,10 @@ mod tests {
         );
         assert_eq!(BATCH_ATTR_NAMES[ATTR_DOM_CLASS_LIST], "AXDOMClassList");
         assert_eq!(BATCH_ATTR_NAMES[ATTR_ROLE_DESCRIPTION], "AXRoleDescription");
+        assert_eq!(BATCH_ATTR_NAMES[ATTR_ENABLED], "AXEnabled");
+        assert_eq!(BATCH_ATTR_NAMES[ATTR_FOCUSED], "AXFocused");
+        assert_eq!(BATCH_ATTR_NAMES[ATTR_SELECTED], "AXSelected");
+        assert_eq!(BATCH_ATTR_NAMES[ATTR_IDENTIFIER], "AXIdentifier");
     }
 
     #[test]

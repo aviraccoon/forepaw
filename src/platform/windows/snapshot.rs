@@ -152,38 +152,18 @@ fn build_tree(
     if pruning.skip_zero_size {
         if let Some(b) = &bounds {
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
-                return ElementNode {
-                    role,
-                    name: non_empty(name.as_ref()),
-                    value: None,
-                    r#ref: None,
-                    bounds,
-                    enabled: None,
-                    focused: None,
-                    selected: None,
-                    description: None,
-                    attributes: Vec::new(),
-                    children: Vec::new(),
-                };
+                return ElementNode::new(role)
+                    .with_name_opt(non_empty(name.as_ref()))
+                    .with_bounds(*b);
             }
         }
     }
 
     // Prune offscreen elements
     if pruning.skip_offscreen && depth > 1 && is_offscreen(element) {
-        return ElementNode {
-            role,
-            name: non_empty(name.as_ref()),
-            value: None,
-            r#ref: None,
-            bounds,
-            enabled: None,
-            focused: None,
-            selected: None,
-            description: None,
-            attributes: Vec::new(),
-            children: Vec::new(),
-        };
+        return ElementNode::new(role)
+            .with_name_opt(non_empty(name.as_ref()))
+            .with_bounds_opt(bounds);
     }
 
     // Walk children via TreeWalker (depth-first)
@@ -209,6 +189,8 @@ fn build_tree(
         focused: None,
         selected: None,
         description: None,
+        native_role: None,
+        identifier: None,
         attributes: Vec::new(),
         children,
     }
