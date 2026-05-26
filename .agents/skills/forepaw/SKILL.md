@@ -26,14 +26,17 @@ forepaw snapshot --app "App Name" --timing   # show per-subtree timing breakdown
 
 Returns structured text with `@e` refs and window-relative positions:
 ```
-app: Finder
+app: Finder  window: [312,139 1010x614]
 window "Documents" (0,0 1200x800)
   button @e1 "Back" (10,4 60x30)
-  textfield @e2 "Search" value="" (200,4 300x30)
+  textfield @e2 "Search" value="" (200,4 300x30) focused
+  button @e3 "OK" disabled (500,300 80x30)
   list (10,44 1180x700)
-    cell @e3 "README.md" (10,44 1180x25)
-    cell @e4 "src" (10,69 1180x25)
+    cell @e4 "README.md" selected (10,44 1180x25)
+    cell @e5 "src" (10,69 1180x25)
 ```
+
+The header line shows app name and window bounds (screen coordinates). Element state is shown inline: `disabled`, `focused`, `selected`. Enabled elements don't show anything (too noisy). Use `-v` (verbose) to see element descriptions, native roles (`AXButton`), and identifiers (`AutomationId`).
 
 All coordinates are **window-relative**: `(0,0)` is the window's top-left corner. These match what action commands expect -- you can verify click targets or use coordinate-based click/hover for precision. Coordinates are portable across window positions (if the window moves, the same coordinates still work).
 
@@ -435,6 +438,17 @@ Two permissions needed:
 ```bash
 forepaw list-apps                  # running GUI apps with bundle IDs
 forepaw list-windows --app Finder  # windows for an app
+```
+
+`list-apps` shows the frontmost (active) app with a trailing `*`:
+```
+Finder (com.apple.finder) [pid: 1374]
+Ghostty (com.mitchellh.ghostty) * [pid: 1331]
+```
+
+`list-windows` shows window bounds:
+```
+w-42  Finder  "Documents"  [312,139 1010x614]
 ```
 
 Use the exact app name from `list-apps` in `--app` flags. Use `list-windows` to find window titles/IDs for `--window`.

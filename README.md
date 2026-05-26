@@ -32,7 +32,7 @@ cargo run -- list-apps
 forepaw snapshot --app Finder -i
 ```
 ```
-app: Finder
+app: Finder  window: [312,139 1010x614]
 window "Recents" (0,0 1024x678)
   button @e1 "Back" (7,4 28x24)
   button @e2 "Forward" (39,4 28x24)
@@ -158,8 +158,8 @@ Actions are separated by `;;`. Default 100ms delay between them (`--delay` to ad
 
 ```bash
 forepaw list-windows --app Zed
-# w-1234  Zed  "my-project"
-# w-1235  Zed  "other-project"
+# w-1234  Zed  "my-project"  [100,200 1200x800]
+# w-1235  Zed  "other-project"  [50,100 900x600]
 
 forepaw snapshot --app Zed --window "my-project"   # by title substring
 forepaw screenshot --app Zed --window w-1234       # by window ID
