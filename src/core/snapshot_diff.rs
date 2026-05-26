@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 /// Snapshot diffing via LCS algorithm.
 ///
 /// Refs (@eN) are stripped for comparison so positional ref shifts
@@ -146,12 +144,52 @@ impl SnapshotDiff {
     }
 }
 
-static REF_RE: LazyLock<regex::Regex> =
-    LazyLock::new(|| regex::Regex::new(r"@e\d+\s?").expect("valid static regex"));
-
-/// Removes @eN refs from a line for comparison purposes.
+/// Removes `@eN` refs from a line for comparison purposes.
+///
+/// Strips every occurrence of `@e` followed by one or more digits,
+/// consuming an optional trailing space after each ref.
+/// Trailing whitespace is trimmed from the result.
+#[must_use]
 pub fn strip_refs(line: &str) -> String {
-    let result = REF_RE.replace_all(line, "").to_string();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut result = String::with_capacity(len);
+    let mut last = 0;
+    let mut i = 0;
+
+    while i < len {
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "all indices guarded by < len checks"
+        )]
+        if bytes[i] == b'@' && i + 1 < len && bytes[i + 1] == b'e' {
+            let digit_start = i + 2;
+            if digit_start < len && bytes[digit_start].is_ascii_digit() {
+                // Copy everything before this ref
+                #[expect(clippy::string_slice, reason = "i is always at an ASCII byte boundary")]
+                result.push_str(&line[last..i]);
+                // Consume digits
+                let mut end = digit_start + 1;
+                while end < len && bytes[end].is_ascii_digit() {
+                    end += 1;
+                }
+                // Consume optional trailing space
+                if end < len && bytes[end] == b' ' {
+                    end += 1;
+                }
+                last = end;
+                i = end;
+                continue;
+            }
+        }
+        i += 1;
+    }
+
+    #[expect(
+        clippy::string_slice,
+        reason = "last is always at an ASCII byte boundary"
+    )]
+    result.push_str(&line[last..]);
     result.trim_end().to_owned()
 }
 
@@ -305,6 +343,65 @@ mod tests {
         assert_eq!(
             strip_refs("  menuitem @e302 \"Paste\""),
             "  menuitem \"Paste\""
+        );
+    }
+
+    #[test]
+    fn strips_multiple_refs() {
+        assert_eq!(strip_refs("  row @e1 @e2 @e3 item"), "  row item");
+    }
+
+    #[test]
+    fn strips_ref_without_trailing_space() {
+        // Ref at end of line, no trailing space to consume
+        assert_eq!(strip_refs("button @e99"), "button");
+    }
+
+    #[test]
+    fn strips_ref_followed_by_non_space() {
+        // "@e5" immediately followed by a quote -- no space consumed
+        assert_eq!(strip_refs("@e5\"label\""), "\"label\"");
+    }
+
+    #[test]
+    fn no_match_without_digits() {
+        // "@e" with no digit after it is not a ref
+        assert_eq!(strip_refs("text @e other"), "text @e other");
+    }
+
+    #[test]
+    fn no_match_email_address() {
+        // "user@example" has @ but no "@e" prefix
+        assert_eq!(strip_refs("user@example.com"), "user@example.com");
+    }
+
+    #[test]
+    fn empty_string() {
+        assert_eq!(strip_refs(""), "");
+    }
+
+    #[test]
+    fn only_a_ref() {
+        assert_eq!(strip_refs("@e42"), "");
+    }
+
+    #[test]
+    fn only_refs_and_spaces() {
+        assert_eq!(strip_refs("@e1 @e2 @e3 "), "");
+    }
+
+    #[test]
+    fn preserves_internal_spaces() {
+        // Two spaces before ref, ref consumes @e5 + one trailing space, one space remains after
+        assert_eq!(strip_refs("  button  @e5  label"), "  button   label");
+    }
+
+    #[test]
+    fn preserves_multibyte_chars() {
+        // Emoji and CJK characters in the name should survive intact
+        assert_eq!(
+            strip_refs("  button @e1 \"\u{1F389} Settings \u{8BBE}\u{7F6E}\""),
+            "  button \"\u{1F389} Settings \u{8BBE}\u{7F6E}\""
         );
     }
 

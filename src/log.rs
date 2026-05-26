@@ -328,10 +328,7 @@ mod tests {
             strip_crate_prefix("forepaw::platform::darwin::snapshot"),
             "snapshot"
         );
-        assert_eq!(
-            strip_crate_prefix("forepaw::platform::windows::ocr"),
-            "ocr"
-        );
+        assert_eq!(strip_crate_prefix("forepaw::platform::windows::ocr"), "ocr");
         assert_eq!(
             strip_crate_prefix("forepaw::core::element_tree"),
             "core::element_tree"
