@@ -10,15 +10,11 @@ use forepaw::cli::GlobalArgs;
 use forepaw::core::output_formatter::OutputFormat;
 use forepaw::platform::DesktopProvider;
 
-fn version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
-}
-
 #[derive(Parser)]
 #[command(
     name = "forepaw",
     about = "A raccoon's paws on your desktop. Cross-platform automation CLI.",
-    version = version(),
+    version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("FOREPAW_GIT_SHA"), ")"),
 )]
 struct App {
     #[arg(
