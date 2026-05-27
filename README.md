@@ -169,7 +169,6 @@ Without `--window`, commands target the largest window. Ambiguous matches are re
 
 ## Requirements
 
-- Rust toolchain (for building)
 - macOS 14+ (Apple Silicon or Intel)
 - Two permissions on macOS, granted to your terminal app:
 
@@ -201,6 +200,42 @@ forepaw permissions --request  # trigger system dialogs (macOS only)
 | `docs/performance-macos.md` | Benchmark data across apps, what's fast, what's slow, why Music is cursed. |
 | `docs/cross-platform.md` | Linux and Windows feasibility research, AT-SPI2/UIA notes. |
 
+## Install
+
+### Binaries
+
+Download from [releases](https://github.com/aviraccoon/forepaw/releases) for your platform:
+
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `forepaw-darwin-arm64.tar.gz` |
+| Windows (x86_64) | `forepaw-windows-x86_64.zip` |
+| Windows (ARM64) | `forepaw-windows-arm64.zip` |
+| Linux (x86_64) | `forepaw-linux-x86_64.tar.gz` |
+| Linux (ARM64) | `forepaw-linux-arm64.tar.gz` |
+
+Linux binaries are statically linked (musl) -- they run on any distribution, including NixOS.
+
+### Nix
+
+```bash
+# Build and run directly
+nix run github:aviraccoon/forepaw -- list-apps
+
+# Or install to your flake profile
+nix profile install github:aviraccoon/forepaw
+```
+
+### From source
+
+```bash
+git clone https://github.com/aviraccoon/forepaw.git
+cd forepaw
+cargo build --release
+```
+
+Requires a Rust toolchain, or use `nix build` to get a reproducible build without installing Rust.
+
 ## Development
 
 Uses [mise](https://mise.jdx.dev) for task running and Cargo for building.
@@ -211,13 +246,16 @@ mise run dev <command>  # build + run (e.g. mise run dev snapshot --app Finder -
 mise run fmt            # auto-format (cargo fmt + swift-format for test apps)
 ```
 
-Or without mise:
+Or with Nix (complete dev environment, no Rust installation needed):
 
 ```bash
-cargo build && cargo test
-cargo clippy -- -D warnings
-cargo fmt
+nix develop                          # enter dev shell with Rust + cross-compilation tools
+nix develop --command cargo test     # run a command directly
+nix build                            # build the package
+nix fmt -- flake.nix                 # format nix files
 ```
+
+The project includes a [nix flake](flake.nix) and [direnv](.envrc) config. If you use direnv, the dev shell loads automatically.
 
 ### Cross-compiling for Windows
 
@@ -235,14 +273,7 @@ cargo xwin build --target x86_64-pc-windows-msvc
 cargo clippy --target x86_64-pc-windows-msvc -- -D warnings
 ```
 
-Install `cargo-xwin` and `lld` however you prefer:
-
-| Method | Command |
-|--------|----------|
-| Cargo | `cargo install cargo-xwin` |
-| Nix | `nix shell nixpkgs#cargo-xwin nixpkgs#lld` |
-
-The project includes a [nix flake](flake.nix) and [direnv](.envrc) config that provides `cargo-xwin` and `lld` automatically if you use them.
+`cargo-xwin` and `lld` are included in the nix dev shell.
 
 ### Project layout
 

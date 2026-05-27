@@ -8,6 +8,10 @@
 *.xcworkspace/
 DerivedData/
 
+# Nix
+/result
+/result-*
+
 # General
 .DS_Store
 .direnv/

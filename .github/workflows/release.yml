@@ -89,8 +89,42 @@ jobs:
           name: windows-${{ matrix.target }}-artifacts
           path: dist/
 
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            arch: x86_64
+          - target: aarch64-unknown-linux-musl
+            arch: arm64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31
+        with:
+          extra_nix_config: experimental-features = nix-command flakes
+
+      - name: Build release
+        run: nix develop .# --command cargo zigbuild --release --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/forepaw dist/
+          cd dist
+          tar czf forepaw-linux-${{ matrix.arch }}.tar.gz forepaw
+          shasum -a 256 forepaw-linux-${{ matrix.arch }}.tar.gz > forepaw-linux-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-${{ matrix.arch }}-artifacts
+          path: dist/
+
   release:
-    needs: [macos, windows]
+    needs: [macos, windows, linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -139,6 +173,19 @@ jobs:
           mv forepaw.exe ~/bin/
           \`\`\`
 
+          **Linux (x86_64)**
+          \`\`\`bash
+          curl -L https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-linux-x86_64.tar.gz | tar xz
+          mv forepaw /usr/local/bin/
+          \`\`\`
+
+          **Linux (ARM64)**
+          \`\`\`bash
+          curl -L https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-linux-arm64.tar.gz | tar xz
+          mv forepaw /usr/local/bin/
+          \`\`\`
+
+          Linux binaries are statically linked (musl) and work on any distribution, including NixOS.
           Windows binaries are cross-compiled from macOS -- no Windows SDK needed on your machine.
           INSTALL
 
@@ -149,6 +196,10 @@ jobs:
           files: |
             dist/forepaw-darwin-arm64.tar.gz
             dist/forepaw-darwin-arm64.tar.gz.sha256
+            dist/forepaw-linux-x86_64.tar.gz
+            dist/forepaw-linux-x86_64.tar.gz.sha256
+            dist/forepaw-linux-arm64.tar.gz
+            dist/forepaw-linux-arm64.tar.gz.sha256
             dist/forepaw-windows-x86_64.zip
             dist/forepaw-windows-x86_64.zip.sha256
             dist/forepaw-windows-arm64.zip

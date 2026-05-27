@@ -366,8 +366,8 @@ mod tests {
     fn role_mapping_covers_interactive_types() {
         assert_eq!(atspi_role_to_role(43), Role::Button);
         assert_eq!(atspi_role_to_role(79), Role::TextField);
-        assert_eq!(atspi_role_to_role(44), Role::CheckBox);
-        assert_eq!(atspi_role_to_role(45), Role::RadioButton);
+        assert_eq!(atspi_role_to_role(44), Role::RadioButton);
+        assert_eq!(atspi_role_to_role(45), Role::MenuItemRadio);
         assert_eq!(atspi_role_to_role(11), Role::ComboBox);
         assert_eq!(atspi_role_to_role(51), Role::Slider);
         assert_eq!(atspi_role_to_role(91), Role::TreeItem);
@@ -394,7 +394,7 @@ mod tests {
     fn interactive_roles_mapped_correctly() {
         assert!(atspi_role_to_role(43).is_interactive()); // Button
         assert!(atspi_role_to_role(79).is_interactive()); // TextField
-        assert!(atspi_role_to_role(44).is_interactive()); // CheckBox
+        assert!(atspi_role_to_role(44).is_interactive()); // RadioButton
         assert!(atspi_role_to_role(11).is_interactive()); // ComboBox
         assert!(atspi_role_to_role(91).is_interactive()); // TreeItem
         assert!(atspi_role_to_role(88).is_interactive()); // Link

@@ -19,6 +19,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
           components: rustfmt
 
       - name: Cache Cargo
@@ -39,6 +40,12 @@ jobs:
 
       - name: Test
         run: cargo test
+
+      - name: Check x86_64
+        run: cargo check --target x86_64-apple-darwin
+
+      - name: Lint x86_64
+        run: cargo clippy --target x86_64-apple-darwin -- -D warnings
 
   windows:
     runs-on: windows-2025
@@ -70,6 +77,9 @@ jobs:
       - name: Lint ARM64
         run: cargo clippy --target aarch64-pc-windows-msvc -- -D warnings
 
+      - name: Test
+        run: cargo test
+
       - name: Check x86_64
         run: cargo check --target x86_64-pc-windows-msvc
 
@@ -80,12 +90,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          targets: x86_64-unknown-linux-musl
-          components: rustfmt
 
       - name: Install Nix
         uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31
@@ -103,13 +107,22 @@ jobs:
           restore-keys: cargo-linux-
 
       - name: Check formatting
-        run: cargo fmt --check
+        run: nix develop .# --command cargo fmt --check
 
       - name: Check generated AT-SPI roles
         run: diff <(bash res/generate_atspi_roles.sh) src/platform/linux/role.rs
 
       - name: Check musl x86_64
-        run: nix develop .# --command cargo zigbuild --target x86_64-unknown-linux-musl --lib
+        run: nix develop .# --command cargo check --target x86_64-unknown-linux-musl
 
       - name: Lint musl x86_64
         run: nix develop .# --command cargo clippy --target x86_64-unknown-linux-musl -- -D warnings
+
+      - name: Check musl aarch64
+        run: nix develop .# --command cargo check --target aarch64-unknown-linux-musl
+
+      - name: Lint musl aarch64
+        run: nix develop .# --command cargo clippy --target aarch64-unknown-linux-musl -- -D warnings
+
+      - name: Test
+        run: nix develop .# --command cargo test

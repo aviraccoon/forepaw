@@ -133,6 +133,10 @@ mod tests {
 
     #[test]
     fn finds_system_tools() {
+        // Nix build sandbox has a minimal PATH without standard tools.
+        if std::env::var("NIX_BUILD_TOP").is_ok() {
+            return;
+        }
         assert!(is_command_available("env"));
     }
 
