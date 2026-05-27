@@ -47,6 +47,15 @@ jobs:
       - name: Lint x86_64
         run: cargo clippy --target x86_64-apple-darwin -- -D warnings
 
+      - name: Build release
+        run: cargo build --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: forepaw-darwin-arm64-${{ github.sha }}
+          path: target/release/forepaw
+
   windows:
     runs-on: windows-2025
     steps:
@@ -85,6 +94,15 @@ jobs:
 
       - name: Lint x86_64
         run: cargo clippy --target x86_64-pc-windows-msvc -- -D warnings
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: forepaw-windows-x86_64-${{ github.sha }}
+          path: target/release/forepaw.exe
 
   linux:
     runs-on: ubuntu-latest
@@ -126,3 +144,12 @@ jobs:
 
       - name: Test
         run: nix develop .# --command cargo test
+
+      - name: Build release
+        run: nix develop .# --command cargo zigbuild --release --target x86_64-unknown-linux-musl
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: forepaw-linux-x86_64-${{ github.sha }}
+          path: target/x86_64-unknown-linux-musl/release/forepaw

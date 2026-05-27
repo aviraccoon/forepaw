@@ -50,7 +50,7 @@ jobs:
           shasum -a 256 forepaw-darwin-arm64.tar.gz > forepaw-darwin-arm64.tar.gz.sha256
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: macos-artifacts
           path: dist/
@@ -84,7 +84,7 @@ jobs:
           (Get-FileHash "dist/forepaw-windows-$arch.zip" -Algorithm SHA256).Hash.ToLower() + "  forepaw-windows-$arch.zip" | Set-Content "dist/forepaw-windows-$arch.zip.sha256"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: windows-${{ matrix.target }}-artifacts
           path: dist/
@@ -118,7 +118,7 @@ jobs:
           shasum -a 256 forepaw-linux-${{ matrix.arch }}.tar.gz > forepaw-linux-${{ matrix.arch }}.tar.gz.sha256
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: linux-${{ matrix.arch }}-artifacts
           path: dist/
