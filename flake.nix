@@ -8,7 +8,7 @@
   };
 
   outputs =
-    { nixpkgs, rust-overlay, ... }:
+    { nixpkgs, rust-overlay, self, ... }:
     let
       systems = [
         "aarch64-darwin"
@@ -31,6 +31,11 @@
             inherit version;
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
+
+            # Embed git SHA from flake source when available.
+            # self.shortRev is set for fetched repos (nix run github:...)
+            # and null for dirty working trees.
+            FOREPAW_GIT_SHA = self.shortRev or "unknown";
 
             # Darwin stdenv includes all frameworks via $SDKROOT.
             # No explicit framework buildInputs needed.

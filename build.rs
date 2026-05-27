@@ -3,10 +3,11 @@ use std::process::Command;
 /// Embed the git commit SHA into the binary at build time.
 ///
 /// Sets `FOREPAW_GIT_SHA` env var for use via `env!()` in main.rs.
-/// Falls back to "unknown" when git is unavailable (e.g. Nix sandbox).
+/// Respects a pre-set `FOREPAW_GIT_SHA` environment variable (e.g. from Nix)
+/// before trying git. Falls back to "unknown" when neither is available.
 /// Appends "-dirty" when the working tree has any changes.
 fn main() {
-    let sha = git_short_sha().unwrap_or_else(|| "unknown".to_owned());
+    let sha = env_sha().or_else(git_short_sha).unwrap_or_else(|| "unknown".to_owned());
     println!("cargo:rustc-env=FOREPAW_GIT_SHA={sha}");
     println!("cargo:rerun-if-changed=.git/HEAD");
     // Also watch the ref that HEAD points to, so commit changes trigger rebuild
@@ -16,6 +17,15 @@ fn main() {
             println!("cargo:rerun-if-changed=.git/{ref_path}");
         }
     }
+}
+
+/// Check if FOREPAW_GIT_SHA was pre-set by the build environment (e.g. Nix flake).
+fn env_sha() -> Option<String> {
+    let sha = std::env::var("FOREPAW_GIT_SHA").ok()?;
+    if sha.is_empty() || sha == "unknown" {
+        return None;
+    }
+    Some(sha)
 }
 
 fn git_short_sha() -> Option<String> {
