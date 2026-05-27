@@ -1,8 +1,14 @@
 {
-  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
 
   outputs =
-    { nixpkgs, ... }:
+    { nixpkgs, rust-overlay, ... }:
     let
       systems = [
         "aarch64-darwin"
@@ -43,27 +49,33 @@
       devShells = forAllSystems (
         system:
         let
-          pkgs = nixpkgs.legacyPackages.${system};
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ rust-overlay.overlays.default ];
+          };
+          rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+            targets = [
+              "x86_64-unknown-linux-musl"
+              "aarch64-unknown-linux-musl"
+              "x86_64-pc-windows-msvc"
+              "aarch64-pc-windows-msvc"
+            ];
+          };
         in
         {
           default = pkgs.mkShell {
-            packages = with pkgs; [
-              # Rust toolchain
-              rustc
-              cargo
-              clippy
-              rustfmt
-              rust-analyzer
+            packages = [
+              rustToolchain
               # Cross-compilation to Windows
-              cargo-xwin
-              lld
+              pkgs.cargo-xwin
+              pkgs.lld
               # Cross-compilation to Linux
-              cargo-zigbuild
-              zig
+              pkgs.cargo-zigbuild
+              pkgs.zig
               # Linting and auditing
-              cargo-audit
-              cargo-machete
-              cargo-outdated
+              pkgs.cargo-audit
+              pkgs.cargo-machete
+              pkgs.cargo-outdated
             ];
           };
         }

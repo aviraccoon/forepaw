@@ -137,7 +137,9 @@ mod tests {
         if std::env::var("NIX_BUILD_TOP").is_ok() {
             return;
         }
-        assert!(is_command_available("env"));
+        // Use a command that exists on the current platform.
+        let cmd = if cfg!(windows) { "cmd" } else { "env" };
+        assert!(is_command_available(cmd));
     }
 
     #[test]
