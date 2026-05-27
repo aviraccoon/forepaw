@@ -83,12 +83,24 @@ impl ScreenshotOptions {
 /// Check whether a command-line tool is available in PATH.
 #[must_use]
 pub fn is_command_available(command: &str) -> bool {
-    std::process::Command::new("/usr/bin/env")
-        .args(["which", command])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+    #[cfg(unix)]
+    {
+        std::process::Command::new("/usr/bin/env")
+            .args(["which", command])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    }
+    #[cfg(windows)]
+    {
+        std::process::Command::new("where")
+            .arg(command)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    }
 }
 
 #[cfg(test)]
