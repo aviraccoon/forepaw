@@ -17,6 +17,7 @@ run = "cargo test"
 [tasks.check]
 description = "Lint and test"
 run = [
+    "cargo fmt -- --check",
     "cargo clippy -- -D warnings",
     "cargo test",
 ]

@@ -7,7 +7,9 @@ use std::process::Command;
 /// before trying git. Falls back to "unknown" when neither is available.
 /// Appends "-dirty" when the working tree has any changes.
 fn main() {
-    let sha = env_sha().or_else(git_short_sha).unwrap_or_else(|| "unknown".to_owned());
+    let sha = env_sha()
+        .or_else(git_short_sha)
+        .unwrap_or_else(|| "unknown".to_owned());
     println!("cargo:rustc-env=FOREPAW_GIT_SHA={sha}");
     println!("cargo:rerun-if-changed=.git/HEAD");
     // Also watch the ref that HEAD points to, so commit changes trigger rebuild
@@ -19,7 +21,7 @@ fn main() {
     }
 }
 
-/// Check if FOREPAW_GIT_SHA was pre-set by the build environment (e.g. Nix flake).
+/// Check if `FOREPAW_GIT_SHA` was pre-set by the build environment (e.g. Nix flake).
 fn env_sha() -> Option<String> {
     let sha = std::env::var("FOREPAW_GIT_SHA").ok()?;
     if sha.is_empty() || sha == "unknown" {

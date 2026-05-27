@@ -54,7 +54,7 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 
 - **rustfmt** (ships with Rust toolchain). Default settings.
 - **nixfmt** for `.nix` files (via `nix fmt -- flake.nix` or the dev shell).
-- Run `cargo fmt` before committing. **Re-run `cargo clippy` after `cargo fmt`** -- rustfmt can introduce or change lint-triggering patterns (e.g. collapsing format args).
+- **Run `mise run check` before every commit.** No exceptions. It checks fmt, clippy, and tests in order.
 - Zero clippy warnings: `cargo clippy` must pass clean on all platform targets you changed. Use `mise run lint-all` to check all targets.
 - Swift test apps use `swift-format` (via `mise run fmt`).
 
