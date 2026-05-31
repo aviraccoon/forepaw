@@ -714,12 +714,12 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
 /// [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
 /// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
 pub fn click_ref(
-    r#ref: crate::core::element_tree::ElementRef,
+    reference: crate::core::element_tree::ElementRef,
     app: &AppTarget,
     options: &ClickOptions,
 ) -> Result<ActionResult, ForepawError> {
     let (_, pid) = activate_app(app)?;
-    let element = snapshot::resolve_ref_element(r#ref.id, app)?;
+    let element = snapshot::resolve_ref_element(reference.id, app)?;
     click_element(element, options, Some(pid))
 }
 
@@ -796,16 +796,18 @@ pub fn click_region(
 /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
 /// or [`ForepawError::ActionFailed`] if the element has no position or size.
 pub fn hover_ref(
-    r#ref: crate::core::element_tree::ElementRef,
+    reference: crate::core::element_tree::ElementRef,
     app: &AppTarget,
 ) -> Result<ActionResult, ForepawError> {
     let (_, pid) = activate_app(app)?;
-    let element = snapshot::resolve_ref_element(r#ref.id, app)?;
+    let element = snapshot::resolve_ref_element(reference.id, app)?;
 
-    let pos = snapshot::get_element_position(element)
-        .ok_or_else(|| ForepawError::ActionFailed(format!("Cannot determine position of {ref}")))?;
-    let (w, h) = snapshot::get_element_size(element)
-        .ok_or_else(|| ForepawError::ActionFailed(format!("Cannot determine size of {ref}")))?;
+    let pos = snapshot::get_element_position(element).ok_or_else(|| {
+        ForepawError::ActionFailed(format!("Cannot determine position of {reference}"))
+    })?;
+    let (w, h) = snapshot::get_element_size(element).ok_or_else(|| {
+        ForepawError::ActionFailed(format!("Cannot determine size of {reference}"))
+    })?;
 
     let screen_point = CGPointFFI {
         x: pos.x + w / 2.0,
@@ -886,12 +888,12 @@ pub fn hover_region(
 /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
 /// or [`ForepawError::ActionFailed`] if the value cannot be set.
 pub fn type_ref(
-    r#ref: crate::core::element_tree::ElementRef,
+    reference: crate::core::element_tree::ElementRef,
     text: &str,
     app: &AppTarget,
 ) -> Result<ActionResult, ForepawError> {
     activate_app(app)?;
-    let element = snapshot::resolve_ref_element(r#ref.id, app)?;
+    let element = snapshot::resolve_ref_element(reference.id, app)?;
     set_value_on_element(element, text)
 }
 
@@ -934,7 +936,7 @@ pub fn scroll(
     amount: u32,
     app: &AppTarget,
     window: Option<&WindowTarget>,
-    r#ref: Option<crate::core::element_tree::ElementRef>,
+    reference: Option<crate::core::element_tree::ElementRef>,
     at: Option<Point>,
 ) -> Result<ActionResult, ForepawError> {
     let (_, pid, resolved) = activate_and_resolve_window(app, window)?;
@@ -949,14 +951,15 @@ pub fn scroll(
             x: screen.x,
             y: screen.y,
         }
-    } else if let Some(r#ref) = r#ref {
+    } else if let Some(reference) = reference {
         // Scroll at element center
-        let element = snapshot::resolve_ref_element(r#ref.id, app)?;
+        let element = snapshot::resolve_ref_element(reference.id, app)?;
         let pos = snapshot::get_element_position(element).ok_or_else(|| {
-            ForepawError::ActionFailed(format!("Cannot determine position of {ref}"))
+            ForepawError::ActionFailed(format!("Cannot determine position of {reference}"))
         })?;
-        let (w, h) = snapshot::get_element_size(element)
-            .ok_or_else(|| ForepawError::ActionFailed(format!("Cannot determine size of {ref}")))?;
+        let (w, h) = snapshot::get_element_size(element).ok_or_else(|| {
+            ForepawError::ActionFailed(format!("Cannot determine size of {reference}"))
+        })?;
         CGPointFFI {
             x: pos.x + w / 2.0,
             y: pos.y + h / 2.0,

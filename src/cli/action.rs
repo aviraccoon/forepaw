@@ -116,7 +116,7 @@ impl Click {
 #[command(about = "Type text into an element")]
 pub struct Type {
     #[arg(help = "Element ref (e.g. @e5)")]
-    pub r#ref: String,
+    pub reference: String,
 
     #[arg(help = "Text to type")]
     pub positional_text: Option<String>,
@@ -144,10 +144,10 @@ impl Type {
             self.text_option.as_deref(),
             "type",
         )?;
-        let element_ref = ElementRef::parse(&self.r#ref).ok_or_else(|| {
+        let element_ref = ElementRef::parse(&self.reference).ok_or_else(|| {
             anyhow::anyhow!(
                 "Invalid ref: {}. Expected format: @e1, @e2, etc.",
-                self.r#ref
+                self.reference
             )
         })?;
         let app = self.app_target.require("type")?;
@@ -459,7 +459,7 @@ pub struct Scroll {
     pub amount: Option<u32>,
 
     #[arg(long, help = "Element ref to scroll within")]
-    pub r#ref: Option<String>,
+    pub reference: Option<String>,
 
     #[arg(long, help = "Window-relative coordinates to scroll at")]
     pub at: Option<String>,
@@ -482,12 +482,12 @@ impl Scroll {
             );
         }
 
-        if self.r#ref.is_some() && self.at.is_some() {
+        if self.reference.is_some() && self.at.is_some() {
             anyhow::bail!("Use --ref or --at, not both");
         }
 
         let element_ref = self
-            .r#ref
+            .reference
             .as_deref()
             .map(|s| {
                 ElementRef::parse(s)
@@ -785,10 +785,10 @@ fn execute_action(
                 },
             );
 
-            if let Some(r#ref) = ElementRef::parse(target) {
+            if let Some(reference) = ElementRef::parse(target) {
                 let app = require_app_raw(app_name, effective_pid, "click")?;
                 provider
-                    .click_ref(r#ref, &app, &options)
+                    .click_ref(reference, &app, &options)
                     .map_err(Into::into)
             } else if let Some(region) = parse_region(target) {
                 let app = require_app_raw(app_name, effective_pid, "click")?;
@@ -814,9 +814,9 @@ fn execute_action(
             let app_name = parse_option("--app", args).or(batch_app);
             let smooth = args.iter().any(|a| a == "--smooth");
 
-            if let Some(r#ref) = ElementRef::parse(target) {
+            if let Some(reference) = ElementRef::parse(target) {
                 let app = require_app_raw(app_name, effective_pid, "hover")?;
-                provider.hover_ref(r#ref, &app).map_err(Into::into)
+                provider.hover_ref(reference, &app).map_err(Into::into)
             } else if let Some(region) = parse_region(target) {
                 let app = require_app_raw(app_name, effective_pid, "hover")?;
                 let win = resolve_batch_window(args, batch_window);
@@ -840,7 +840,7 @@ fn execute_action(
             let ref_str = args
                 .first()
                 .ok_or_else(|| anyhow::anyhow!("type requires ref and text"))?;
-            let r#ref = ElementRef::parse(ref_str)
+            let reference = ElementRef::parse(ref_str)
                 .ok_or_else(|| anyhow::anyhow!("Invalid ref: {ref_str}"))?;
             let text = parse_option("--text", args)
                 .map(String::from)
@@ -851,7 +851,9 @@ fn execute_action(
                 effective_pid,
                 "type",
             )?;
-            provider.type_ref(r#ref, &text, &app).map_err(Into::into)
+            provider
+                .type_ref(reference, &text, &app)
+                .map_err(Into::into)
         }
         "keyboard-type" => {
             let text = parse_option("--text", args)

@@ -220,12 +220,22 @@ impl serde::Serialize for Role {
 
 impl fmt::Display for Role {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // "Button" → "button", "TextField" → "textfield"
-        let name = self.short_name();
-        for ch in name.chars() {
-            ch.to_ascii_lowercase().fmt(f)?;
-        }
-        Ok(())
+        f.write_str(self.short_name())
+    }
+}
+
+impl Role {
+    /// Lowercase role name for prose (e.g. "button", "text field").
+    ///
+    /// Same output as [`short_name()`](Self::short_name). Use [`to_lowercase()`](Self::to_lowercase)
+    /// for prose text (e.g. "the button is disabled").
+    /// Use this for inline text: "the {role} is disabled".
+    #[must_use]
+    pub fn to_lowercase(self) -> String {
+        self.short_name()
+            .chars()
+            .map(|c| c.to_ascii_lowercase())
+            .collect()
     }
 }
 
@@ -291,10 +301,10 @@ mod tests {
 
     #[test]
     fn display_format() {
-        assert_eq!(Role::Button.to_string(), "button");
-        assert_eq!(Role::TextField.to_string(), "textfield");
-        assert_eq!(Role::StaticText.to_string(), "statictext");
-        assert_eq!(Role::Unknown.to_string(), "unknown");
+        assert_eq!(Role::Button.to_string(), "Button");
+        assert_eq!(Role::TextField.to_string(), "TextField");
+        assert_eq!(Role::StaticText.to_string(), "StaticText");
+        assert_eq!(Role::Unknown.to_string(), "Unknown");
     }
 
     #[test]

@@ -84,11 +84,11 @@ impl DesktopProvider for DarwinProvider {
 
     fn click_ref(
         &self,
-        r#ref: crate::core::element_tree::ElementRef,
+        reference: crate::core::element_tree::ElementRef,
         app: &AppTarget,
         options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        input::click_ref(r#ref, app, options)
+        input::click_ref(reference, app, options)
     }
 
     fn click_at_point(
@@ -112,10 +112,10 @@ impl DesktopProvider for DarwinProvider {
 
     fn hover_ref(
         &self,
-        r#ref: crate::core::element_tree::ElementRef,
+        reference: crate::core::element_tree::ElementRef,
         app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        input::hover_ref(r#ref, app)
+        input::hover_ref(reference, app)
     }
 
     fn hover_at_point(
@@ -149,11 +149,11 @@ impl DesktopProvider for DarwinProvider {
 
     fn type_ref(
         &self,
-        r#ref: crate::core::element_tree::ElementRef,
+        reference: crate::core::element_tree::ElementRef,
         text: &str,
         app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        input::type_ref(r#ref, text, app)
+        input::type_ref(reference, text, app)
     }
 
     fn keyboard_type(
@@ -178,10 +178,10 @@ impl DesktopProvider for DarwinProvider {
         amount: u32,
         app: &AppTarget,
         window: Option<&WindowTarget>,
-        r#ref: Option<crate::core::element_tree::ElementRef>,
+        reference: Option<crate::core::element_tree::ElementRef>,
         at: Option<crate::core::types::Point>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        input::scroll(direction, amount, app, window, r#ref, at)
+        input::scroll(direction, amount, app, window, reference, at)
     }
 
     fn drag_path(
@@ -227,18 +227,18 @@ impl DesktopProvider for DarwinProvider {
 
     fn resolve_ref_position(
         &self,
-        r#ref: crate::core::element_tree::ElementRef,
+        reference: crate::core::element_tree::ElementRef,
         app: &AppTarget,
     ) -> Result<crate::core::types::Point, ForepawError> {
-        snapshot::resolve_ref_position(r#ref.id, app)
+        snapshot::resolve_ref_position(reference.id, app)
     }
 
     fn resolve_ref_bounds(
         &self,
-        r#ref: crate::core::element_tree::ElementRef,
+        reference: crate::core::element_tree::ElementRef,
         app: &AppTarget,
     ) -> Result<crate::core::types::Rect, ForepawError> {
-        snapshot::resolve_ref_bounds(r#ref.id, app)
+        snapshot::resolve_ref_bounds(reference.id, app)
     }
 
     fn element_at_point(

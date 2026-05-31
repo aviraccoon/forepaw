@@ -681,7 +681,7 @@ fn build_tree(
             role,
             name,
             value,
-            r#ref: None,
+            reference: None,
             bounds,
             enabled,
             focused,

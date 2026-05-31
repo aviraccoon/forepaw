@@ -46,12 +46,12 @@ impl TreeRenderer {
         let prefix = "  ".repeat(indent);
         let mut parts: Vec<String> = Vec::new();
 
-        // Role (lowercase via Display)
-        let role = node.data.role.to_string();
+        // Role (lowercase for prose)
+        let role = node.data.role.to_lowercase();
         parts.push(role);
 
         // Ref
-        if let Some(r) = &node.data.r#ref {
+        if let Some(r) = &node.data.reference {
             parts.push(r.to_string());
         }
 
@@ -157,13 +157,13 @@ mod tests {
                     ElementNode::new(
                         ElementData::new(Role::Button)
                             .with_name("OK")
-                            .with_ref(ElementRef::new(1)),
+                            .with_reference(ElementRef::new(1)),
                     ),
                     ElementNode::new(
                         ElementData::new(Role::TextField)
                             .with_name("Name")
                             .with_value("hello")
-                            .with_ref(ElementRef::new(2)),
+                            .with_reference(ElementRef::new(2)),
                     ),
                 ]),
         );
@@ -247,7 +247,7 @@ mod tests {
             .with_children(vec![ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("OK")
-                    .with_ref(ElementRef::new(1))
+                    .with_reference(ElementRef::new(1))
                     .with_bounds(Rect::new(150.0, 250.0, 80.0, 30.0)),
             )]),
         )
@@ -277,7 +277,7 @@ mod tests {
             .with_children(vec![ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("OK")
-                    .with_ref(ElementRef::new(1))
+                    .with_reference(ElementRef::new(1))
                     .with_bounds(Rect::new(150.0, 250.0, 80.0, 30.0)),
             )]),
         );
@@ -298,7 +298,7 @@ mod tests {
             ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("OK")
-                    .with_ref(ElementRef::new(1)),
+                    .with_reference(ElementRef::new(1)),
             ),
         );
 
@@ -316,7 +316,7 @@ mod tests {
             ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("OK")
-                    .with_ref(ElementRef::new(1))
+                    .with_reference(ElementRef::new(1))
                     .with_enabled(false),
             ),
         );
@@ -335,7 +335,7 @@ mod tests {
             ElementNode::new(
                 ElementData::new(Role::TextField)
                     .with_name("Name")
-                    .with_ref(ElementRef::new(1))
+                    .with_reference(ElementRef::new(1))
                     .with_focused(true)
                     .with_selected(true),
             ),
@@ -354,7 +354,7 @@ mod tests {
             ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("OK")
-                    .with_ref(ElementRef::new(1))
+                    .with_reference(ElementRef::new(1))
                     .with_enabled(true),
             ),
         );
@@ -373,7 +373,7 @@ mod tests {
             ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("OK")
-                    .with_ref(ElementRef::new(1))
+                    .with_reference(ElementRef::new(1))
                     .with_description("Confirms the action"),
             ),
         );
@@ -394,7 +394,7 @@ mod tests {
             ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("OK")
-                    .with_ref(ElementRef::new(1))
+                    .with_reference(ElementRef::new(1))
                     .with_native_role("AXButton")
                     .with_identifier("submit-btn"),
             ),

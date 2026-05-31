@@ -444,7 +444,7 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     if let Some(only) = params.only {
         if !only.is_empty() {
             let ref_set: std::collections::HashSet<ElementRef> = only.iter().copied().collect();
-            annotations.retain(|a| ref_set.contains(&a.r#ref));
+            annotations.retain(|a| ref_set.contains(&a.reference));
         }
     }
 

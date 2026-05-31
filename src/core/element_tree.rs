@@ -16,8 +16,8 @@ pub struct ElementData {
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
-    #[serde(rename = "ref", skip_serializing_if = "Option::is_none")]
-    pub r#ref: Option<ElementRef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference: Option<ElementRef>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
     /// Whether the element is enabled (interactive). `None` if the platform
@@ -54,7 +54,7 @@ impl ElementData {
             role,
             name: None,
             value: None,
-            r#ref: None,
+            reference: None,
             bounds: None,
             enabled: None,
             focused: None,
@@ -81,8 +81,8 @@ impl ElementData {
         self
     }
 
-    pub fn with_ref(mut self, r#ref: ElementRef) -> Self {
-        self.r#ref = Some(r#ref);
+    pub fn with_reference(mut self, reference: ElementRef) -> Self {
+        self.reference = Some(reference);
         self
     }
 
@@ -200,7 +200,7 @@ impl ElementTree {
         }
     }
 
-    pub fn with_refs(
+    pub fn with_references(
         mut self,
         refs: std::collections::HashMap<ElementRef, ElementRefInfo>,
     ) -> Self {

@@ -421,7 +421,7 @@ pub trait DesktopProvider: Send + Sync {
     /// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
     fn click_ref(
         &self,
-        r#ref: ElementRef,
+        reference: ElementRef,
         app: &AppTarget,
         options: &ClickOptions,
     ) -> Result<ActionResult, ForepawError>;
@@ -461,7 +461,11 @@ pub trait DesktopProvider: Send + Sync {
     ///
     /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
     /// or [`ForepawError::ActionFailed`] if the element has no position or size.
-    fn hover_ref(&self, r#ref: ElementRef, app: &AppTarget) -> Result<ActionResult, ForepawError>;
+    fn hover_ref(
+        &self,
+        reference: ElementRef,
+        app: &AppTarget,
+    ) -> Result<ActionResult, ForepawError>;
 
     /// Moves the cursor to absolute screen coordinates.
     ///
@@ -512,7 +516,7 @@ pub trait DesktopProvider: Send + Sync {
     /// or [`ForepawError::ActionFailed`] if the element does not support text input.
     fn type_ref(
         &self,
-        r#ref: ElementRef,
+        reference: ElementRef,
         text: &str,
         app: &AppTarget,
     ) -> Result<ActionResult, ForepawError>;
@@ -550,7 +554,7 @@ pub trait DesktopProvider: Send + Sync {
         amount: u32,
         app: &AppTarget,
         window: Option<&WindowTarget>,
-        r#ref: Option<ElementRef>,
+        reference: Option<ElementRef>,
         at: Option<Point>,
     ) -> Result<ActionResult, ForepawError>;
 
@@ -621,7 +625,7 @@ pub trait DesktopProvider: Send + Sync {
     /// or [`ForepawError::ActionFailed`] if the element has no position or size.
     fn resolve_ref_position(
         &self,
-        r#ref: ElementRef,
+        reference: ElementRef,
         app: &AppTarget,
     ) -> Result<Point, ForepawError>;
 
@@ -631,7 +635,11 @@ pub trait DesktopProvider: Send + Sync {
     ///
     /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
     /// or [`ForepawError::ActionFailed`] if the element has no position or size.
-    fn resolve_ref_bounds(&self, r#ref: ElementRef, app: &AppTarget) -> Result<Rect, ForepawError>;
+    fn resolve_ref_bounds(
+        &self,
+        reference: ElementRef,
+        app: &AppTarget,
+    ) -> Result<Rect, ForepawError>;
 
     /// Performs a hit test at the given screen coordinates.
     ///

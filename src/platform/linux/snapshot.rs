@@ -187,7 +187,7 @@ fn build_tree(
             role,
             name: final_name,
             value,
-            r#ref: None,
+            reference: None,
             bounds,
             // TODO: populate from AT-SPI2 StateSet (ENABLED, FOCUSED, SELECTED) and Description
             enabled: None,

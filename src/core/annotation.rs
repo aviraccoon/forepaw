@@ -6,7 +6,7 @@ use crate::core::types::Rect;
 /// A single element annotation: a labeled marker on a screenshot.
 #[derive(Debug, Clone)]
 pub struct Annotation {
-    pub r#ref: ElementRef,
+    pub reference: ElementRef,
     pub display_number: usize,
     pub role: Role,
     pub name: Option<String>,
@@ -16,14 +16,14 @@ pub struct Annotation {
 impl Annotation {
     #[must_use]
     pub fn new(
-        r#ref: ElementRef,
+        reference: ElementRef,
         display_number: usize,
         role: Role,
         name: Option<String>,
         bounds: Rect,
     ) -> Self {
         Self {
-            r#ref,
+            reference,
             display_number,
             role,
             name,
@@ -93,7 +93,7 @@ impl AnnotationCollector {
         display_number: &mut usize,
         window_bounds: Rect,
     ) {
-        if let Some(r) = &node.data.r#ref {
+        if let Some(r) = &node.data.reference {
             if let Some(bounds) = &node.data.bounds {
                 if node.is_interactive() {
                     // Convert to window-relative coordinates
@@ -164,7 +164,7 @@ impl AnnotationLegend {
                 format!(
                     "[{}] {} {}{}",
                     a.display_number,
-                    a.r#ref,
+                    a.reference,
                     a.short_role(),
                     name
                 )
@@ -309,13 +309,13 @@ mod tests {
                 ElementData::new(Role::Button)
                     .with_name("Save")
                     .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
-                    .with_ref(ElementRef::new(1)),
+                    .with_reference(ElementRef::new(1)),
             ),
             ElementNode::new(
                 ElementData::new(Role::TextField)
                     .with_name("Search")
                     .with_bounds(Rect::new(300.0, 100.0, 200.0, 25.0))
-                    .with_ref(ElementRef::new(2)),
+                    .with_reference(ElementRef::new(2)),
             ),
         ]);
 
@@ -324,10 +324,10 @@ mod tests {
 
         assert_eq!(annotations.len(), 2);
         assert_eq!(annotations[0].display_number, 1);
-        assert_eq!(annotations[0].r#ref, ElementRef::new(1));
+        assert_eq!(annotations[0].reference, ElementRef::new(1));
         assert_eq!(annotations[0].name.as_deref(), Some("Save"));
         assert_eq!(annotations[1].display_number, 2);
-        assert_eq!(annotations[1].r#ref, ElementRef::new(2));
+        assert_eq!(annotations[1].reference, ElementRef::new(2));
     }
 
     #[test]
@@ -338,7 +338,7 @@ mod tests {
                 ElementData::new(Role::Button)
                     .with_name("OK")
                     .with_bounds(Rect::new(250.0, 150.0, 60.0, 30.0))
-                    .with_ref(ElementRef::new(1)),
+                    .with_reference(ElementRef::new(1)),
             )]);
 
         let collector = AnnotationCollector::new();
@@ -357,7 +357,7 @@ mod tests {
             ElementNode::new(ElementData::new(Role::Window)).with_children(vec![ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("Ghost")
-                    .with_ref(ElementRef::new(1)),
+                    .with_reference(ElementRef::new(1)),
             )]);
 
         let collector = AnnotationCollector::new();
@@ -389,21 +389,21 @@ mod tests {
                 ElementData::new(Role::Button)
                     .with_name("Hidden")
                     .with_bounds(Rect::new(0.0, 100.0, 50.0, 30.0))
-                    .with_ref(ElementRef::new(1)),
+                    .with_reference(ElementRef::new(1)),
             ),
             // Entirely below
             ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("Below")
                     .with_bounds(Rect::new(200.0, 700.0, 80.0, 30.0))
-                    .with_ref(ElementRef::new(2)),
+                    .with_reference(ElementRef::new(2)),
             ),
             // Visible
             ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("Visible")
                     .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
-                    .with_ref(ElementRef::new(3)),
+                    .with_reference(ElementRef::new(3)),
             ),
         ]);
 
@@ -422,13 +422,13 @@ mod tests {
                 ElementData::new(Role::Button)
                     .with_name("A")
                     .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
-                    .with_ref(ElementRef::new(5)),
+                    .with_reference(ElementRef::new(5)),
             ),
             ElementNode::new(
                 ElementData::new(Role::Button)
                     .with_name("B")
                     .with_bounds(Rect::new(300.0, 100.0, 80.0, 30.0))
-                    .with_ref(ElementRef::new(10)),
+                    .with_reference(ElementRef::new(10)),
             ),
         ]);
 
@@ -436,9 +436,9 @@ mod tests {
         let annotations = collector.collect(&root, window_bounds);
 
         assert_eq!(annotations[0].display_number, 1);
-        assert_eq!(annotations[0].r#ref, ElementRef::new(5));
+        assert_eq!(annotations[0].reference, ElementRef::new(5));
         assert_eq!(annotations[1].display_number, 2);
-        assert_eq!(annotations[1].r#ref, ElementRef::new(10));
+        assert_eq!(annotations[1].reference, ElementRef::new(10));
     }
 
     #[test]

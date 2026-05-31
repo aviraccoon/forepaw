@@ -191,7 +191,7 @@ pub struct Screenshot {
         long,
         help = "Crop to element ref bounds (e.g. --ref @e5). Requires --app."
     )]
-    pub r#ref: Option<String>,
+    pub reference: Option<String>,
 
     #[arg(long, help = "Crop to region: x,y,w,h. Requires --app.")]
     pub region: Option<String>,
@@ -295,7 +295,7 @@ impl Screenshot {
     ) -> anyhow::Result<Option<CropRegion>> {
         let pad = self.padding.unwrap_or(20.0);
 
-        if let Some(ref ref_str) = self.r#ref {
+        if let Some(ref ref_str) = self.reference {
             let app = self
                 .global
                 .app_target

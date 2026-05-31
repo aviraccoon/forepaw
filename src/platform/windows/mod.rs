@@ -84,12 +84,12 @@ impl DesktopProvider for WindowsProvider {
 
     fn click_ref(
         &self,
-        r#ref: crate::core::element_tree::ElementRef,
+        reference: crate::core::element_tree::ElementRef,
         _app: &AppTarget,
         _options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(format!(
-            "click not yet implemented on Windows (ref: {ref})"
+            "click not yet implemented on Windows (ref: {reference})"
         )))
     }
 
@@ -118,11 +118,11 @@ impl DesktopProvider for WindowsProvider {
 
     fn hover_ref(
         &self,
-        r#ref: crate::core::element_tree::ElementRef,
+        reference: crate::core::element_tree::ElementRef,
         _app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(format!(
-            "hover not yet implemented on Windows (ref: {ref})"
+            "hover not yet implemented on Windows (ref: {reference})"
         )))
     }
 
@@ -163,12 +163,12 @@ impl DesktopProvider for WindowsProvider {
 
     fn type_ref(
         &self,
-        r#ref: crate::core::element_tree::ElementRef,
+        reference: crate::core::element_tree::ElementRef,
         _text: &str,
         _app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         Err(ForepawError::ActionFailed(format!(
-            "type not yet implemented on Windows (ref: {ref})"
+            "type not yet implemented on Windows (ref: {reference})"
         )))
     }
 

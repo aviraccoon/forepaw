@@ -41,14 +41,14 @@ impl RefAssigner {
 
         if node.is_interactive() {
             let element_ref = ElementRef::new(*counter);
-            new_data.r#ref = Some(element_ref);
+            new_data.reference = Some(element_ref);
             refs.insert(
                 element_ref,
                 ElementRefInfo::new(node.data.role, node.data.name.clone()),
             );
             *counter += 1;
         } else {
-            new_data.r#ref = node.data.r#ref;
+            new_data.reference = node.data.reference;
         }
 
         let children: Vec<ElementNode> = if interactive_only {
@@ -56,7 +56,7 @@ impl RefAssigner {
                 .iter()
                 .filter_map(|child| {
                     let walked = Self::walk(child, counter, refs, true);
-                    if walked.data.r#ref.is_some() || !walked.children.is_empty() {
+                    if walked.data.reference.is_some() || !walked.children.is_empty() {
                         Some(walked)
                     } else {
                         None
@@ -108,15 +108,18 @@ mod tests {
         let result = assigner.assign(&tree, false);
 
         assert_eq!(
-            result.root.children[0].children[0].data.r#ref,
+            result.root.children[0].children[0].data.reference,
             Some(ElementRef::new(1))
         );
         assert_eq!(
-            result.root.children[0].children[1].data.r#ref,
+            result.root.children[0].children[1].data.reference,
             Some(ElementRef::new(2))
         );
-        assert_eq!(result.root.children[1].data.r#ref, Some(ElementRef::new(3)));
-        assert!(result.root.data.r#ref.is_none());
+        assert_eq!(
+            result.root.children[1].data.reference,
+            Some(ElementRef::new(3))
+        );
+        assert!(result.root.data.reference.is_none());
     }
 
     #[test]

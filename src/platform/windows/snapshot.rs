@@ -187,7 +187,7 @@ fn build_tree(
             role,
             name: final_name,
             value: None, // TODO: UIA Value pattern for element values
-            r#ref: None,
+            reference: None,
             bounds,
             // TODO: populate from UIA (IsEnabled, HasKeyboardFocus, IsSelected, HelpText)
             enabled: None,
