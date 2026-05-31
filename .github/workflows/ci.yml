@@ -36,19 +36,19 @@ jobs:
         run: cargo fmt --check
 
       - name: Lint
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --workspace -- -D warnings
 
       - name: Test
-        run: cargo test
+        run: cargo test --workspace
 
       - name: Check x86_64
         run: cargo check --target x86_64-apple-darwin
 
       - name: Lint x86_64
-        run: cargo clippy --target x86_64-apple-darwin -- -D warnings
+        run: cargo clippy --target x86_64-apple-darwin --workspace -- -D warnings
 
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --bin forepaw
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -84,19 +84,19 @@ jobs:
         run: cargo check --target aarch64-pc-windows-msvc
 
       - name: Lint ARM64
-        run: cargo clippy --target aarch64-pc-windows-msvc -- -D warnings
+        run: cargo clippy --target aarch64-pc-windows-msvc --workspace -- -D warnings
 
       - name: Test
-        run: cargo test
+        run: cargo test --workspace
 
       - name: Check x86_64
         run: cargo check --target x86_64-pc-windows-msvc
 
       - name: Lint x86_64
-        run: cargo clippy --target x86_64-pc-windows-msvc -- -D warnings
+        run: cargo clippy --target x86_64-pc-windows-msvc --workspace -- -D warnings
 
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --bin forepaw
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -128,22 +128,22 @@ jobs:
         run: nix develop .# --command cargo fmt --check
 
       - name: Check generated AT-SPI roles
-        run: diff <(bash res/generate_atspi_roles.sh) src/platform/linux/role.rs
+        run: diff <(bash res/generate_atspi_roles.sh) crates/forepaw/src/platform/linux/role.rs
 
       - name: Check musl x86_64
         run: nix develop .# --command cargo check --target x86_64-unknown-linux-musl
 
       - name: Lint musl x86_64
-        run: nix develop .# --command cargo clippy --target x86_64-unknown-linux-musl -- -D warnings
+        run: nix develop .# --command cargo clippy --target x86_64-unknown-linux-musl --workspace -- -D warnings
 
       - name: Check musl aarch64
         run: nix develop .# --command cargo check --target aarch64-unknown-linux-musl
 
       - name: Lint musl aarch64
-        run: nix develop .# --command cargo clippy --target aarch64-unknown-linux-musl -- -D warnings
+        run: nix develop .# --command cargo clippy --target aarch64-unknown-linux-musl --workspace -- -D warnings
 
       - name: Test
-        run: nix develop .# --command cargo test
+        run: nix develop .# --command cargo test --workspace
 
       - name: Build release
         run: nix develop .# --command cargo zigbuild --release --target x86_64-unknown-linux-musl

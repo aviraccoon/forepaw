@@ -33,13 +33,13 @@ jobs:
         run: cargo fmt --check
 
       - name: Lint
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --workspace -- -D warnings
 
       - name: Test
-        run: cargo test
+        run: cargo test --workspace
 
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --bin forepaw
 
       - name: Package
         run: |
@@ -72,7 +72,7 @@ jobs:
           components: rustfmt
 
       - name: Build release
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} --bin forepaw
 
       - name: Package
         shell: pwsh
@@ -107,7 +107,7 @@ jobs:
           extra_nix_config: experimental-features = nix-command flakes
 
       - name: Build release
-        run: nix develop .# --command cargo zigbuild --release --target ${{ matrix.target }}
+        run: nix develop .# --command cargo zigbuild --release --target ${{ matrix.target }} --bin forepaw
 
       - name: Package
         run: |

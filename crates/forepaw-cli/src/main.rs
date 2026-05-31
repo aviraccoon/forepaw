@@ -1,12 +1,14 @@
 /// Forepaw: desktop automation CLI for AI agents.
 use clap::Parser;
 
-use forepaw::cli::action::{
+mod cli;
+
+use crate::cli::action::{
     Batch, Click, Drag, Hover, KeyboardType, OcrClick, Press, Scroll, Type, Wait,
 };
-use forepaw::cli::observation::{HitTest, ListApps, ListWindows, Ocr, Screenshot, Snapshot};
-use forepaw::cli::system::Permissions;
-use forepaw::cli::GlobalArgs;
+use crate::cli::observation::{HitTest, ListApps, ListWindows, Ocr, Screenshot, Snapshot};
+use crate::cli::system::Permissions;
+use crate::cli::GlobalArgs;
 use forepaw::core::output_formatter::OutputFormat;
 use forepaw::platform::DesktopProvider;
 
@@ -84,22 +86,22 @@ fn main() -> anyhow::Result<()> {
     let globals = GlobalArgs::new(app.format, app.verbose);
 
     match app.command {
-        Commands::Snapshot(cmd) => cmd.run(provider, &globals),
-        Commands::Screenshot(cmd) => cmd.run(provider, &globals),
-        Commands::ListApps(cmd) => cmd.run(provider, &globals),
-        Commands::ListWindows(cmd) => cmd.run(provider, &globals),
-        Commands::Ocr(cmd) => cmd.run(provider, &globals),
-        Commands::HitTest(cmd) => cmd.run(provider, &globals),
-        Commands::Click(cmd) => cmd.run(provider, &globals),
-        Commands::Type(cmd) => cmd.run(provider, &globals),
-        Commands::KeyboardType(cmd) => cmd.run(provider, &globals),
-        Commands::Press(cmd) => cmd.run(provider, &globals),
-        Commands::OcrClick(cmd) => cmd.run(provider, &globals),
-        Commands::Hover(cmd) => cmd.run(provider, &globals),
-        Commands::Wait(cmd) => cmd.run(provider, &globals),
-        Commands::Scroll(cmd) => cmd.run(provider, &globals),
-        Commands::Drag(cmd) => cmd.run(provider, &globals),
-        Commands::Batch(cmd) => cmd.run(provider, &globals),
-        Commands::Permissions(cmd) => cmd.run(provider, &globals),
+        Commands::Snapshot(cmd) => cmd.run(provider, globals),
+        Commands::Screenshot(cmd) => cmd.run(provider, globals),
+        Commands::ListApps(cmd) => cmd.run(provider, globals),
+        Commands::ListWindows(cmd) => cmd.run(provider, globals),
+        Commands::Ocr(cmd) => cmd.run(provider, globals),
+        Commands::HitTest(cmd) => cmd.run(provider, globals),
+        Commands::Click(cmd) => cmd.run(provider, globals),
+        Commands::Type(cmd) => cmd.run(provider, globals),
+        Commands::KeyboardType(cmd) => cmd.run(provider, globals),
+        Commands::Press(cmd) => cmd.run(provider, globals),
+        Commands::OcrClick(cmd) => cmd.run(provider, globals),
+        Commands::Hover(cmd) => cmd.run(provider, globals),
+        Commands::Wait(cmd) => cmd.run(provider, globals),
+        Commands::Scroll(cmd) => cmd.run(provider, globals),
+        Commands::Drag(cmd) => cmd.run(provider, globals),
+        Commands::Batch(cmd) => cmd.run(provider, globals),
+        Commands::Permissions(cmd) => cmd.run(provider, globals),
     }
 }

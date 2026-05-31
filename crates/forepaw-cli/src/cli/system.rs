@@ -1,11 +1,11 @@
 /// CLI subcommand: permissions check.
 use crate::cli::GlobalArgs;
-use crate::platform::DesktopProvider;
+use forepaw::platform::DesktopProvider;
 
 /// Check or request accessibility permissions.
 #[derive(clap::Args)]
 #[command(about = "Check or request accessibility permissions")]
-pub struct Permissions {
+pub(crate) struct Permissions {
     #[arg(long, help = "Prompt for permission")]
     pub request: bool,
 }
@@ -16,7 +16,11 @@ impl Permissions {
     /// # Errors
     ///
     /// Returns an error if the current executable path cannot be determined.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let binary = std::env::current_exe().unwrap_or_default();
         let binary_display = binary.display();
 

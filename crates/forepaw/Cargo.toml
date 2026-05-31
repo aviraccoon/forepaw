@@ -1,0 +1,69 @@
+# Dependency policy for library crate:
+# - Minor-range pins ("x.y") to avoid conflicts with downstream consumers.
+# - Exact versions are resolved in Cargo.lock (committed). CI enforces --locked.
+# - Run `cargo update` intentionally, review the lockfile diff.
+
+[package]
+name = "forepaw"
+version = "0.3.0"
+edition = "2021"
+license = "Unlicense"
+description = "Cross-platform desktop automation library. Control any application through accessibility trees, OCR, and input simulation."
+readme = "README.md"
+repository = "https://github.com/aviraccoon/forepaw"
+categories = ["accessibility"]
+keywords = ["accessibility", "desktop-automation", "ocr", "a11y"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = { version = "0.3", features = [
+    "NSWorkspace",
+    "NSRunningApplication",
+    "NSScreen",
+    "NSImage",
+    "NSGraphicsContext",
+    "NSBitmapImageRep",
+] }
+objc2-core-graphics = "0.3"
+objc2-core-foundation = "0.3"
+objc2-vision = { version = "0.3", features = [
+    "VNRecognizeTextRequest",
+    "VNRequestHandler",
+    "VNObservation",
+    "VNTypes",
+    "block2",
+] }
+block2 = "0.6"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+image = "0.25"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_Xps",          # PrintWindow + PRINT_WINDOW_FLAGS
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Threading",
+    "Win32_System_WinRT",
+    "Win32_UI_Accessibility",
+    "Win32_UI_HiDpi",
+    "Win32_UI_WindowsAndMessaging",
+    "Foundation",
+    "Graphics_Imaging",
+    "Media_Ocr",
+] }
+windows-future = "0.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+
+[lints]
+workspace = true

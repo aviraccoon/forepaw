@@ -1,9 +1,9 @@
 /// Shared parsing utilities for CLI arguments.
-use crate::core::types::{Point, Rect};
+use forepaw::core::types::{Point, Rect};
 
 /// Parse "x,y" coordinate string into a Point.
 #[must_use]
-pub fn parse_coordinate(s: &str) -> Option<Point> {
+pub(crate) fn parse_coordinate(s: &str) -> Option<Point> {
     let parts: Vec<&str> = s.split(',').collect();
     if parts.len() != 2 {
         return None;
@@ -16,7 +16,7 @@ pub fn parse_coordinate(s: &str) -> Option<Point> {
 /// Parse "x,y,w,h" into a Rect (4 components = region).
 #[expect(clippy::many_single_char_names, reason = "geometric coordinates")]
 #[must_use]
-pub fn parse_region(s: &str) -> Option<Rect> {
+pub(crate) fn parse_region(s: &str) -> Option<Rect> {
     let parts: Vec<&str> = s.split(',').collect();
     if parts.len() != 4 {
         return None;
@@ -34,7 +34,7 @@ pub fn parse_region(s: &str) -> Option<Rect> {
 /// # Errors
 ///
 /// Returns an error if neither source provides text, or both are provided.
-pub fn resolve_text<'a>(
+pub(crate) fn resolve_text<'a>(
     positional: Option<&'a str>,
     option: Option<&'a str>,
     command: &str,
@@ -54,7 +54,7 @@ pub fn resolve_text<'a>(
 
 /// Split a string into shell-like tokens, respecting double quotes.
 #[must_use]
-pub fn shell_split(input: &str) -> Vec<String> {
+pub(crate) fn shell_split(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut in_quotes = false;

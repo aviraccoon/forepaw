@@ -642,9 +642,7 @@ dependencies = [
 name = "forepaw"
 version = "0.3.0"
 dependencies = [
- "anyhow",
  "block2",
- "clap",
  "image",
  "libc",
  "objc2",
@@ -658,6 +656,17 @@ dependencies = [
  "windows",
  "windows-future",
  "zbus",
+]
+
+[[package]]
+name = "forepaw-cli"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "forepaw",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

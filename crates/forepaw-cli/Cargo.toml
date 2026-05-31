@@ -1,0 +1,29 @@
+# Dependency policy for CLI binary:
+# - Exact pins ("=x.y.z") for maximum supply chain control.
+# - 14-day cooldown on new versions (security fixes excepted).
+# - Cargo.lock is committed and CI enforces --locked.
+
+[package]
+name = "forepaw-cli"
+version = "0.3.0"
+edition = "2021"
+license = "Unlicense"
+description = "CLI for forepaw desktop automation."
+readme = "README.md"
+repository = "https://github.com/aviraccoon/forepaw"
+categories = ["command-line-utilities", "accessibility"]
+keywords = ["accessibility", "desktop-automation", "ocr", "a11y", "cli"]
+
+[[bin]]
+name = "forepaw"
+path = "src/main.rs"
+
+[dependencies]
+forepaw = { path = "../forepaw" }
+anyhow = "=1.0.102"
+clap = { version = "=4.6.1", features = ["derive"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.149"
+
+[lints]
+workspace = true

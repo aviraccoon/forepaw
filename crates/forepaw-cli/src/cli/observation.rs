@@ -3,13 +3,13 @@ use clap::Args;
 
 use crate::cli::parse::{parse_coordinate, parse_region};
 use crate::cli::GlobalArgs;
-use crate::core::annotation::AnnotationStyle;
-use crate::core::crop_region::CropRegion;
-use crate::core::element_tree::ElementRef;
-use crate::core::snapshot_cache::SnapshotCache;
-use crate::core::snapshot_diff::SnapshotDiffer;
-use crate::core::tree_renderer::TreeRenderer;
-use crate::platform::{
+use forepaw::core::annotation::AnnotationStyle;
+use forepaw::core::crop_region::CropRegion;
+use forepaw::core::element_tree::ElementRef;
+use forepaw::core::snapshot_cache::SnapshotCache;
+use forepaw::core::snapshot_diff::SnapshotDiffer;
+use forepaw::core::tree_renderer::TreeRenderer;
+use forepaw::platform::{
     AncestorInfo, DesktopProvider, HitTestResult, ImageFormat, ScreenshotOptions, SnapshotOptions,
 };
 
@@ -30,7 +30,7 @@ fn truncate_display(s: &str) -> String {
 
 /// Shared global options (app/pid, window).
 #[derive(Args, Clone)]
-pub struct GlobalOptions {
+pub(crate) struct GlobalOptions {
     #[command(flatten)]
     pub app_target: crate::cli::AppTargetArgs,
 
@@ -45,7 +45,7 @@ pub struct GlobalOptions {
     reason = "CLI flags accumulate booleans"
 )]
 #[command(about = "Accessibility tree with element refs")]
-pub struct Snapshot {
+pub(crate) struct Snapshot {
     #[command(flatten)]
     pub global: GlobalOptions,
 
@@ -91,11 +91,15 @@ impl Snapshot {
     ///
     /// Returns an error if `--app` is missing, the application is not running,
     /// or accessibility permission is denied.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let app = self
             .global
             .app_target
-            .resolve()?
+            .resolve()
             .ok_or_else(|| anyhow::anyhow!("--app or --pid is required"))?;
 
         let interactive = self.interactive;
@@ -159,7 +163,7 @@ impl Snapshot {
 /// Take a screenshot.
 #[derive(clap::Args)]
 #[command(about = "Take a screenshot")]
-pub struct Screenshot {
+pub(crate) struct Screenshot {
     #[command(flatten)]
     pub global: GlobalOptions,
 
@@ -210,7 +214,11 @@ impl Screenshot {
     ///
     /// Returns an error if `--ref` is given without `--app`, the ref is invalid,
     /// or the provider fails to capture (permission denied, app not found).
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let annotation_style = self.resolve_annotation_style();
         let ref_filter: Option<Vec<ElementRef>> = if self.only.is_empty() {
             None
@@ -225,10 +233,10 @@ impl Screenshot {
 
         let ss_options = self.build_screenshot_options();
         let crop_region = self.resolve_crop_region(provider)?;
-        let app_target = self.global.app_target.resolve()?;
+        let app_target = self.global.app_target.resolve();
         let window_target = self.global.window_target.resolve();
 
-        let params = crate::platform::ScreenshotParams {
+        let params = forepaw::platform::ScreenshotParams {
             app: app_target.as_ref(),
             window: window_target.as_ref(),
             style: annotation_style,
@@ -299,7 +307,7 @@ impl Screenshot {
             let app = self
                 .global
                 .app_target
-                .resolve()?
+                .resolve()
                 .ok_or_else(|| anyhow::anyhow!("--app or --pid is required"))?;
             let element_ref = ElementRef::parse(ref_str)
                 .ok_or_else(|| anyhow::anyhow!("Invalid ref format: {ref_str}. Expected @eN"))?;
@@ -321,7 +329,7 @@ impl Screenshot {
 /// List running GUI applications.
 #[derive(clap::Args)]
 #[command(about = "List running GUI applications")]
-pub struct ListApps;
+pub(crate) struct ListApps;
 
 impl ListApps {
     /// Lists running GUI applications.
@@ -329,7 +337,15 @@ impl ListApps {
     /// # Errors
     ///
     /// Returns an error if accessibility permission is denied.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    #[expect(
+        clippy::unused_self,
+        reason = "clap subcommand dispatch uses instance method"
+    )]
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let apps = provider.list_apps()?;
         let mut sorted = apps;
         sorted.sort_by(|a, b| a.name.cmp(&b.name));
@@ -356,7 +372,7 @@ impl ListApps {
 /// List visible windows.
 #[derive(clap::Args)]
 #[command(about = "List visible windows")]
-pub struct ListWindows {
+pub(crate) struct ListWindows {
     #[command(flatten)]
     pub global: GlobalOptions,
 }
@@ -367,8 +383,12 @@ impl ListWindows {
     /// # Errors
     ///
     /// Returns an error if the specified application is not found.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
-        let app_target = self.global.app_target.resolve()?;
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
+        let app_target = self.global.app_target.resolve();
         let windows = provider.list_windows(app_target.as_ref())?;
         if globals.json() {
             println!(
@@ -385,7 +405,7 @@ impl ListWindows {
                     .unwrap_or_default();
                 let state = w
                     .state
-                    .filter(|s| *s != crate::platform::WindowState::Normal)
+                    .filter(|s| *s != forepaw::platform::WindowState::Normal)
                     .map(|s| format!("  {s}"))
                     .unwrap_or_default();
                 println!("{}  {}  \"{}\"{}{}", w.id, w.app, w.title, bounds, state);
@@ -398,7 +418,7 @@ impl ListWindows {
 /// Hit-test an accessibility element at screen coordinates.
 #[derive(clap::Args)]
 #[command(about = "Find what element is at screen coordinates")]
-pub struct HitTest {
+pub(crate) struct HitTest {
     #[command(flatten)]
     pub global: GlobalOptions,
 
@@ -417,11 +437,15 @@ impl HitTest {
     ///
     /// Returns an error if the coordinates are invalid, or the hit test fails
     /// (no element at point, permission denied, etc).
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let point = parse_coordinate(&self.point)
             .ok_or_else(|| anyhow::anyhow!("Invalid coordinates: {}. Expected x,y", self.point))?;
 
-        let app_target = self.global.app_target.resolve()?;
+        let app_target = self.global.app_target.resolve();
         let result = provider.element_at_point(point, app_target.as_ref())?;
 
         let truncate = |s: &str| {
@@ -504,7 +528,7 @@ impl HitTest {
 /// Screenshot and run OCR, returning recognized text with coordinates.
 #[derive(clap::Args)]
 #[command(about = "Screenshot and run OCR, returning recognized text with coordinates")]
-pub struct Ocr {
+pub(crate) struct Ocr {
     #[command(flatten)]
     pub global: GlobalOptions,
 
@@ -537,14 +561,18 @@ impl Ocr {
     ///
     /// Returns an error if screen recording permission is denied,
     /// or the target app/window is not found.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let ss_options: Option<ScreenshotOptions> = if self.no_screenshot {
             None
         } else {
             Some(self.build_screenshot_options())
         };
 
-        let app_target = self.global.app_target.resolve()?;
+        let app_target = self.global.app_target.resolve();
         let window_target = self.global.window_target.resolve();
         let output = provider.ocr(
             app_target.as_ref(),

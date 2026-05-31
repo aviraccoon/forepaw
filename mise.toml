@@ -3,47 +3,47 @@ swift_dirs = "TestApps/"
 
 [tasks.build]
 description = "Build debug binary (Rust)"
-run = "cargo build"
+run = "cargo build --workspace"
 
 [tasks.dev]
 description = "Build debug binary and run"
 usage = 'arg "<command>" var=#true help="forepaw subcommand and arguments"'
-run = "cargo build && cargo run -- ${usage_command}"
+run = "cargo build --workspace && cargo run --bin forepaw -- ${usage_command}"
 
 [tasks.test]
 description = "Run tests (Rust)"
-run = "cargo test"
+run = "cargo test --workspace"
 
 [tasks.check]
 description = "Lint and test"
 run = [
     "cargo fmt -- --check",
-    "cargo clippy -- -D warnings",
-    "cargo test",
+    "cargo clippy --workspace -- -D warnings",
+    "cargo test --workspace",
 ]
 
 [tasks.lint]
 description = "Lint current platform (clippy)"
-run = "cargo clippy -- -D warnings"
+run = "cargo clippy --workspace -- -D warnings"
 
 [tasks.lint-all]
 description = "Lint all platform targets (needs rustup targets installed)"
 run = [
-    "cargo clippy --target aarch64-apple-darwin -- -D warnings",
-    "cargo clippy --target x86_64-apple-darwin -- -D warnings",
-    "cargo clippy --target x86_64-pc-windows-msvc -- -D warnings",
-    "cargo clippy --target aarch64-pc-windows-msvc -- -D warnings",
-    "cargo clippy --target aarch64-unknown-linux-musl -- -D warnings",
-    "cargo clippy --target x86_64-unknown-linux-musl -- -D warnings",
+    "cargo clippy --workspace --target aarch64-apple-darwin -- -D warnings",
+    "cargo clippy --workspace --target x86_64-apple-darwin -- -D warnings",
+    "cargo clippy --workspace --target x86_64-pc-windows-msvc -- -D warnings",
+    "cargo clippy --workspace --target aarch64-pc-windows-msvc -- -D warnings",
+    "cargo clippy --workspace --target aarch64-unknown-linux-musl -- -D warnings",
+    "cargo clippy --workspace --target x86_64-unknown-linux-musl -- -D warnings",
 ]
 
 [tasks.lint-strict]
 description = "Discover new lints (full pedantic + restriction as warnings, not blocking)"
-run = "cargo clippy --all-targets -- -W clippy::pedantic -W clippy::restriction"
+run = "cargo clippy --workspace --all-targets -- -W clippy::pedantic -W clippy::restriction"
 
 [tasks.miri]
 description = "Run tests under Miri (UB detection, requires nightly)"
-run = "cargo +nightly miri test"
+run = "cargo +nightly miri test --workspace"
 
 [tasks.audit]
 description = "Check dependencies for known vulnerabilities"
@@ -62,7 +62,7 @@ run = [
 
 [tasks.release-build]
 description = "Build release binary (Rust)"
-run = "cargo build --release"
+run = "cargo build --release --bin forepaw"
 
 [tasks.build-windows]
 description = "Cross-compile for Windows (both architectures)"

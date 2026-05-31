@@ -278,15 +278,20 @@ cargo clippy --target x86_64-pc-windows-msvc -- -D warnings
 ### Project layout
 
 ```
-src/
-  main.rs             # CLI entry point (clap derive)
-  cli/                # Command handlers
-  core/               # Platform-agnostic: types, refs, rendering, diffing
-  platform/
-    mod.rs            # DesktopProvider trait definition
-    darwin/           # macOS: AXUIElement, CGEvent, Vision OCR, CoreGraphics
-    windows/          # Windows: UIA, EnumWindows, SendInput (in progress)
-TestApps/             # SwiftUI test apps for manual testing
+crates/
+  forepaw/                    # library crate (types, trait, backends)
+    src/
+      core/                   # Platform-agnostic: types, refs, rendering, diffing
+      platform/
+        mod.rs                # DesktopProvider trait definition
+        darwin/               # macOS: AXUIElement, CGEvent, Vision OCR, CoreGraphics
+        windows/              # Windows: UIA, EnumWindows, SendInput
+        linux/                # Linux: AT-SPI2, D-Bus
+  forepaw-cli/                 # CLI binary
+    src/
+      main.rs                 # CLI entry point (clap derive)
+      cli/                     # Command handlers
+TestApps/                      # SwiftUI test apps for manual testing
 ```
 
 ### Contributing guidelines

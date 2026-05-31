@@ -1,70 +1,9 @@
-# Dependency policy: pin versions older than 14 days (supply chain protection).
-# Exception: security fixes may bypass the cooldown.
+[workspace]
+members = ["crates/forepaw", "crates/forepaw-cli"]
+resolver = "2"
 
-[package]
-name = "forepaw"
-version = "0.3.0"
-edition = "2021"
-license = "Unlicense"
-description = "A raccoon's paws on your desktop. Cross-platform automation CLI. Control any application through accessibility trees, OCR, and input simulation."
-repository = "https://github.com/aviraccoon/forepaw"
-categories = ["command-line-utilities", "accessibility"]
-keywords = ["accessibility", "desktop-automation", "ocr", "a11y", "cli"]
-
-[dependencies]
-anyhow = "=1.0.102"
-clap = { version = "=4.6.1", features = ["derive"] }
-serde = { version = "=1.0.228", features = ["derive"] }
-serde_json = "=1.0.149"
-
-[target.'cfg(unix)'.dependencies]
-libc = "=0.2.186"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "=0.6.4"
-objc2-foundation = "=0.3.2"
-objc2-app-kit = { version = "=0.3.2", features = [
-    "NSWorkspace",
-    "NSRunningApplication",
-    "NSScreen",
-    "NSImage",
-    "NSGraphicsContext",
-    "NSBitmapImageRep",
-] }
-objc2-core-graphics = "=0.3.2"
-objc2-core-foundation = "=0.3.2"
-objc2-vision = { version = "=0.3.2", features = [
-    "VNRecognizeTextRequest",
-    "VNRequestHandler",
-    "VNObservation",
-    "VNTypes",
-    "block2",
-] }
-block2 = "=0.6.2"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-image = "=0.25.10"
-windows = { version = "=0.62.2", features = [
-    "Win32_Foundation",
-    "Win32_Graphics_Gdi",
-    "Win32_Storage_Xps",          # PrintWindow + PRINT_WINDOW_FLAGS
-    "Win32_Security",
-    "Win32_System_Com",
-    "Win32_System_Threading",
-    "Win32_System_WinRT",
-    "Win32_UI_Accessibility",
-    "Win32_UI_HiDpi",
-    "Win32_UI_WindowsAndMessaging",
-    "Foundation",
-    "Graphics_Imaging",
-    "Media_Ocr",
-] }
-windows-future = "=0.3.2"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-zbus = { version = "=5.15.0", default-features = false, features = ["blocking-api", "async-io"] }
-
-# Clippy lint configuration.
+# Workspace-level lint configuration.
+# Both crates inherit via `[lints] workspace = true`.
 #
 # pedantic is denied as baseline (broadly useful, new lints auto-appear).
 # restriction lints are cherry-picked (no blanket category enable).
@@ -73,13 +12,13 @@ zbus = { version = "=5.15.0", default-features = false, features = ["blocking-ap
 #
 # Test exceptions live in clippy.toml.
 
-[lints.rust]
+[workspace.lints.rust]
 unreachable_pub                 = "warn"
 unused_qualifications           = "warn"
 missing_docs                    = "allow"   # bookmark: enable when lib surface matters
 missing_debug_implementations   = "allow"   # bookmark: enable when lib surface matters
 
-[lints.clippy]
+[workspace.lints.clippy]
 pedantic = { level = "deny", priority = -1 }
 cargo   = { level = "warn", priority = -1 }
 

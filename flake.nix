@@ -28,7 +28,7 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
+          version = (builtins.fromTOML (builtins.readFile ./crates/forepaw/Cargo.toml)).package.version;
         in
         {
           default = pkgs.rustPlatform.buildRustPackage {

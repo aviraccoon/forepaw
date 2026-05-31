@@ -1,29 +1,29 @@
 /// CLI module: clap subcommands and shared utilities.
-pub mod action;
-pub mod observation;
-pub mod parse;
-pub mod system;
+pub(crate) mod action;
+pub(crate) mod observation;
+pub(crate) mod parse;
+pub(crate) mod system;
 
-use crate::core::output_formatter::OutputFormat;
-use crate::platform::{AppTarget, WindowTarget};
+use forepaw::core::output_formatter::OutputFormat;
+use forepaw::platform::{AppTarget, WindowTarget};
 
 /// Global options parsed from the top-level `forepaw` command.
 ///
 /// Passed to every subcommand's `run()` method.
 #[derive(Debug, Clone, Copy)]
-pub struct GlobalArgs {
+pub(crate) struct GlobalArgs {
     pub format: OutputFormat,
     pub verbose: bool,
 }
 
 impl GlobalArgs {
     #[must_use]
-    pub fn new(format: OutputFormat, verbose: bool) -> Self {
+    pub(crate) fn new(format: OutputFormat, verbose: bool) -> Self {
         Self { format, verbose }
     }
 
     #[must_use]
-    pub fn json(&self) -> bool {
+    pub(crate) fn json(self) -> bool {
         self.format == OutputFormat::Json
     }
 }
@@ -34,7 +34,7 @@ impl GlobalArgs {
 /// Clap enforces that at most one is set.
 #[derive(clap::Args, Clone, Debug)]
 #[group(multiple = false)]
-pub struct AppTargetArgs {
+pub(crate) struct AppTargetArgs {
     #[arg(long, help = "Target application name")]
     pub app: Option<String>,
 
@@ -52,11 +52,11 @@ impl AppTargetArgs {
     ///
     /// Returns an error only if clap's group validation was somehow bypassed.
     /// In practice, this should never happen.
-    pub fn resolve(&self) -> anyhow::Result<Option<AppTarget>> {
+    pub(crate) fn resolve(&self) -> Option<AppTarget> {
         match (&self.app, &self.pid) {
-            (Some(name), None) => Ok(Some(AppTarget::name(name))),
-            (None, Some(pid)) => Ok(Some(AppTarget::pid(*pid))),
-            (None, None) => Ok(None),
+            (Some(name), None) => Some(AppTarget::name(name)),
+            (None, Some(pid)) => Some(AppTarget::pid(*pid)),
+            (None, None) => None,
             (Some(_), Some(_)) => unreachable!("clap group prevents both --app and --pid"),
         }
     }
@@ -66,8 +66,8 @@ impl AppTargetArgs {
     /// # Errors
     ///
     /// Returns an error if neither is provided.
-    pub fn require(&self, context: &str) -> anyhow::Result<AppTarget> {
-        self.resolve()?
+    pub(crate) fn require(&self, context: &str) -> anyhow::Result<AppTarget> {
+        self.resolve()
             .ok_or_else(|| anyhow::anyhow!("--app or --pid is required for {context}"))
     }
 }
@@ -78,7 +78,7 @@ impl AppTargetArgs {
 /// Clap enforces that at most one is set.
 #[derive(clap::Args, Clone, Debug)]
 #[group(multiple = false)]
-pub struct WindowTargetArgs {
+pub(crate) struct WindowTargetArgs {
     #[arg(long, help = "Window title (case-insensitive substring match)")]
     pub window: Option<String>,
 
@@ -92,7 +92,7 @@ impl WindowTargetArgs {
     /// Returns `Some(target)` if one is set, `None` if neither is set.
     /// Clap's group validation already prevents both being set.
     #[must_use]
-    pub fn resolve(&self) -> Option<WindowTarget> {
+    pub(crate) fn resolve(&self) -> Option<WindowTarget> {
         match (&self.window, &self.window_id) {
             (Some(title), None) => Some(WindowTarget::title(title)),
             (None, Some(id)) => Some(WindowTarget::id(id.strip_prefix("w-").unwrap_or(id))),

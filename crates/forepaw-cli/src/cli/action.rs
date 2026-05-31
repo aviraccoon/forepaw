@@ -2,10 +2,10 @@ use crate::cli::parse::{parse_coordinate, parse_region, resolve_text, shell_spli
 /// CLI subcommands: actions (click, type, press, scroll, drag, hover, wait, batch, ocr-click).
 use crate::cli::AppTargetArgs;
 use crate::cli::GlobalArgs;
-use crate::core::element_tree::ElementRef;
-use crate::core::key_combo::{ClickOptions, DragOptions, KeyCombo, MouseButton};
-use crate::core::output_formatter::OutputFormatter;
-use crate::platform::{DesktopProvider, WindowTarget};
+use forepaw::core::element_tree::ElementRef;
+use forepaw::core::key_combo::{ClickOptions, DragOptions, KeyCombo, MouseButton};
+use forepaw::core::output_formatter::OutputFormatter;
+use forepaw::platform::{DesktopProvider, WindowTarget};
 
 /// Resolve `--app` and `--pid` from raw option values (batch subcommand parsing).
 ///
@@ -17,10 +17,10 @@ use crate::platform::{DesktopProvider, WindowTarget};
 fn resolve_app_raw(
     app: Option<&str>,
     pid: Option<i32>,
-) -> anyhow::Result<Option<crate::platform::AppTarget>> {
+) -> anyhow::Result<Option<forepaw::platform::AppTarget>> {
     match (app, pid) {
-        (Some(name), None) => Ok(Some(crate::platform::AppTarget::name(name))),
-        (None, Some(pid)) => Ok(Some(crate::platform::AppTarget::pid(pid))),
+        (Some(name), None) => Ok(Some(forepaw::platform::AppTarget::name(name))),
+        (None, Some(pid)) => Ok(Some(forepaw::platform::AppTarget::pid(pid))),
         (Some(_), Some(_)) => {
             anyhow::bail!("Cannot specify both --app and --pid")
         }
@@ -37,7 +37,7 @@ fn require_app_raw(
     app: Option<&str>,
     pid: Option<i32>,
     context: &str,
-) -> anyhow::Result<crate::platform::AppTarget> {
+) -> anyhow::Result<forepaw::platform::AppTarget> {
     resolve_app_raw(app, pid)?
         .ok_or_else(|| anyhow::anyhow!("--app or --pid is required for {context}"))
 }
@@ -45,7 +45,7 @@ fn require_app_raw(
 /// Click an element by ref or at coordinates.
 #[derive(clap::Args)]
 #[command(about = "Click an element by ref or at coordinates (coords are window-relative)")]
-pub struct Click {
+pub(crate) struct Click {
     #[arg(help = "Element ref (@e3), coordinates (500,300), or region (400,280,80,80)")]
     pub target: String,
 
@@ -70,7 +70,11 @@ impl Click {
     /// Returns an error if `--app` is missing for ref/coordinate targets,
     /// or if the underlying provider call fails (app not found, stale ref,
     /// point outside window, etc.).
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let options = ClickOptions::new(
             if self.right {
                 MouseButton::Right
@@ -114,7 +118,7 @@ impl Click {
 /// Type text into an element.
 #[derive(clap::Args)]
 #[command(about = "Type text into an element")]
-pub struct Type {
+pub(crate) struct Type {
     #[arg(help = "Element ref (e.g. @e5)")]
     pub reference: String,
 
@@ -138,7 +142,11 @@ impl Type {
     ///
     /// Returns an error if the ref format is invalid, `--app` is missing,
     /// or the element does not support text input.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
             self.text_option.as_deref(),
@@ -173,7 +181,7 @@ impl Type {
     name = "keyboard-type",
     about = "Type text into the focused element (no ref needed). Omit --app/--pid to type into current focus"
 )]
-pub struct KeyboardType {
+pub(crate) struct KeyboardType {
     #[arg(help = "Text to type")]
     pub positional_text: Option<String>,
 
@@ -193,13 +201,17 @@ impl KeyboardType {
     /// # Errors
     ///
     /// Returns an error if no text is provided, or the platform input API fails.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
             self.text_option.as_deref(),
             "keyboard-type",
         )?;
-        let app_target = self.app_target.resolve()?;
+        let app_target = self.app_target.resolve();
         let result = provider.keyboard_type(text, app_target.as_ref())?;
 
         let formatter = OutputFormatter::new(globals.format);
@@ -221,7 +233,7 @@ impl KeyboardType {
 #[command(
     about = "Press a keyboard shortcut (e.g. cmd+s, ctrl+shift+z). Omit --app/--pid for global hotkeys"
 )]
-pub struct Press {
+pub(crate) struct Press {
     #[arg(help = "Key combo (e.g. cmd+s, return, escape)")]
     pub combo: String,
 
@@ -235,9 +247,13 @@ impl Press {
     /// # Errors
     ///
     /// Returns an error if the key combination is invalid or the platform input API fails.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let key_combo = KeyCombo::parse(&self.combo);
-        let app_target = self.app_target.resolve()?;
+        let app_target = self.app_target.resolve();
         let result = provider.press(&key_combo, app_target.as_ref())?;
 
         let formatter = OutputFormatter::new(globals.format);
@@ -257,7 +273,7 @@ impl Press {
 /// Find text on screen via OCR and click it.
 #[derive(clap::Args)]
 #[command(name = "ocr-click", about = "Find text on screen via OCR and click it")]
-pub struct OcrClick {
+pub(crate) struct OcrClick {
     #[arg(help = "Text to find and click")]
     pub positional_text: Option<String>,
 
@@ -290,7 +306,11 @@ impl OcrClick {
     ///
     /// Returns an error if no text is provided, the text is not found,
     /// or multiple matches exist without `--index`.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
             self.text_option.as_deref(),
@@ -326,7 +346,7 @@ impl OcrClick {
 /// Hover over an element or at coordinates.
 #[derive(clap::Args)]
 #[command(about = "Move mouse to an element without clicking (triggers tooltips/hover states)")]
-pub struct Hover {
+pub(crate) struct Hover {
     #[arg(
         help = "Element ref (@e3), text for OCR, coordinates (500,300), or region (400,280,80,80)"
     )]
@@ -349,7 +369,11 @@ impl Hover {
     ///
     /// Returns an error if `--app` is missing for ref/region targets,
     /// or the underlying provider call fails.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let window_target = self.window_target.resolve();
         let result = if let Some(element_ref) = ElementRef::parse(&self.target) {
             let app = self.app_target.require("ref-based hover")?;
@@ -358,7 +382,7 @@ impl Hover {
             let app = self.app_target.require("region-based hover")?;
             provider.hover_region(region, &app, window_target.as_ref(), self.smooth)?
         } else if let Some(point) = parse_coordinate(&self.target) {
-            let app_target = self.app_target.resolve()?;
+            let app_target = self.app_target.resolve();
             provider.hover_at_point(point, app_target.as_ref(), self.smooth)?
         } else {
             let app = self.app_target.require("text-based hover")?;
@@ -382,7 +406,7 @@ impl Hover {
 /// Wait for text to appear on screen (OCR polling).
 #[derive(clap::Args)]
 #[command(about = "Wait for text to appear on screen (OCR polling)")]
-pub struct Wait {
+pub(crate) struct Wait {
     #[arg(help = "Text to wait for")]
     pub positional_text: Option<String>,
 
@@ -412,7 +436,11 @@ impl Wait {
     ///
     /// Returns an error if `--app` is missing, the text is not found before
     /// the timeout, or screen recording permission is denied.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let text = resolve_text(
             self.positional_text.as_deref(),
             self.text_option.as_deref(),
@@ -445,7 +473,7 @@ impl Wait {
 /// Scroll within an app window.
 #[derive(clap::Args)]
 #[command(about = "Scroll within an app window")]
-pub struct Scroll {
+pub(crate) struct Scroll {
     #[arg(help = "Direction: up, down, left, right")]
     pub direction: String,
 
@@ -472,7 +500,11 @@ impl Scroll {
     ///
     /// Returns an error if `--app` is missing, the direction is invalid,
     /// or a ref/coordinate target cannot be resolved.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let valid = ["up", "down", "left", "right"];
         if !valid.contains(&self.direction.as_str()) {
             anyhow::bail!(
@@ -532,7 +564,7 @@ impl Scroll {
 /// Drag from one point to another.
 #[derive(clap::Args)]
 #[command(about = "Drag from one point to another (for drawing, moving, resizing)")]
-pub struct Drag {
+pub(crate) struct Drag {
     #[arg(
         trailing_var_arg = true,
         help = "Drag targets: <from> <to> or path (coords as x,y or refs as @eN)"
@@ -571,17 +603,23 @@ impl Drag {
     ///
     /// Returns an error if `--app` is missing for ref-based drag,
     /// coordinate arguments are malformed, or the underlying provider call fails.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let options = DragOptions {
             steps: self.steps.unwrap_or(30),
             duration: self.duration.unwrap_or(0.3),
-            modifiers: crate::core::key_combo::Modifier::parse_modifiers(self.modifiers.as_deref()),
+            modifiers: forepaw::core::key_combo::Modifier::parse_modifiers(
+                self.modifiers.as_deref(),
+            ),
             pressure: self.pressure,
             right_button: self.right,
             close_path: self.close,
         };
 
-        let app_target = self.app_target.resolve()?;
+        let app_target = self.app_target.resolve();
         let result = if self.stdin {
             let coords = read_coords_from_stdin()?;
             if coords.len() < 2 {
@@ -641,7 +679,7 @@ impl Drag {
 fn resolve_drag_target(
     target: &str,
     _provider: &dyn DesktopProvider,
-) -> anyhow::Result<crate::core::types::Point> {
+) -> anyhow::Result<forepaw::core::types::Point> {
     if let Some(point) = parse_coordinate(target) {
         return Ok(point);
     }
@@ -650,7 +688,7 @@ fn resolve_drag_target(
     anyhow::bail!("Invalid target: {target}. Expected coordinates (500,300).")
 }
 
-fn read_coords_from_stdin() -> anyhow::Result<Vec<crate::core::types::Point>> {
+fn read_coords_from_stdin() -> anyhow::Result<Vec<forepaw::core::types::Point>> {
     use std::io::Read;
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
@@ -677,7 +715,7 @@ fn read_coords_from_stdin() -> anyhow::Result<Vec<crate::core::types::Point>> {
 /// Execute multiple actions in one invocation.
 #[derive(clap::Args)]
 #[command(about = "Execute multiple actions in one invocation")]
-pub struct Batch {
+pub(crate) struct Batch {
     #[arg(
         trailing_var_arg = true,
         help = "Actions separated by ;; (e.g. 'click @e3 ;; press cmd+s ;; keyboard-type hello')"
@@ -701,7 +739,11 @@ impl Batch {
     ///
     /// Returns an error on the first subcommand that fails. Earlier subcommands'
     /// side effects are not rolled back.
-    pub fn run(&self, provider: &dyn DesktopProvider, globals: &GlobalArgs) -> anyhow::Result<()> {
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
         let joined = self.args.join(" ");
         let actions: Vec<&str> = joined
             .split(";;")
@@ -754,7 +796,7 @@ fn execute_action(
     batch_app: Option<&str>,
     batch_pid: Option<i32>,
     batch_window: Option<&WindowTarget>,
-) -> anyhow::Result<crate::platform::ActionResult> {
+) -> anyhow::Result<forepaw::platform::ActionResult> {
     let parts = shell_split(action);
     let command = parts
         .first()
@@ -937,7 +979,7 @@ fn execute_action(
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0.3);
             let drag_pressure = parse_option("--pressure", args).and_then(|s| s.parse().ok());
-            let drag_mods = crate::core::key_combo::Modifier::parse_modifiers(parse_option(
+            let drag_mods = forepaw::core::key_combo::Modifier::parse_modifiers(parse_option(
                 "--modifiers",
                 args,
             ));

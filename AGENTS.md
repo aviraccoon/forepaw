@@ -20,14 +20,14 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 
 | Task | Location |
 |------|----------|
-| Add/modify CLI commands | `src/cli/action.rs`, `src/cli/observation.rs`, `src/cli/system.rs` |
-| Platform-agnostic types & logic | `src/core/` |
-| Logging (FOREPAW_LOG env var) | `src/log.rs` |
-| Platform abstraction (DesktopProvider trait) | `src/platform/mod.rs` |
-| macOS backend (AX, OCR, input, screenshots) | `src/platform/darwin/` |
-| Windows backend (UIA, Win32, WinRT OCR) | `src/platform/windows/` |
-| Linux backend (AT-SPI2, D-Bus) | `src/platform/linux/` |
-| AT-SPI2 role generator | `res/generate_atspi_roles.sh` → `src/platform/linux/role.rs` |
+| Add/modify CLI commands | `crates/forepaw-cli/src/cli/action.rs`, `crates/forepaw-cli/src/cli/observation.rs`, `crates/forepaw-cli/src/cli/system.rs` |
+| Platform-agnostic types & logic | `crates/forepaw/src/core/` |
+| Logging (FOREPAW_LOG env var) | `crates/forepaw/src/log.rs` |
+| Platform abstraction (DesktopProvider trait) | `crates/forepaw/src/platform/mod.rs` |
+| macOS backend (AX, OCR, input, screenshots) | `crates/forepaw/src/platform/darwin/` |
+| Windows backend (UIA, Win32, WinRT OCR) | `crates/forepaw/src/platform/windows/` |
+| Linux backend (AT-SPI2, D-Bus) | `crates/forepaw/src/platform/linux/` |
+| AT-SPI2 role generator | `res/generate_atspi_roles.sh` → `crates/forepaw/src/platform/linux/role.rs` |
 | Test apps (SwiftUI, manual testing) | `TestApps/` |
 | Research docs | `docs/` |
 | Windows diagnostic scripts | `scripts/windows/` |
@@ -40,7 +40,9 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 - **Dependencies**: clap, anyhow, serde, serde_json. Platform APIs via `objc2` (macOS), `windows` crate (Windows), `zbus` (Linux). No external cross-platform deps.
 - **Ref system**: `@e1`, `@e2` assigned depth-first by `RefAssigner`. Positional -- action commands re-walk the tree to resolve refs across CLI invocations.
 - **DesktopProvider trait** in `src/platform/mod.rs` defines the full platform surface. All CLI commands call through `&dyn DesktopProvider`. Every new platform method must be added to the trait first.
-- **Single crate with cfg gates** for all three platforms (`target_os = "macos"` / `"windows"` / `"linux"`).
+- **Two-crate workspace**: `forepaw` (library, `crates/forepaw/`) and `forepaw-cli` (binary, `crates/forepaw-cli/`). cfg gates for all three platforms (`target_os = "macos"` / `"windows"` / `"linux"`).
+- **Dependency policy**: library crate uses minor-range pins (`"1"`, `"0.6"`) so downstream consumers don't hit patch-version conflicts. CLI binary uses exact pins (`"=1.0.102"`) for supply chain control. Lockfile pins exact versions for both.
+- **Import convention**: library code uses `crate::` internally. CLI code uses `forepaw::core::` / `forepaw::platform::` for lib imports, `crate::cli::` for internal refs.
 - **`r#ref` everywhere** because `ref` is a Rust keyword.
 - **Two permissions**: Accessibility (for AX tree, actions) and Screen Recording (for screenshots, OCR). Both checked in `forepaw permissions`.
 
@@ -75,7 +77,7 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 - Implement `std::str::FromStr` for string-parsed enums (clippy enforces this over custom `from_str` methods).
 - Use `anyhow::Result` in CLI command methods; use `Result<_, ForepawError>` in platform/trait methods.
 - **Per-site `#[expect]` for cast lints, never fn-wide.** Fn-wide `#[expect(clippy::cast_*)]` silently suppresses new casts added later. Always annotate the specific `as` expression with `#[expect(clippy::cast_X, reason = "why this is safe")]`. For display-only casts (format strings), prefer eliminating the cast entirely by formatting f64 directly with `{:.0}` instead of casting to `i32`/`i64` first.
-- `forepaw-audit` and other companion tools depend on this crate as a library dependency (not subprocess/JSON). Keep the lib surface clean.
+- `forepaw-audit` and other companion tools depend on the `forepaw` library crate (not subprocess/JSON). Keep the lib surface clean.
 - **Debug logging**: `FOREPAW_LOG=debug` or `FOREPAW_LOG=snapshot=debug`. Zero-deps, uses `RUST_LOG` as fallback. See `src/log.rs`.
 - **Read docs and skill files in full before acting on them.** Skimming leads to stale assumptions and wrong edits.
 - **Nix**: `nix build` produces the binary, `nix develop` gives a complete dev environment (Rust + cross-compilation tools), `nix fmt` formats `.nix` files. Linux CI uses the nix dev shell for musl builds. Tests that depend on PATH tools (e.g. `is_command_available`) should skip in the Nix sandbox (`NIX_BUILD_TOP` env check).
