@@ -8,7 +8,12 @@
   };
 
   outputs =
-    { nixpkgs, rust-overlay, self, ... }:
+    {
+      nixpkgs,
+      rust-overlay,
+      self,
+      ...
+    }:
     let
       systems = [
         "aarch64-darwin"
@@ -60,6 +65,8 @@
           };
           rustToolchain = pkgs.rust-bin.stable.latest.default.override {
             targets = [
+              "aarch64-apple-darwin"
+              "x86_64-apple-darwin"
               "x86_64-unknown-linux-musl"
               "aarch64-unknown-linux-musl"
               "x86_64-pc-windows-msvc"
