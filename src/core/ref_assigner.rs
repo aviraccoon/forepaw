@@ -37,16 +37,18 @@ impl RefAssigner {
         refs: &mut HashMap<ElementRef, ElementRefInfo>,
         interactive_only: bool,
     ) -> ElementNode {
-        let mut new_ref = None;
+        let mut new_data = node.data.clone();
 
         if node.is_interactive() {
             let element_ref = ElementRef::new(*counter);
-            new_ref = Some(element_ref);
+            new_data.r#ref = Some(element_ref);
             refs.insert(
                 element_ref,
-                ElementRefInfo::new(node.role, node.name.clone()),
+                ElementRefInfo::new(node.data.role, node.data.name.clone()),
             );
             *counter += 1;
+        } else {
+            new_data.r#ref = node.data.r#ref;
         }
 
         let children: Vec<ElementNode> = if interactive_only {
@@ -54,7 +56,7 @@ impl RefAssigner {
                 .iter()
                 .filter_map(|child| {
                     let walked = Self::walk(child, counter, refs, true);
-                    if walked.r#ref.is_some() || !walked.children.is_empty() {
+                    if walked.data.r#ref.is_some() || !walked.children.is_empty() {
                         Some(walked)
                     } else {
                         None
@@ -68,20 +70,10 @@ impl RefAssigner {
                 .collect()
         };
 
-        let mut new_node = ElementNode::new(node.role);
-        new_node.name.clone_from(&node.name);
-        new_node.value.clone_from(&node.value);
-        new_node.r#ref = new_ref.or(node.r#ref);
-        new_node.bounds = node.bounds;
-        new_node.enabled = node.enabled;
-        new_node.focused = node.focused;
-        new_node.selected = node.selected;
-        new_node.description.clone_from(&node.description);
-        new_node.native_role.clone_from(&node.native_role);
-        new_node.identifier.clone_from(&node.identifier);
-        new_node.attributes.clone_from(&node.attributes);
-        new_node.children = children;
-        new_node
+        ElementNode {
+            data: new_data,
+            children,
+        }
     }
 }
 
@@ -94,18 +86,19 @@ impl Default for RefAssigner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::element_tree::ElementData;
     use crate::core::role::Role;
 
     fn make_tree() -> ElementNode {
-        ElementNode::new(Role::Window)
-            .with_name("Test Window")
-            .with_children(vec![
-                ElementNode::new(Role::Group).with_children(vec![
-                    ElementNode::new(Role::Button).with_name("OK"),
-                    ElementNode::new(Role::Button).with_name("Cancel"),
+        ElementNode::new(ElementData::new(Role::Window).with_name("Test Window")).with_children(
+            vec![
+                ElementNode::new(ElementData::new(Role::Group)).with_children(vec![
+                    ElementNode::new(ElementData::new(Role::Button).with_name("OK")),
+                    ElementNode::new(ElementData::new(Role::Button).with_name("Cancel")),
                 ]),
-                ElementNode::new(Role::TextField).with_name("Name"),
-            ])
+                ElementNode::new(ElementData::new(Role::TextField).with_name("Name")),
+            ],
+        )
     }
 
     #[test]
@@ -115,25 +108,25 @@ mod tests {
         let result = assigner.assign(&tree, false);
 
         assert_eq!(
-            result.root.children[0].children[0].r#ref,
+            result.root.children[0].children[0].data.r#ref,
             Some(ElementRef::new(1))
         );
         assert_eq!(
-            result.root.children[0].children[1].r#ref,
+            result.root.children[0].children[1].data.r#ref,
             Some(ElementRef::new(2))
         );
-        assert_eq!(result.root.children[1].r#ref, Some(ElementRef::new(3)));
-        assert!(result.root.r#ref.is_none());
+        assert_eq!(result.root.children[1].data.r#ref, Some(ElementRef::new(3)));
+        assert!(result.root.data.r#ref.is_none());
     }
 
     #[test]
     fn interactive_only_prunes() {
-        let tree = ElementNode::new(Role::Window).with_children(vec![
-            ElementNode::new(Role::Group).with_children(vec![
-                ElementNode::new(Role::StaticText).with_name("Label"),
-                ElementNode::new(Role::Button).with_name("OK"),
+        let tree = ElementNode::new(ElementData::new(Role::Window)).with_children(vec![
+            ElementNode::new(ElementData::new(Role::Group)).with_children(vec![
+                ElementNode::new(ElementData::new(Role::StaticText).with_name("Label")),
+                ElementNode::new(ElementData::new(Role::Button).with_name("OK")),
             ]),
-            ElementNode::new(Role::StaticText).with_name("Footer"),
+            ElementNode::new(ElementData::new(Role::StaticText).with_name("Footer")),
         ]);
 
         let assigner = RefAssigner::new();

@@ -4,10 +4,13 @@ use std::fmt;
 use crate::core::role::Role;
 use crate::core::types::Rect;
 
-/// A node in the accessibility element tree.
+/// Per-element data, independent of tree structure.
+///
+/// Most consumers only need this -- children are expensive to walk and
+/// often unnecessary (indexing, state comparison, audit rules).
 #[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
-pub struct ElementNode {
+pub struct ElementData {
     pub role: Role,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -43,11 +46,9 @@ pub struct ElementNode {
     pub identifier: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub attributes: Vec<(String, String)>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<Self>,
 }
 
-impl ElementNode {
+impl ElementData {
     pub fn new(role: Role) -> Self {
         Self {
             role,
@@ -62,7 +63,6 @@ impl ElementNode {
             native_role: None,
             identifier: None,
             attributes: Vec::new(),
-            children: Vec::new(),
         }
     }
 
@@ -131,6 +131,31 @@ impl ElementNode {
         self
     }
 
+    /// Whether this element is interactive (should receive a ref).
+    #[must_use]
+    pub fn is_interactive(&self) -> bool {
+        self.role.is_interactive()
+    }
+}
+
+/// A node in the accessibility element tree.
+#[derive(Debug, Clone, serde::Serialize)]
+#[must_use]
+pub struct ElementNode {
+    pub data: ElementData,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<Self>,
+}
+
+impl ElementNode {
+    /// Create a node from element data.
+    pub fn new(data: ElementData) -> Self {
+        Self {
+            data,
+            children: Vec::new(),
+        }
+    }
+
     pub fn with_children(mut self, children: Vec<Self>) -> Self {
         self.children = children;
         self
@@ -143,7 +168,7 @@ impl ElementNode {
     /// Whether this element is interactive (should receive a ref).
     #[must_use]
     pub fn is_interactive(&self) -> bool {
-        self.role.is_interactive()
+        self.data.is_interactive()
     }
 }
 
@@ -262,7 +287,7 @@ impl SnapshotTiming {
                 .iter()
                 .filter(|c| Self::count_nodes(c) >= threshold)
                 .collect();
-            if large_children.len() == 1 && child.name.is_none() {
+            if large_children.len() == 1 && child.data.name.is_none() {
                 Self::append_subtree_report(child, indent, total, threshold, lines);
                 continue;
             }
@@ -287,13 +312,14 @@ impl SnapshotTiming {
     }
 
     fn node_label(node: &ElementNode) -> String {
-        let name = node
-            .name
-            .as_ref()
-            .and_then(|n| if n.is_empty() { None } else { Some(n.as_str()) });
+        let name =
+            node.data
+                .name
+                .as_ref()
+                .and_then(|n| if n.is_empty() { None } else { Some(n.as_str()) });
         let label = name.map_or_else(
-            || node.role.short_name().to_owned(),
-            |n| format!("{} \"{}\"", node.role.short_name(), n),
+            || node.data.role.short_name().to_owned(),
+            |n| format!("{} \"{}\"", node.data.role.short_name(), n),
         );
         let truncated: String = label.chars().take(40).collect();
         truncated
@@ -357,8 +383,8 @@ mod tests {
 
     #[test]
     fn node_is_interactive() {
-        let button = ElementNode::new(Role::Button).with_name("OK");
-        let group = ElementNode::new(Role::Group);
+        let button = ElementNode::new(ElementData::new(Role::Button).with_name("OK"));
+        let group = ElementNode::new(ElementData::new(Role::Group));
         assert!(button.is_interactive());
         assert!(!group.is_interactive());
     }

@@ -13,7 +13,7 @@ use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationTreeWalker,
 };
 
-use crate::core::element_tree::{ElementNode, ElementTree, SnapshotTiming};
+use crate::core::element_tree::{ElementData, ElementNode, ElementTree, SnapshotTiming};
 use crate::core::errors::ForepawError;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::role::Role;
@@ -139,7 +139,7 @@ fn build_tree(
     pruning: &TreePruning,
 ) -> ElementNode {
     if depth >= max_depth {
-        return ElementNode::new(Role::Group);
+        return ElementNode::new(ElementData::new(Role::Group));
     }
 
     // Read properties via direct accessors (no VARIANT/SAFEARRAY)
@@ -152,18 +152,22 @@ fn build_tree(
     if pruning.skip_zero_size {
         if let Some(b) = &bounds {
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
-                return ElementNode::new(role)
-                    .with_name_opt(non_empty(name.as_ref()))
-                    .with_bounds(*b);
+                return ElementNode::new(
+                    ElementData::new(role)
+                        .with_name_opt(non_empty(name.as_ref()))
+                        .with_bounds(*b),
+                );
             }
         }
     }
 
     // Prune offscreen elements
     if pruning.skip_offscreen && depth > 1 && is_offscreen(element) {
-        return ElementNode::new(role)
-            .with_name_opt(non_empty(name.as_ref()))
-            .with_bounds_opt(bounds);
+        return ElementNode::new(
+            ElementData::new(role)
+                .with_name_opt(non_empty(name.as_ref()))
+                .with_bounds_opt(bounds),
+        );
     }
 
     // Walk children via TreeWalker (depth-first)
@@ -179,19 +183,21 @@ fn build_tree(
     let final_name = non_empty(name.as_ref()).or(computed_name);
 
     ElementNode {
-        role,
-        name: final_name,
-        value: None, // TODO: UIA Value pattern for element values
-        r#ref: None,
-        bounds,
-        // TODO: populate from UIA (IsEnabled, HasKeyboardFocus, IsSelected, HelpText)
-        enabled: None,
-        focused: None,
-        selected: None,
-        description: None,
-        native_role: None,
-        identifier: None,
-        attributes: Vec::new(),
+        data: ElementData {
+            role,
+            name: final_name,
+            value: None, // TODO: UIA Value pattern for element values
+            r#ref: None,
+            bounds,
+            // TODO: populate from UIA (IsEnabled, HasKeyboardFocus, IsSelected, HelpText)
+            enabled: None,
+            focused: None,
+            selected: None,
+            description: None,
+            native_role: None,
+            identifier: None,
+            attributes: Vec::new(),
+        },
         children,
     }
 }
@@ -254,8 +260,8 @@ fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Opt
 
     // 2. First child that looks like a text label (`StaticText` with a name)
     for child in children {
-        if child.role == Role::StaticText {
-            if let Some(ref name) = child.name {
+        if child.data.role == Role::StaticText {
+            if let Some(ref name) = child.data.name {
                 if !name.is_empty() {
                     return Some(name.clone());
                 }

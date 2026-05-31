@@ -7,7 +7,7 @@
 
 use zbus::blocking::Connection;
 
-use crate::core::element_tree::{ElementNode, ElementTree, SnapshotTiming};
+use crate::core::element_tree::{ElementData, ElementNode, ElementTree, SnapshotTiming};
 use crate::core::errors::ForepawError;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::role::Role;
@@ -122,7 +122,7 @@ fn build_tree(
     pruning: &TreePruning,
 ) -> ElementNode {
     if depth >= max_depth {
-        return ElementNode::new(Role::Group);
+        return ElementNode::new(ElementData::new(Role::Group));
     }
 
     let role_num = get_role(conn, app_bus, path);
@@ -183,19 +183,21 @@ fn build_tree(
     }
 
     ElementNode {
-        role,
-        name: final_name,
-        value,
-        r#ref: None,
-        bounds,
-        // TODO: populate from AT-SPI2 StateSet (ENABLED, FOCUSED, SELECTED) and Description
-        enabled: None,
-        focused: None,
-        selected: None,
-        description: None,
-        native_role: None,
-        identifier: None,
-        attributes,
+        data: ElementData {
+            role,
+            name: final_name,
+            value,
+            r#ref: None,
+            bounds,
+            // TODO: populate from AT-SPI2 StateSet (ENABLED, FOCUSED, SELECTED) and Description
+            enabled: None,
+            focused: None,
+            selected: None,
+            description: None,
+            native_role: None,
+            identifier: None,
+            attributes,
+        },
         children,
     }
 }
@@ -213,11 +215,11 @@ fn check_pruned(
     if pruning.skip_zero_size {
         if let Some(b) = bounds {
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
-                return Some(
-                    ElementNode::new(role)
+                return Some(ElementNode::new(
+                    ElementData::new(role)
                         .with_name_opt(name.cloned())
                         .with_bounds(*b),
-                );
+                ));
             }
         }
     }
@@ -228,11 +230,11 @@ fn check_pruned(
             let no_horizontal = b.x + b.width <= wb.x || b.x >= wb.x + wb.width;
             let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
             if no_horizontal || no_vertical {
-                return Some(
-                    ElementNode::new(role)
+                return Some(ElementNode::new(
+                    ElementData::new(role)
                         .with_name_opt(name.cloned())
                         .with_bounds(*b),
-                );
+                ));
             }
         }
     }
@@ -243,8 +245,8 @@ fn check_pruned(
 /// Get the first child that looks like a text label.
 fn first_text_child_name(children: &[ElementNode]) -> Option<String> {
     for child in children {
-        if child.role == Role::StaticText {
-            if let Some(ref name) = child.name {
+        if child.data.role == Role::StaticText {
+            if let Some(ref name) = child.data.name {
                 if !name.is_empty() {
                     return Some(name.clone());
                 }

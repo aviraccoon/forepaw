@@ -93,8 +93,8 @@ impl AnnotationCollector {
         display_number: &mut usize,
         window_bounds: Rect,
     ) {
-        if let Some(r) = &node.r#ref {
-            if let Some(bounds) = &node.bounds {
+        if let Some(r) = &node.data.r#ref {
+            if let Some(bounds) = &node.data.bounds {
                 if node.is_interactive() {
                     // Convert to window-relative coordinates
                     let rel = Rect::new(
@@ -113,8 +113,8 @@ impl AnnotationCollector {
                         annotations.push(Annotation::new(
                             *r,
                             *display_number,
-                            node.role,
-                            node.name.clone(),
+                            node.data.role,
+                            node.data.name.clone(),
                             rel,
                         ));
                         *display_number += 1;
@@ -183,6 +183,7 @@ impl Default for AnnotationLegend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::element_tree::ElementData;
     use crate::core::element_tree::ElementRef;
     use crate::core::role::AnnotationCategory;
 
@@ -303,15 +304,19 @@ mod tests {
     #[test]
     fn collects_interactive() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
-        let root = ElementNode::new(Role::Window).with_children(vec![
-            ElementNode::new(Role::Button)
-                .with_name("Save")
-                .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
-                .with_ref(ElementRef::new(1)),
-            ElementNode::new(Role::TextField)
-                .with_name("Search")
-                .with_bounds(Rect::new(300.0, 100.0, 200.0, 25.0))
-                .with_ref(ElementRef::new(2)),
+        let root = ElementNode::new(ElementData::new(Role::Window)).with_children(vec![
+            ElementNode::new(
+                ElementData::new(Role::Button)
+                    .with_name("Save")
+                    .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
+                    .with_ref(ElementRef::new(1)),
+            ),
+            ElementNode::new(
+                ElementData::new(Role::TextField)
+                    .with_name("Search")
+                    .with_bounds(Rect::new(300.0, 100.0, 200.0, 25.0))
+                    .with_ref(ElementRef::new(2)),
+            ),
         ]);
 
         let collector = AnnotationCollector::new();
@@ -329,10 +334,12 @@ mod tests {
     fn window_relative_coords() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
         let root =
-            ElementNode::new(Role::Window).with_children(vec![ElementNode::new(Role::Button)
-                .with_name("OK")
-                .with_bounds(Rect::new(250.0, 150.0, 60.0, 30.0))
-                .with_ref(ElementRef::new(1))]);
+            ElementNode::new(ElementData::new(Role::Window)).with_children(vec![ElementNode::new(
+                ElementData::new(Role::Button)
+                    .with_name("OK")
+                    .with_bounds(Rect::new(250.0, 150.0, 60.0, 30.0))
+                    .with_ref(ElementRef::new(1)),
+            )]);
 
         let collector = AnnotationCollector::new();
         let annotations = collector.collect(&root, window_bounds);
@@ -347,9 +354,11 @@ mod tests {
     fn skips_no_bounds() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
         let root =
-            ElementNode::new(Role::Window).with_children(vec![ElementNode::new(Role::Button)
-                .with_name("Ghost")
-                .with_ref(ElementRef::new(1))]);
+            ElementNode::new(ElementData::new(Role::Window)).with_children(vec![ElementNode::new(
+                ElementData::new(Role::Button)
+                    .with_name("Ghost")
+                    .with_ref(ElementRef::new(1)),
+            )]);
 
         let collector = AnnotationCollector::new();
         let annotations = collector.collect(&root, window_bounds);
@@ -360,9 +369,11 @@ mod tests {
     fn skips_non_interactive() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
         let root =
-            ElementNode::new(Role::Window).with_children(vec![ElementNode::new(Role::StaticText)
-                .with_name("Label")
-                .with_bounds(Rect::new(200.0, 100.0, 80.0, 20.0))]);
+            ElementNode::new(ElementData::new(Role::Window)).with_children(vec![ElementNode::new(
+                ElementData::new(Role::StaticText)
+                    .with_name("Label")
+                    .with_bounds(Rect::new(200.0, 100.0, 80.0, 20.0)),
+            )]);
 
         let collector = AnnotationCollector::new();
         let annotations = collector.collect(&root, window_bounds);
@@ -372,22 +383,28 @@ mod tests {
     #[test]
     fn skips_off_screen() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
-        let root = ElementNode::new(Role::Window).with_children(vec![
+        let root = ElementNode::new(ElementData::new(Role::Window)).with_children(vec![
             // Entirely to the left
-            ElementNode::new(Role::Button)
-                .with_name("Hidden")
-                .with_bounds(Rect::new(0.0, 100.0, 50.0, 30.0))
-                .with_ref(ElementRef::new(1)),
+            ElementNode::new(
+                ElementData::new(Role::Button)
+                    .with_name("Hidden")
+                    .with_bounds(Rect::new(0.0, 100.0, 50.0, 30.0))
+                    .with_ref(ElementRef::new(1)),
+            ),
             // Entirely below
-            ElementNode::new(Role::Button)
-                .with_name("Below")
-                .with_bounds(Rect::new(200.0, 700.0, 80.0, 30.0))
-                .with_ref(ElementRef::new(2)),
+            ElementNode::new(
+                ElementData::new(Role::Button)
+                    .with_name("Below")
+                    .with_bounds(Rect::new(200.0, 700.0, 80.0, 30.0))
+                    .with_ref(ElementRef::new(2)),
+            ),
             // Visible
-            ElementNode::new(Role::Button)
-                .with_name("Visible")
-                .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
-                .with_ref(ElementRef::new(3)),
+            ElementNode::new(
+                ElementData::new(Role::Button)
+                    .with_name("Visible")
+                    .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
+                    .with_ref(ElementRef::new(3)),
+            ),
         ]);
 
         let collector = AnnotationCollector::new();
@@ -400,15 +417,19 @@ mod tests {
     #[test]
     fn sequential_display_numbers() {
         let window_bounds = Rect::new(100.0, 50.0, 800.0, 600.0);
-        let root = ElementNode::new(Role::Window).with_children(vec![
-            ElementNode::new(Role::Button)
-                .with_name("A")
-                .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
-                .with_ref(ElementRef::new(5)),
-            ElementNode::new(Role::Button)
-                .with_name("B")
-                .with_bounds(Rect::new(300.0, 100.0, 80.0, 30.0))
-                .with_ref(ElementRef::new(10)),
+        let root = ElementNode::new(ElementData::new(Role::Window)).with_children(vec![
+            ElementNode::new(
+                ElementData::new(Role::Button)
+                    .with_name("A")
+                    .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
+                    .with_ref(ElementRef::new(5)),
+            ),
+            ElementNode::new(
+                ElementData::new(Role::Button)
+                    .with_name("B")
+                    .with_bounds(Rect::new(300.0, 100.0, 80.0, 30.0))
+                    .with_ref(ElementRef::new(10)),
+            ),
         ]);
 
         let collector = AnnotationCollector::new();

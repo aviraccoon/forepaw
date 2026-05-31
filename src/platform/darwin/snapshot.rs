@@ -6,7 +6,9 @@
 
 use std::collections::HashMap;
 
-use crate::core::element_tree::{ElementNode, ElementRef, ElementTree, SnapshotTiming};
+use crate::core::element_tree::{
+    ElementData, ElementNode, ElementRef, ElementTree, SnapshotTiming,
+};
 use crate::core::errors::ForepawError;
 use crate::core::icon_class_parser::IconClassParser;
 use crate::core::ref_assigner::RefAssigner;
@@ -571,11 +573,11 @@ fn build_tree(
     pruning: &TreePruning,
 ) -> ElementNode {
     if depth >= max_depth {
-        return ElementNode::new(Role::Group);
+        return ElementNode::new(ElementData::new(Role::Group));
     }
 
     let Some(attrs) = fetch_batch_attributes(element) else {
-        return ElementNode::new(Role::Unknown);
+        return ElementNode::new(ElementData::new(Role::Unknown));
     };
 
     let role_str = attrs
@@ -593,7 +595,7 @@ fn build_tree(
 
     // Skip menu bar subtree if requested.
     if pruning.skip_menu_bar && role == Role::MenuBar {
-        return ElementNode::new(role);
+        return ElementNode::new(ElementData::new(role));
     }
 
     let value = attrs.value_string(ATTR_VALUE);
@@ -638,10 +640,10 @@ fn build_tree(
         .iter()
         .enumerate()
         .filter(|(_, node)| {
-            node.role == Role::Unknown
-                && node.name.is_none()
-                && node.value.is_none()
-                && node.bounds.is_none()
+            node.data.role == Role::Unknown
+                && node.data.name.is_none()
+                && node.data.value.is_none()
+                && node.data.bounds.is_none()
         })
         .map(|(i, _)| i)
         .collect();
@@ -675,18 +677,20 @@ fn build_tree(
         .filter(|d| name.as_ref() != Some(d));
 
     ElementNode {
-        role,
-        name,
-        value,
-        r#ref: None,
-        bounds,
-        enabled,
-        focused,
-        selected,
-        description,
-        native_role,
-        identifier,
-        attributes,
+        data: ElementData {
+            role,
+            name,
+            value,
+            r#ref: None,
+            bounds,
+            enabled,
+            focused,
+            selected,
+            description,
+            native_role,
+            identifier,
+            attributes,
+        },
         children,
     }
 }
@@ -709,11 +713,11 @@ fn check_pruned(
                 let name = non_empty(attrs.string(ATTR_TITLE).as_ref())
                     .or_else(|| non_empty(attrs.string(ATTR_DESCRIPTION).as_ref()))
                     .or_else(|| computed_name(attrs, &[], element));
-                let mut node = ElementNode::new(role).with_name_opt(name).with_bounds(*b);
+                let mut data = ElementData::new(role).with_name_opt(name).with_bounds(*b);
                 if let Some(v) = value {
-                    node = node.with_value(v.as_str());
+                    data = data.with_value(v.as_str());
                 }
-                return Some(node);
+                return Some(ElementNode::new(data));
             }
         }
     }
@@ -725,7 +729,9 @@ fn check_pruned(
             let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
             if no_horizontal || no_vertical {
                 let name = non_empty(attrs.string(ATTR_TITLE).as_ref());
-                return Some(ElementNode::new(role).with_name_opt(name).with_bounds(*b));
+                return Some(ElementNode::new(
+                    ElementData::new(role).with_name_opt(name).with_bounds(*b),
+                ));
             }
         }
     }
@@ -767,15 +773,15 @@ fn computed_name(
 
     // 2. First AXStaticText child's value, or AXImage child with a name.
     for child in children {
-        if child.role == Role::StaticText {
-            if let Some(ref val) = child.value {
+        if child.data.role == Role::StaticText {
+            if let Some(ref val) = child.data.value {
                 if !val.is_empty() {
                     return Some(val.clone());
                 }
             }
         }
-        if child.role == Role::Image {
-            if let Some(ref name) = child.name {
+        if child.data.role == Role::Image {
+            if let Some(ref name) = child.data.name {
                 if !name.is_empty() {
                     return Some(name.clone());
                 }
