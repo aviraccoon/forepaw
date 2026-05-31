@@ -624,10 +624,37 @@ fn build_tree(
     // names/values from already-built child ElementNodes instead of making
     // individual IPC calls.
     let children_refs = attrs.children(ATTR_CHILDREN);
-    let children: Vec<ElementNode> = children_refs
+    let mut children: Vec<ElementNode> = children_refs
         .iter()
         .map(|child| build_tree(*child, depth + 1, max_depth, pruning))
         .collect();
+
+    // Retry children that came back as stale AX references.
+    // Some frameworks (notably Slint) lazily initialize their accessibility tree.
+    // The first AXChildren read may contain invalid references that return
+    // AXError::InvalidUIElement for all attribute queries. Re-reading AXChildren
+    // from the parent element yields fresh, valid references.
+    let stale_indices: Vec<usize> = children
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| {
+            node.role == Role::Unknown
+                && node.name.is_none()
+                && node.value.is_none()
+                && node.bounds.is_none()
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if !stale_indices.is_empty() {
+        let fresh_refs = get_ax_element_children(element);
+        for idx in stale_indices {
+            if let Some(fresh_child) = fresh_refs.get(idx) {
+                if let Some(slot) = children.get_mut(idx) {
+                    *slot = build_tree(*fresh_child, depth + 1, max_depth, pruning);
+                }
+            }
+        }
+    }
 
     let name = non_empty(attrs.string(ATTR_TITLE).as_ref())
         .or_else(|| non_empty(attrs.string(ATTR_DESCRIPTION).as_ref()))
