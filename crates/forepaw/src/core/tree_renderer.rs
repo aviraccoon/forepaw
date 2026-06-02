@@ -117,6 +117,15 @@ impl TreeRenderer {
             if let Some(id) = &node.data.identifier {
                 parts.push(format!("id=\"{id}\""));
             }
+            if let Some(uid) = node.data.uid {
+                parts.push(format!("uid={uid}"));
+            }
+            if let Some(sig) = node.data.signature {
+                parts.push(format!("sig=0x{sig:016x}"));
+            }
+            if let Some(sig) = node.data.signature_bounds {
+                parts.push(format!("sig_b=0x{sig:016x}"));
+            }
         }
 
         // Extra attributes (sorted by key)
@@ -409,5 +418,50 @@ mod tests {
         let output = renderer.render(&tree);
         assert!(output.contains("native_role=AXButton"));
         assert!(output.contains("id=\"submit-btn\""));
+    }
+
+    #[test]
+    fn verbose_hides_uid_and_sig_by_default() {
+        let tree = ElementTree::new(
+            "App",
+            ElementNode::new(
+                ElementData::new(Role::Button)
+                    .with_name("OK")
+                    .with_reference(ElementRef::new(1)),
+            ),
+        );
+
+        let renderer = TreeRenderer::new(false);
+        let output = renderer.render(&tree);
+        assert!(!output.contains("uid="));
+        assert!(!output.contains("sig="));
+    }
+
+    #[test]
+    fn verbose_shows_uid() {
+        let mut data = ElementData::new(Role::Button).with_name("OK");
+        data.uid = Some(7);
+        let tree = ElementTree::new(
+            "App",
+            ElementNode::new(data.with_reference(ElementRef::new(1))),
+        );
+
+        let renderer = TreeRenderer::new(true);
+        let output = renderer.render(&tree);
+        assert!(output.contains("uid=7"));
+    }
+
+    #[test]
+    fn verbose_shows_signature() {
+        let mut data = ElementData::new(Role::Button).with_name("OK");
+        data.signature = Some(0xdead_beef_cafe_babe);
+        let tree = ElementTree::new(
+            "App",
+            ElementNode::new(data.with_reference(ElementRef::new(1))),
+        );
+
+        let renderer = TreeRenderer::new(true);
+        let output = renderer.render(&tree);
+        assert!(output.contains("sig=0xdeadbeefcafebabe"));
     }
 }

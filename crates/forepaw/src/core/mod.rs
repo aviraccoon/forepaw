@@ -11,6 +11,7 @@ pub mod ocr_result;
 pub mod output_formatter;
 pub mod ref_assigner;
 pub mod role;
+pub mod signature;
 pub mod snapshot_cache;
 pub mod snapshot_diff;
 pub mod temp;

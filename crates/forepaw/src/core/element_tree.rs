@@ -45,6 +45,33 @@ pub struct ElementData {
     /// Shown only in verbose text output.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identifier: Option<String>,
+    /// Stable identifier within a single snapshot tree.
+    ///
+    /// Assigned depth-first to every element during snapshot construction.
+    /// Survives tree filtering (menu/offscreen toggles).
+    /// Does NOT survive between snapshots — resets on every snapshot call.
+    /// `None` for elements not going through `RefAssigner`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uid: Option<u64>,
+    /// Content-based identity hash for cross-snapshot element matching.
+    ///
+    /// Hash of `(role, name?, identifier?, native_role?)` using FNV-1a 64-bit.
+    /// Same content across two snapshots → same signature.
+    /// Changed content → different signature.
+    /// Undifferentiated elements (same role, unnamed, un-identified) →
+    /// same signature.
+    /// `None` for elements not going through `RefAssigner`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature: Option<u64>,
+    /// Content + bounds-based identity hash for cross-snapshot matching.
+    ///
+    /// Hash of `(role, name?, identifier?, native_role?, bounds?)` — same as
+    /// `signature` but with bounds folded in. Changes when the element moves
+    /// or its content changes. Use when you need to disambiguate
+    /// content-identical elements at different positions.
+    /// `None` for elements not going through `RefAssigner`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_bounds: Option<u64>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub attributes: Vec<(String, String)>,
 }
@@ -63,6 +90,9 @@ impl ElementData {
             description: None,
             native_role: None,
             identifier: None,
+            uid: None,
+            signature: None,
+            signature_bounds: None,
             attributes: Vec::new(),
         }
     }
