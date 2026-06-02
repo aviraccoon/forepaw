@@ -13,6 +13,7 @@ use crate::core::errors::ForepawError;
 use crate::core::icon_class_parser::IconClassParser;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::role::Role;
+use crate::core::tree_pruning::PruningOptions;
 use crate::core::types::{Point, Rect};
 use crate::debug;
 use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
@@ -230,8 +231,11 @@ pub fn snapshot(
     let window_bounds = find_window(pid, window).ok().map(|w| w.bounds);
 
     let pruning = TreePruning {
-        skip_menu_bar: options.skip_menu_bar,
-        skip_zero_size: options.skip_zero_size,
+        options: PruningOptions {
+            exclude_menu_bar: options.skip_menu_bar,
+            skip_zero_size: options.skip_zero_size,
+            exclude_offscreen: options.skip_offscreen,
+        },
         window_bounds: if options.skip_offscreen {
             window_bounds
         } else {
@@ -299,9 +303,11 @@ pub fn resolve_ref_bounds(ref_id: i32, app: &AppTarget) -> Result<Rect, ForepawE
 // Tree pruning options
 // ---------------------------------------------------------------------------
 
+/// Shared pruning options for the Darwin snapshot.
+///
+/// Wraps `PruningOptions` from `tree_pruning` with Darwin-specific state.
 struct TreePruning {
-    skip_menu_bar: bool,
-    skip_zero_size: bool,
+    options: PruningOptions,
     window_bounds: Option<Rect>,
 }
 
@@ -594,7 +600,7 @@ fn build_tree(
             .and_then(|id| if id.is_empty() { None } else { Some(id) });
 
     // Skip menu bar subtree if requested.
-    if pruning.skip_menu_bar && role == Role::MenuBar {
+    if pruning.options.exclude_menu_bar && role == Role::MenuBar {
         return ElementNode::new(ElementData::new(role));
     }
 
@@ -707,7 +713,7 @@ fn check_pruned(
     element: AXUIElementRef,
 ) -> Option<ElementNode> {
     // Skip zero-size subtrees (collapsed menus, hidden panels).
-    if pruning.skip_zero_size {
+    if pruning.options.skip_zero_size {
         if let Some(b) = bounds {
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
                 let name = non_empty(attrs.string(ATTR_TITLE).as_ref())
@@ -1190,11 +1196,13 @@ mod tests {
         // We can't easily test build_tree directly without AX elements,
         // but we can test the pruning logic conceptually.
         let pruning = TreePruning {
-            skip_menu_bar: false,
-            skip_zero_size: true,
+            options: PruningOptions {
+                skip_zero_size: true,
+                ..Default::default()
+            },
             window_bounds: None,
         };
-        assert!(pruning.skip_zero_size);
+        assert!(pruning.options.skip_zero_size);
     }
 
     #[test]

@@ -2,6 +2,7 @@
 use std::fmt;
 
 use crate::core::role::Role;
+use crate::core::tree_pruning::{prune_node, PruningOptions};
 use crate::core::types::Rect;
 
 /// Per-element data, independent of tree structure.
@@ -374,6 +375,46 @@ impl ElementRefInfo {
     #[must_use]
     pub fn new(role: Role, name: Option<String>) -> Self {
         Self { role, name }
+    }
+}
+
+/// Options for filtering an element tree.
+#[derive(Clone, Debug, Default)]
+pub struct FilterOptions {
+    /// Exclude menu bar elements (and their subtrees).
+    pub exclude_menu_bar: bool,
+    /// Exclude elements outside the viewport.
+    pub exclude_offscreen: bool,
+}
+
+/// Filter an element tree, removing menu bar and offscreen elements.
+///
+/// Returns a new `ElementTree` with the filtered root. Elements are removed if
+/// they match the filter options — menu bar elements are excluded by role,
+/// offscreen elements are excluded by bounds overlap with the viewport.
+///
+/// The viewport is used for offscreen detection. If `viewport` is `None`,
+/// the tree's `window_bounds` are used if available, otherwise no offscreen
+/// filtering is applied.
+pub fn filter_tree(
+    tree: &ElementTree,
+    viewport: Option<Rect>,
+    options: &FilterOptions,
+) -> ElementTree {
+    let vp = viewport.or(tree.window_bounds);
+    let pruning = PruningOptions {
+        exclude_menu_bar: options.exclude_menu_bar,
+        exclude_offscreen: options.exclude_offscreen,
+        skip_zero_size: false,
+    };
+    let root = prune_node(&tree.root, vp.as_ref(), 0, &pruning)
+        .unwrap_or_else(|| ElementNode::new(ElementData::new(Role::Application)));
+    ElementTree {
+        app: tree.app.clone(),
+        root,
+        refs: tree.refs.clone(),
+        window_bounds: tree.window_bounds,
+        timing: tree.timing.clone(),
     }
 }
 

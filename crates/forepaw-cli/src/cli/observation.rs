@@ -110,7 +110,7 @@ impl Snapshot {
             interactive_only: interactive,
             max_depth: depth,
             compact: self.compact,
-            skip_menu_bar: interactive && !self.menu,
+            skip_menu_bar: !self.menu,
             skip_zero_size: interactive && !include_hidden,
             skip_offscreen: !self.offscreen,
             timing: self.timing,
