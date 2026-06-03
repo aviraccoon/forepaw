@@ -8,7 +8,7 @@ use std::fmt::Write;
 
 use objc2::AnyThread;
 use objc2_core_foundation::CGRect;
-use objc2_foundation::{NSDictionary, NSString};
+use objc2_foundation::{NSDictionary, NSRange, NSString};
 use objc2_vision::{VNImageRequestHandler, VNRecognizeTextRequest, VNRequestTextRecognitionLevel};
 
 use crate::core::errors::ForepawError;
@@ -196,7 +196,16 @@ fn recognize_text(
 
     let observations = request.results().unwrap_or_default();
 
-    // Build block-level results from observations
+    if let Some(query) = find {
+        return Ok(find_precise_matches(
+            &observations,
+            query,
+            image_width,
+            image_height,
+        ));
+    }
+
+    // Build block-level results from observations (no find filter)
     let mut results = Vec::new();
     for observation in &observations {
         let candidates = observation.topCandidates(1);
@@ -207,7 +216,7 @@ fn recognize_text(
 
         // Vision returns normalized coordinates (0-1) with origin at bottom-left.
         // Convert to top-left origin in pixel coordinates.
-        // SAFETY: boundingBox() is an objc2 msg_send on a valid VNRecognizedTextObservation.
+        // SAFETY: boundingBox() is an objc2 msg_send on a VNRecognizedTextObservation.
         let box_rect: CGRect = unsafe { observation.boundingBox() };
         let x = box_rect.origin.x * image_width;
         let y = image_height - (box_rect.origin.y + box_rect.size.height) * image_height;
@@ -220,17 +229,94 @@ fn recognize_text(
         });
     }
 
-    // Filter if searching
-    if let Some(query) = find {
-        let q = query.to_lowercase();
-        let filtered: Vec<OCRResult> = results
-            .into_iter()
-            .filter(|r| r.text.to_lowercase().contains(&q))
-            .collect();
-        return Ok(filtered);
+    Ok(results)
+}
+
+/// Case-insensitive search across Vision text observations, returning precise
+/// word-level bounding boxes for each match.
+///
+/// Uses `VNRecognizedText::boundingBoxForRange:error:` instead of the full
+/// observation's bounding box, so clicking "password" in a dialog hits the
+/// exact word rather than the center of the full line.
+///
+/// Falls back to full-observation bounds when word-level box retrieval
+/// fails (returns `Err` from Vision).
+fn find_precise_matches(
+    observations: &objc2_foundation::NSArray<objc2_vision::VNRecognizedTextObservation>,
+    query: &str,
+    image_width: f64,
+    image_height: f64,
+) -> Vec<OCRResult> {
+    let mut results = Vec::new();
+
+    for observation in observations {
+        let candidates = observation.topCandidates(1);
+        let Some(candidate) = candidates.firstObject() else {
+            continue;
+        };
+        let text = candidate.string();
+        let text_str = text.to_string();
+
+        let ranges = crate::core::ocr_result::find_case_insensitive_ranges(&text_str, query);
+
+        for (byte_start, byte_end) in &ranges {
+            // Convert UTF-8 byte offsets to UTF-16 code unit offsets for NSString.
+            #[expect(
+                clippy::string_slice,
+                reason = "byte_start from find_case_insensitive_ranges — char-indices-derived, guaranteed valid"
+            )]
+            let utf16_start: usize = text_str[..*byte_start].chars().map(char::len_utf16).sum();
+            #[expect(
+                clippy::string_slice,
+                reason = "byte_start/end from find_case_insensitive_ranges — guaranteed char boundary"
+            )]
+            let utf16_len: usize = text_str[*byte_start..*byte_end]
+                .chars()
+                .map(char::len_utf16)
+                .sum();
+            let utf16_range = NSRange::new(utf16_start, utf16_len);
+
+            // Get precise bounding box for just this substring
+            // SAFETY: VNRecognizedText::boundingBoxForRange:error: is an objc2 msg_send.
+            // The range is within bounds of the recognized text string.
+            let rect_obs = unsafe { candidate.boundingBoxForRange_error(utf16_range) };
+
+            #[expect(
+                clippy::string_slice,
+                reason = "byte_start/end from find_case_insensitive_ranges — char-indices-derived, guaranteed valid"
+            )]
+            let matched_text = text_str[*byte_start..*byte_end].to_string();
+
+            if let Ok(rect_obs) = rect_obs {
+                // SAFETY: boundingBox is inherited from VNDetectedObjectObservation.
+                let word_box: CGRect = unsafe { rect_obs.boundingBox() };
+                let x = word_box.origin.x * image_width;
+                let y = image_height - (word_box.origin.y + word_box.size.height) * image_height;
+                let width = word_box.size.width * image_width;
+                let height = word_box.size.height * image_height;
+
+                results.push(OCRResult {
+                    text: matched_text,
+                    bounds: Rect::new(x, y, width, height),
+                });
+            } else {
+                // Fall back to full observation box if word-level box fails
+                // SAFETY: boundingBox() is an objc2 msg_send on VNRecognizedTextObservation.
+                let box_rect: CGRect = unsafe { observation.boundingBox() };
+                let x = box_rect.origin.x * image_width;
+                let y = image_height - (box_rect.origin.y + box_rect.size.height) * image_height;
+                let width = box_rect.size.width * image_width;
+                let height = box_rect.size.height * image_height;
+
+                results.push(OCRResult {
+                    text: matched_text,
+                    bounds: Rect::new(x, y, width, height),
+                });
+            }
+        }
     }
 
-    Ok(results)
+    results
 }
 
 /// Resolve OCR text to a window-relative center point.
