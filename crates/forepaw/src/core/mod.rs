@@ -1,3 +1,9 @@
+//! Platform-agnostic core types and algorithms for desktop accessibility automation.
+//!
+//! These modules are used by all platform backends and define the shared data
+//! model (element tree, OCR results, geometric types), algorithms (tree pruning,
+//! snapshot diffing, ref assignment), and utilities (logging helpers, temp files).
+
 pub mod annotation;
 pub mod cast;
 pub mod coordinate_validation;

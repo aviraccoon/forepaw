@@ -1,15 +1,21 @@
-/// Cross-platform accessibility element role.
-///
-/// One enum for all platforms. Each platform backend maps its native role type
-/// (macOS `AXRole`, Windows `ControlType`, Linux AT-SPI2 `Role`) to a `Role`
-/// variant. The [`Display`](std::fmt::Display) impl produces the lowercase
-/// form used in tree output (`button`, `textfield`, etc.).
+//! Cross-platform accessibility element role.
+//!
+//! One enum for all platforms. Each platform backend maps its native role type
+//! (macOS `AXRole`, Windows `ControlType`, Linux AT-SPI2 `Role`) to a `Role`
+//! variant. The [`Display`](std::fmt::Display) impl produces the lowercase
+//! form used in tree output (`button`, `textfield`, etc.).
 use std::fmt;
 
 // ---------------------------------------------------------------------------
 // Role enum
 // ---------------------------------------------------------------------------
 
+/// All accessibility roles across macOS, Windows, and Linux.
+///
+/// Each platform backend maps its native role type (macOS `AXRole`,
+/// Windows `ControlType`, Linux AT-SPI2 `Role`) to this enum.
+/// The [`Display`](std::fmt::Display) impl produces the lowercase form
+/// used in tree output (`button`, `textfield`, etc.).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Role {
     // -- Interactive (receive refs) --

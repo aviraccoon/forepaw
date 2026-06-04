@@ -1,4 +1,4 @@
-/// Renders an `ElementNode` tree as indented text.
+//! Renders an `ElementNode` tree as indented text.
 use crate::core::element_tree::ElementTree;
 use crate::core::types::Rect;
 

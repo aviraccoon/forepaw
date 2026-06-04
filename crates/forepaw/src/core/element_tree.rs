@@ -1,4 +1,4 @@
-/// Element tree types: nodes, refs, and tree structure.
+//! Element tree types: nodes, refs, and tree structure.
 use std::fmt;
 
 use crate::core::role::Role;

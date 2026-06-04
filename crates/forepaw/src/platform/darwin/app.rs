@@ -636,8 +636,8 @@ pub fn find_app_by_pid(pid: i32) -> Result<Retained<NSRunningApplication>, Forep
 
 /// Find a running application by name or PID.
 ///
-/// Delegates to [`find_app`] for [`AppTarget::Name`] or [`find_app_by_pid`]
-/// for [`AppTarget::Pid`].
+/// Delegates to [`find_app`] for [`crate::platform::AppTarget::Name`] or
+/// [`find_app_by_pid`] for [`crate::platform::AppTarget::Pid`].
 ///
 /// # Errors
 ///

@@ -1,3 +1,4 @@
+//! Extracts semantic icon names from CSS class lists.
 /// Extracts semantic icon names from CSS class lists.
 ///
 /// Electron apps use icon libraries (Lucide, Tabler, `FontAwesome`, etc.)

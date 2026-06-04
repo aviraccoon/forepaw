@@ -1,4 +1,4 @@
-/// Describes a crop region for area screenshots.
+//! Describes a crop region for area screenshots.
 use crate::core::types::{Point, Rect};
 
 pub struct CropRegion {

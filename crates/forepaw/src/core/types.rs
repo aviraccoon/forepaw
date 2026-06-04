@@ -1,3 +1,4 @@
+//! Platform-agnostic geometric types.
 /// Platform-agnostic geometric types.
 ///
 /// These replace platform-specific types (`CGPoint`, `CGRect`) so the core

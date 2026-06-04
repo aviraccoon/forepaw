@@ -1,4 +1,4 @@
-/// Validate that a point falls within a window's bounds.
+//! Validate that a point falls within a window's bounds.
 use crate::core::types::Point;
 
 /// Check if a window-relative point is inside the window.

@@ -1,4 +1,4 @@
-/// Data model for screenshot annotations.
+//! Data model for screenshot annotations.
 use crate::core::element_tree::{ElementNode, ElementRef};
 use crate::core::role::Role;
 use crate::core::types::Rect;

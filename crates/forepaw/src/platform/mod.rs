@@ -1,3 +1,5 @@
+//! Platform backends — the correct one is selected at compile time via cfg attributes.
+
 /// Platform abstraction for desktop automation.
 ///
 /// Each backend implements the `DesktopProvider` trait.

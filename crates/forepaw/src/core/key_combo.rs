@@ -1,3 +1,4 @@
+//! Key combo parsing: "cmd+shift+s" → `KeyCombo` { key, modifiers }.
 /// Key combo parsing: "cmd+shift+s" -> `KeyCombo` { key, modifiers }.
 ///
 /// Keyboard modifier keys.

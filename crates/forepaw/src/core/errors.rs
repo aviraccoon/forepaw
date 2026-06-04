@@ -1,4 +1,4 @@
-/// Error types for forepaw operations.
+//! Error types for forepaw operations.
 use std::fmt;
 
 use crate::core::element_tree::ElementRef;

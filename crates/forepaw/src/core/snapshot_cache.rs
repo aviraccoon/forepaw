@@ -1,4 +1,4 @@
-/// Snapshot cache: saves/loads rendered snapshot text to temp files for diffing.
+//! Snapshot cache: saves/loads rendered snapshot text to temp files for diffing.
 use std::fs;
 use std::path::PathBuf;
 

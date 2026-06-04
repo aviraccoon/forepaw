@@ -1,4 +1,4 @@
-/// OCR result types.
+//! OCR result types.
 use crate::core::types::Rect;
 
 /// Recognized text with its bounding box.

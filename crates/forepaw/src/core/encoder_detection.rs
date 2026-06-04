@@ -1,3 +1,4 @@
+//! Image format and encoder detection.
 /// Image format and encoder detection.
 ///
 /// Image format for screenshots.

@@ -1,3 +1,4 @@
+//! Snapshot diffing via LCS algorithm.
 /// Snapshot diffing via LCS algorithm.
 ///
 /// Refs (@eN) are stripped for comparison so positional ref shifts

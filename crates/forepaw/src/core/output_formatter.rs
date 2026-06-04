@@ -1,3 +1,4 @@
+//! Output formatting: plain text or JSON.
 /// Output formatting: plain text or JSON.
 ///
 /// Error with code, message, and optional suggestion.

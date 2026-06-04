@@ -1,7 +1,7 @@
-/// Tree pruning: filter out menu bar and offscreen elements.
-///
-/// Used by both snapshot-time pruning (platform-specific) and
-/// post-snapshot filtering (platform-agnostic).
+//! Tree pruning: filter out menu bar and offscreen elements.
+//!
+//! Used by both snapshot-time pruning (platform-specific) and
+//! post-snapshot filtering (platform-agnostic).
 use crate::core::element_tree::ElementNode;
 use crate::core::role::Role;
 use crate::core::types::Rect;

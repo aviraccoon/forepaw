@@ -17,6 +17,7 @@ keywords = ["accessibility", "desktop-automation", "ocr", "a11y", "cli"]
 [[bin]]
 name = "forepaw"
 path = "src/main.rs"
+doc = false
 
 [dependencies]
 forepaw = { path = "../forepaw" }
