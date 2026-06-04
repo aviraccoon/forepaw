@@ -2,7 +2,7 @@
 
 A raccoon's paws on your desktop, from the terminal.
 
-CLI for [forepaw](https://crates.io/crates/forepaw) desktop automation.
+CLI for [forepaw](https://github.com/aviraccoon/forepaw) desktop automation.
 Control any application through accessibility trees, OCR, and input simulation.
 
 ```bash
@@ -17,7 +17,7 @@ Full documentation at [github.com/aviraccoon/forepaw](https://github.com/aviracc
 ## Install
 
 ```bash
-cargo install forepaw-cli
+cargo install --git https://github.com/aviraccoon/forepaw.git forepaw-cli
 ```
 
 Or download binaries from [releases](https://github.com/aviraccoon/forepaw/releases).

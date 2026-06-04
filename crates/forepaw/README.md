@@ -15,7 +15,7 @@ connect them to.
 
 ```toml
 [dependencies]
-forepaw = "0.3"
+forepaw = "0.4"
 ```
 
 ```rust
@@ -56,17 +56,22 @@ for result in &ocr.results {
 
 ## What's in the box
 
-- **`DesktopProvider` trait** -- unified interface for observation (snapshot,
+- **`DesktopProvider` trait**: unified interface for observation (snapshot,
   screenshot, OCR, hit-test) and action (click, type, press, scroll, drag).
-- **`ElementTree` / `ElementNode` / `ElementData`** -- accessibility tree
-  representation with role, name, value, bounds, ref assignments.
-- **`Role` enum** -- ~120 platform-agnostic roles mapped from AXRole
-  (macOS), UIA ControlType (Windows), AT-SPI2 Role (Linux).
-- **Tree rendering, diffing, annotation** -- format trees as text, diff two
-  snapshots, annotate screenshots with element labels.
-- **`RefAssigner`** -- deterministic `@e1`, `@e2`, ... ref assignment for
-  stable element identification across observations.
-- **Logging** -- zero-dep `FOREPAW_LOG` / `RUST_LOG` filtering.
+- **`ElementTree` / `ElementNode` / `ElementData`**: accessibility tree
+  representation with role, name, value, bounds, element state (enabled,
+  focused, selected), identifiers, and content signatures for cross-snapshot
+  matching.
+- **`Role` enum**: platform-agnostic roles mapped from AXRole (macOS),
+  UIA ControlType (Windows), and AT-SPI2 Role (Linux).
+- **`WindowState`**: window display state (normal, minimized, maximized,
+  fullscreen) per platform.
+- **Tree rendering, diffing, annotation**: format trees as text, diff
+  before/after snapshots, annotate screenshots with element labels.
+- **`RefAssigner`**: deterministic `@e1`, `@e2`, ... ref assignment with
+  optional interactive-only filtering and content signature generation.
+- **Logging**: zero-dep `FOREPAW_LOG` / `RUST_LOG` filtering with
+  per-module levels.
 
 ## Platform support
 
@@ -78,15 +83,15 @@ for result in &ocr.results {
 
 ## Cargo features
 
-No cargo features -- platform selection is automatic via `cfg(target_os)`.
+No cargo features. Platform selection is automatic via `cfg(target_os)`.
 
 The `image` crate is only pulled in on Windows (for OCR upscaling). macOS uses
 CoreGraphics directly, Linux has no image dependency.
 
 ## CLI
 
-For the command-line tool, see the [`forepaw-cli`](https://crates.io/crates/forepaw-cli) crate.
+For the command-line tool, see the [`forepaw-cli`](https://github.com/aviraccoon/forepaw/tree/main/crates/forepaw-cli) crate.
 
 ## License
 
-[Unlicense](https://unlicense.org/) -- public domain. Raccoons don't believe in fences.
+[Unlicense](https://unlicense.org/). Public domain. Raccoons don't believe in fences.

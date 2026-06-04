@@ -1,11 +1,35 @@
 ---
 name: forepaw
-description: Control macOS desktop apps for the user. Use when asked to interact with GUI applications, click buttons, fill forms, read screen content, or automate any desktop task. Read this before running any forepaw command.
+description: Control desktop apps (macOS, Windows, Linux) for the user. Use when asked to interact with GUI applications, click buttons, fill forms, read screen content, or automate any desktop task. Read this before running any forepaw command.
 ---
 
 # Desktop Automation with forepaw
 
-`forepaw` is a CLI tool for controlling macOS applications. It works through bash -- every command goes through the permission gate.
+`forepaw` is a CLI tool for controlling desktop applications. It works through bash -- every command goes through the permission gate.
+
+## Platform Support
+
+| Capability | macOS | Windows | Linux |
+|---|---|---|---|
+| List apps/windows | ✅ | ✅ | ✅ |
+| Snapshot (AX tree) | ✅ | ✅ (UIA) | ✅ (AT-SPI2) |
+| Screenshot | ✅ | ✅ | ❌ |
+| OCR | ✅ (Vision) | ✅ (WinRT) | ❌ |
+| Hit test | ✅ | ✅ | ✅ |
+| Click, type, press, scroll, drag, hover | ✅ | ❌ | ❌ |
+| Permissions check | ✅ | ✅ (always yes) | ✅ (always yes) |
+
+Observation works on all three platforms. Actions are macOS-only with stubs on Windows/Linux (clear error messages, not crashes). Cross-platform actions are coming.
+
+## Global flags
+
+Every command supports these:
+
+- `-f json` / `--format json` — structured JSON output
+- `-v` / `--verbose` — show native role, identifier, uid, signature in output
+- `--version` — binary shows git SHA: `forepaw 0.4.0 (abc1234)`
+
+Debug logging: `FOREPAW_LOG=debug` or per-module like `FOREPAW_LOG=snapshot=debug,app=info`. Falls back to `RUST_LOG`. Defaults to `warn`.
 
 ## Core loop
 
@@ -21,13 +45,13 @@ Always snapshot or screenshot before acting. Never assume UI state from a previo
 forepaw snapshot --app "App Name" -i         # interactive elements only (skips menus + hidden + offscreen)
 forepaw snapshot --app "App Name" -i --diff  # diff against previous snapshot
 forepaw snapshot --app "App Name" -i --menu  # include menu bar (excluded by default with -i)
+forepaw snapshot --app "App Name" --compact  # remove empty structural containers
 forepaw snapshot --app "App Name" --timing   # show per-subtree timing breakdown on stderr
 ```
 
 Returns structured text with `@e` refs and window-relative positions:
 ```
 app: Finder  window: [312,139 1010x614]
-window "Documents" (0,0 1200x800)
   button @e1 "Back" (10,4 60x30)
   textfield @e2 "Search" value="" (200,4 300x30) focused
   button @e3 "OK" disabled (500,300 80x30)
@@ -36,36 +60,34 @@ window "Documents" (0,0 1200x800)
     cell @e5 "src" (10,69 1180x25)
 ```
 
-The header line shows app name and window bounds (screen coordinates). Element state is shown inline: `disabled`, `focused`, `selected`. Enabled elements don't show anything (too noisy). Use `-v` (verbose) to see element descriptions, native roles (`AXButton`), and identifiers (`AutomationId`).
+The header line shows app name and window bounds (screen coordinates). Element state is shown inline: `disabled`, `focused`, `selected`. Enabled elements don't show anything (too noisy). Use `-v` (verbose) to see element descriptions, native roles (`AXButton`, `UIA 50000`), identifiers (`AutomationId`), uid, and signature.
 
-All coordinates are **window-relative**: `(0,0)` is the window's top-left corner. These match what action commands expect -- you can verify click targets or use coordinate-based click/hover for precision. Coordinates are portable across window positions (if the window moves, the same coordinates still work).
+All coordinates are **window-relative**: `(0,0)` is the window's top-left corner. These match what action commands expect. Coordinates are portable across window positions.
 
-Best for: native macOS apps (Finder, System Settings, Notes, Xcode, browsers' chrome). For browsers, the full tree (without `-i`) includes web content elements like links, headings, and text -- useful for clicking small targets like footnote links.
+Best for: native macOS apps (Finder, System Settings, Notes, Xcode). For browsers, the full tree (without `-i`) includes web content elements like links, headings, and text.
 
-**Electron apps (Discord, Slack, VS Code, Cursor, Notion, Linear, etc.)** are automatically detected. forepaw sets `AXManualAccessibility` to tell Chromium to expose its web content tree. The first snapshot of an Electron app may take an extra 1-3s while the tree builds; subsequent snapshots are fast. No special flags needed -- just use `snapshot` as normal.
+**Electron apps (Discord, Slack, VS Code, Cursor, Notion, Linear, etc.)** are automatically detected. forepaw sets `AXManualAccessibility` to tell Chromium to expose its web content tree. The first snapshot of an Electron app may take an extra 1-3s while the tree builds; subsequent snapshots are fast. No special flags needed.
 
 **Electron icon naming:** Electron apps using icon libraries (Lucide, Tabler, FontAwesome, etc.) get automatic icon names from CSS classes. An unnamed button with a Lucide settings icon becomes `button @e5 "settings"`. Also checks AXHelp, AXPlaceholderValue, and AXRoleDescription for additional names. Try `snapshot -i` first on any Electron app -- the tree is often better than expected.
 
-**CEF apps (Spotify, Steam):** Apps using Chromium Embedded Framework (not Electron) expose zero AX tree content. `snapshot` returns only window chrome. These apps are **OCR-only** -- use `ocr`, `ocr-click`, `screenshot`, and coordinate-based `click` to operate them. Text-based navigation works well (`ocr-click "LIBRARY"` navigates Steam). For icon-only buttons (play, shuffle, gear), use `click x,y,w,h` (region click) -- see "Icon-only buttons in CEF apps" below.
+**CEF apps (Spotify, Steam):** Apps using Chromium Embedded Framework (not Electron) expose zero AX tree content. `snapshot` returns only window chrome. These apps are **OCR-only** -- use `ocr`, `ocr-click`, `screenshot`, and coordinate-based `click` to operate them. See "Icon-only buttons in CEF apps" below.
 
-**Multi-process apps (Steam):** Some apps render their UI in a helper process (e.g. `Steam Helper`). forepaw automatically discovers these windows when the main process has none -- just use `--app Steam` normally. The helper's window appears in `list-windows` output.
+**Multi-process apps (Steam):** Some apps render their UI in a helper process (e.g. `Steam Helper`). forepaw automatically discovers these windows when the main process has none -- just use `--app Steam` normally.
 
-**Performance:** Offscreen elements (outside the visible window area) are automatically excluded in all modes. With `-i`, menu bar and zero-size (hidden/collapsed) elements are also excluded. This dramatically speeds up apps like Music that expose large amounts of invisible content in their AX tree (e.g. play history at negative Y coordinates). Use `--offscreen` to include offscreen elements, `--menu` or `--zero-size` to include those back with `-i`.
+**Performance:** Offscreen elements (outside the visible window area) are automatically excluded in all modes. With `-i`, menu bar and zero-size (hidden/collapsed) elements are also excluded. This dramatically speeds up apps like Music that expose large amounts of invisible content. Use `--offscreen` to include offscreen elements, `--menu` or `--zero-size` to include those back with `-i`.
 
 ### 2. Hit test (quick element lookup)
 
 ```bash
-forepaw hit-test 500,300                              # what element is at these screen coords?
-forepaw hit-test 50,15 --app konsole                  # scoped to a specific app
-forepaw hit-test 500,300 --json                       # machine-readable output
-forepaw hit-test 500,300 --full-values                 # show entire element value (no truncation)
+forepaw hit-test 500,300                                  # what element at these screen coords?
+forepaw hit-test 50,15 --app konsole                       # scoped to a specific app
+forepaw hit-test 500,300 --json                            # machine-readable output
+forepaw hit-test 500,300 --full-values                     # show entire element value (no truncation)
 ```
 
-Finds the deepest accessibility element at screen coordinates. Returns role, name, value, bounds, available actions, owning PID, and ancestor chain (root → window → parent → element). Default truncates long values (e.g. terminal content) to 200 chars; use `--full-values` to see everything.
+Finds the deepest accessibility element at screen coordinates. Returns role, name, value, bounds, available actions, owning PID, and ancestor chain (root → window → parent → element). Default truncates long values to 200 chars; use `--full-values` to see everything.
 
-System-wide by default (cross-app). Use `--app` to scope to a specific application. The ancestor chain shows the element's place in the accessibility tree — useful for understanding element context without a full snapshot.
-
-This is a lightweight query (no full tree walk). On macOS/Windows, it uses a native hit test under 1ms. On Linux, it uses AT-SPI2's `Component.GetAccessibleAtPoint`.
+System-wide by default. Use `--app` to scope to a specific application. On macOS/Windows, this is a native hit test under 1ms. On Linux, it uses AT-SPI2's `Component.GetAccessibleAtPoint`.
 
 ### 3. OCR (fallback for sparse trees)
 
@@ -75,35 +97,32 @@ forepaw ocr --app Discord --find "Settings"  # filter for specific text
 forepaw ocr --app Discord --no-screenshot    # text only, no screenshot saved
 ```
 
-Returns a screenshot path (first line) followed by recognized text with click coordinates. The screenshot uses the best available format (WebP if `cwebp` is installed, else JPEG) at 1x scale. Use when `snapshot` returns unnamed elements or when you need text that isn't in the AX tree (e.g. Discord's poorly labeled icon buttons).
+Returns a screenshot path (first line) followed by recognized text with click coordinates. The screenshot uses the best available format (WebP preferred, else JPEG) at 1x scale. Use when `snapshot` returns unnamed elements or when you need text that isn't in the AX tree.
 
 **OCR replaces separate screenshot + OCR calls.** Since OCR already captures a screenshot internally for text recognition, it saves and returns that screenshot automatically. No need to run `screenshot` + `ocr` separately.
 
-Screenshot format options: `--format`, `--quality`, `--scale`, `--no-cursor` (same as `screenshot` command).
+Screenshot format options: `--image-format`, `--quality`, `--scale`, `--no-cursor` (same as `screenshot` command).
 
 ### 4. Screenshot (for visual inspection)
 
 ```bash
-forepaw screenshot --app "App Name"   # plain screenshot
-forepaw screenshot                    # full screen
-forepaw screenshot --app "App Name" --ref @e5              # crop to element bounds
-forepaw screenshot --app "App Name" --ref @e5 --padding 40 # more context around element
+forepaw screenshot --app "App Name"               # plain screenshot
+forepaw screenshot                                 # full screen
+forepaw screenshot --app "App Name" --ref @e5      # crop to element bounds
+forepaw screenshot --app "App Name" --ref @e5 --padding 40  # more context around element
 forepaw screenshot --app "App Name" --region 10,50,400,300  # crop to window-relative region (x,y,w,h)
+forepaw screenshot --app "App Name" --grid 100     # overlay coordinate grid
 ```
 
-Returns a screenshot path (WebP if `cwebp` is installed, else JPEG; 1x scale by default). Use when you need to see what's on screen without OCR text. The image can be read with the `read` tool.
+Returns a screenshot path. Use when you need to see what's on screen without OCR text. The image can be read with the `read` tool.
 
-**Coordinate grid:** `--grid N` overlays labeled grid lines every N pixels with window-relative coordinates. Useful for human debugging -- prefer `click x,y,w,h` (region click) for agent-driven icon targeting.
-
-**Area capture with `--ref` or `--region`:** Crops the screenshot to just the specified area. `--ref @eN` resolves the element's bounds from the AX tree. `--region x,y,w,h` uses window-relative coordinates. Both add 20px padding by default (override with `--padding`). Works with `--annotate` too -- annotations are rendered on the full image first, then cropped. Requires `--app`.
+**Area capture with `--ref` or `--region`:** Crops to the specified area. `--ref @eN` resolves the element's bounds from the AX tree. `--region x,y,w,h` uses window-relative coordinates. Both add 20px padding by default (override with `--padding`). Works with `--annotate` too -- annotations are rendered on the full image first, then cropped. Requires `--app`.
 
 ### 5. Annotated screenshot (visual + structural)
 
 ```bash
 forepaw screenshot --app "App Name" --annotate           # numbered badges (default)
-forepaw screenshot --app "App Name" --style badges        # same as --annotate
-forepaw screenshot --app "App Name" --style labeled       # bounding boxes with role+name
-forepaw screenshot --app "App Name" --style spotlight      # dims non-interactive areas
+forepaw screenshot --app "App Name" --style spotlight     # dims non-interactive areas
 forepaw screenshot --app "App Name" --style spotlight --only @e5 @e8 @e12  # highlight specific refs
 ```
 
@@ -114,14 +133,7 @@ Overlays numbered labels on interactive elements. Each label maps to an `@e` ref
 [3] @e5 CheckBox "Enable"
 ```
 
-Labels are color-coded by element type: green=buttons, yellow=text fields, blue=selection controls, purple=navigation.
-
-**Styles:**
-- `badges` -- small numbered pills. Minimal visual noise. Best for agents.
-- `labeled` -- bounding boxes with role and name. Best for humans understanding UI structure.
-- `spotlight` -- dims everything except interactive elements. Best for focusing attention.
-
-**When to use:** When the AX tree is sparse (Electron apps) or you need visual context for spatial layout. Prefer `snapshot -i` for most tasks -- it's faster and cheaper in tokens. Use annotated screenshots when you need to correlate visual appearance with interactive elements.
+Styles: `badges` (minimal numbered pills, best for agents), `labeled` (bounding boxes with role+name), `spotlight` (dims non-interactive). Use when you need visual context for spatial layout. Prefer `snapshot -i` for most tasks -- it's faster and cheaper in tokens.
 
 ## Snapshot diffing
 
@@ -146,14 +158,9 @@ Output uses `+` for added lines and `-` for removed lines:
 
 Ref shifts are handled automatically -- if a new element appears early in the tree and bumps all subsequent refs, unchanged elements still show as unchanged (refs are stripped for comparison, then the new refs are shown in the output).
 
-Use `--context N` to show N unchanged lines around each change for spatial context:
-```bash
-forepaw snapshot --app Finder -i --diff --context 2
-```
+Use `--context N` to show N unchanged lines around each change. The previous snapshot is cached per app in a temp file. No manual baseline management needed.
 
-The previous snapshot is cached per app in a temp file. No manual baseline management needed -- just run `snapshot` normally, then `snapshot --diff` after an action.
-
-## Actions
+## Actions (macOS only)
 
 ### Click by ref (from snapshot)
 
@@ -170,7 +177,7 @@ forepaw click 500,300 --app "App Name"    # click at window-relative position
 forepaw hover 500,300 --app "App Name"    # hover at window-relative position
 ```
 
-Coordinates are **window-relative** (0,0 = top-left of window). Use when you have coordinates from snapshot bounds but no ref (e.g. static text, or when refs shift). Read the `(x,y WxH)` from snapshot output and compute the center: `x + W/2, y + H/2`.
+Coordinates are **window-relative** (0,0 = top-left of window). Use when you have coordinates from snapshot bounds but no ref. Read the `(x,y WxH)` from snapshot output and compute the center: `x + W/2, y + H/2`.
 
 ### Click/hover by region (for icon buttons without AX or text)
 
@@ -180,8 +187,6 @@ forepaw hover 325,410,60,60 --app Spotify  # find & hover prominent element (tri
 ```
 
 Pass 4 values `x,y,w,h` to target a rough area. forepaw captures a screenshot, analyzes pixel saturation in that region, finds the centroid of the most colorful element, and clicks/hovers it. Ideal for icon-only buttons in CEF apps (play, shuffle, close) where there's no AX ref and no text for OCR. The region doesn't need to be precise -- a box that contains the target works.
-
-Hover region is useful for triggering hover states and visual feedback. In apps with AX trees, hover + snapshot can discover tooltips (`AXUserInterfaceTooltip`). In CEF apps (no AX tree), hover + screenshot lets the agent visually confirm what's under the cursor.
 
 **Without --app**, `hover` treats coordinates as screen-absolute (for global positioning). All other coordinate commands require `--app`.
 
@@ -193,16 +198,7 @@ forepaw ocr-click "file.txt" --app Finder --double   # double-click
 forepaw ocr-click "item" --app "App Name" --right    # right-click
 ```
 
-`--right` and `--double` work on both `click` and `ocr-click`. Right-click opens context menus. Double-click for selecting words, opening files, etc.
-
-When multiple matches are found, `ocr-click` errors with a listing:
-```
-Multiple matches for 'Shelter':
-  --index 1: 'Shelter' at 608,138
-  --index 2: 'Shelter' at 323,423
-Use --index N to pick one.
-```
-Use `--index N` to click a specific match. Single matches click without needing `--index`. Prefer `click @ref` when available -- it's unambiguous.
+`--right` and `--double` work on both `click` and `ocr-click`. When multiple matches are found, `ocr-click` errors with a listing and you pick with `--index N`. Single matches click without needing `--index`. Prefer `click @ref` when available -- it's unambiguous.
 
 ### Type into element (from snapshot) -- preferred
 
@@ -231,34 +227,27 @@ forepaw press opt+space                 # global hotkey (no --app)
 ### Drag (drawing, moving, resizing)
 
 ```bash
-forepaw drag 100,100 500,500 --app "App Name"                      # simple drag between two points
-forepaw drag 100,100 300,200 500,100 700,300 --app "App Name"      # path through multiple waypoints
-forepaw drag @e3 @e7 --app "App Name"                              # drag between two elements
+forepaw drag 100,100 500,500 --app "App Name"                         # simple drag
+forepaw drag 100,100 300,200 500,100 700,300 --app "App Name"         # multi-point path
+forepaw drag @e3 @e7 --app "App Name"                                 # between two elements
 forepaw drag 100,100 500,500 --app "App Name" --steps 60 --duration 1.0  # slower, smoother
-forepaw drag 100,100 500,350 --app "App Name" --modifiers shift    # constrained (straight lines, 45-degree)
-forepaw drag 100,100 500,500 --app "App Name" --modifiers shift+alt # combine modifiers
-forepaw drag 100,100 300,200 500,100 --app "App Name" --close      # auto-close path back to start
-forepaw drag 100,100 500,500 --app "App Name" --right              # right-button drag (panning, context menus)
-forepaw drag 100,100 500,500 --app "App Name" --pressure 0.5       # tablet pressure simulation
+forepaw drag 100,100 500,350 --app "App Name" --modifiers shift       # constrained (45-degree)
+forepaw drag 100,100 500,500 --app "App Name" --modifiers shift+alt   # combined modifiers
+forepaw drag 100,100 300,200 500,100 --app "App Name" --close         # auto-close path to start
+forepaw drag 100,100 500,500 --app "App Name" --right                 # right-button drag
+forepaw drag 100,100 500,500 --app "App Name" --pressure 0.5          # tablet pressure
+echo "100,100 200,150" | forepaw drag --stdin --app "App Name"        # stdin mode
 ```
 
-Stdin mode for complex paths (circles, stars, curves -- generate coordinates programmatically):
-```bash
-echo "100,100 200,150 300,100 400,200" | forepaw drag --stdin --app "App Name"
-python3 -c "import math; print(' '.join(f'{int(400+150*math.cos(i*2*math.pi/40))},{int(500+150*math.sin(i*2*math.pi/40))}' for i in range(41)))" | forepaw drag --stdin --app "App Name" --close --steps 20 --duration 2.0
-```
+Drags the mouse with smooth interpolation. Supports coordinates, refs, or a mix. For paths with 3+ points, all must be coordinates.
 
-Drags the mouse from one point to another with smooth interpolation. Supports coordinates, refs, or a mix. For paths with 3+ points, all must be coordinates.
-
-- `--steps` controls smoothness per segment (default 30, higher = more intermediate points)
+- `--steps` controls smoothness per segment (default 30, higher = smoother)
 - `--duration` controls total drag time in seconds (default 0.3)
-- Use higher steps and duration for drawing apps that need smooth curves
-- `--modifiers shift+alt` holds modifier keys during the entire drag (supports shift, alt/opt, cmd, ctrl, combinable with `+`)
-- `--close` appends start point to end of path, closing the shape (3+ points only)
-- `--right` uses right mouse button instead of left
-- `--pressure 0.0-1.0` sets mouse pressure (apps must have pressure dynamics enabled)
-- `--stdin` reads coordinates from stdin (space or newline separated x,y pairs) -- use for complex paths with many points
-- Works in batch: `forepaw batch --app App "drag 100,100 500,500 --modifiers shift"`
+- `--modifiers shift+alt` holds modifiers during the entire drag
+- `--close` appends start point to end of path (3+ points only)
+- `--right` uses right mouse button
+- `--pressure 0.0-1.0` sets mouse pressure
+- `--stdin` reads coordinates from stdin (space or newline separated x,y pairs)
 
 ### Scroll
 
@@ -267,10 +256,10 @@ forepaw scroll down --app Orion              # scroll down 3 ticks (default)
 forepaw scroll up --app Orion --amount 10    # scroll up 10 ticks
 forepaw scroll left --app Finder             # horizontal scroll
 forepaw scroll down --app Orion --ref @e5    # scroll within a specific element
-forepaw scroll down --app Discord --at 200,400  # scroll at window-relative coordinates (e.g. a sidebar)
+forepaw scroll down --app Discord --at 200,400  # scroll at window-relative coordinates
 ```
 
-Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks. Use `--at x,y` to scroll a specific panel or sidebar when no ref is available (e.g. Discord's server list). Coordinates are window-relative and validated against window bounds.
+Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks. Use `--at x,y` to scroll a specific panel or sidebar when no ref is available. Coordinates are window-relative and validated against window bounds.
 
 **Boundary detection:** When scroll hits the edge, the result message includes `(at boundary -- content did not change)`. Stop scrolling in that direction when you see this.
 
@@ -279,19 +268,16 @@ Directions: `up`, `down`, `left`, `right`. Default amount is 3 ticks. Use `--at 
 ```bash
 forepaw hover @e5 --app "App Name"              # by ref (from snapshot)
 forepaw hover "Submit" --app "App Name"          # by text (OCR lookup)
-forepaw hover "8 comments" --app Orion           # hover over a link
-forepaw hover 200,470 --app Discord              # hover at window-relative coordinates (triggers tooltips)
-forepaw hover 325,410,60,60 --app Spotify       # hover prominent element in region (saliency-based)
-forepaw hover 700,400 --app Orion --smooth      # smooth mouse movement (dismisses hover-triggered panels)
+forepaw hover 200,470 --app Discord              # at window-relative coordinates
+forepaw hover 325,410,60,60 --app Spotify       # region-based (saliency)
+forepaw hover 700,400 --app Orion --smooth      # smooth mouse movement
 ```
 
-Moves the mouse without clicking. Accepts an `@e` ref, text (OCR lookup), coordinates, or a region (`x,y,w,h`). Useful for triggering tooltips, hover menus, or preview popups.
+Accepts an `@e` ref, text (OCR lookup), coordinates, or a region (`x,y,w,h`). Useful for triggering tooltips, hover menus, or preview popups.
 
-Region hover uses the same saliency detection as region click -- see "Click/hover by region" above. In CEF apps, use hover + screenshot (not snapshot) to visually confirm what's under the cursor.
+**`--smooth` flag:** Moves the mouse along a path from current position to target with intermediate events, instead of teleporting. Some apps need this to register mouse leave events (e.g. Orion's auto-hiding tab sidebar).
 
-**`--smooth` flag:** Moves the mouse along a path from current position to target with intermediate events, instead of teleporting. Use when you need to dismiss hover-triggered overlays (e.g. Orion's auto-hiding tab sidebar) or trigger mouseEnter/mouseLeave handlers. Without `--smooth`, some apps don't register that the mouse left their hover zone. Works in batch too: `hover 1100,400 --smooth`.
-
-**Tooltip discovery for unnamed elements:** Some apps (especially Discord) have icon-only buttons with no AX name. Hover at their coordinates to trigger a tooltip, then snapshot -- the tooltip appears in the AX tree as `subrole=AXUserInterfaceTooltip` with the element's name. This is how you identify unnamed server icons, toolbar buttons, etc.
+**Tooltip discovery for unnamed elements:** Some apps (especially Discord) have icon-only buttons with no AX name. Hover at their coordinates to trigger a tooltip, then snapshot -- the tooltip appears in the AX tree as `subrole=AXUserInterfaceTooltip` with the element's name.
 
 ### Wait (poll for text to appear)
 
@@ -313,17 +299,7 @@ Executes actions sequentially, separated by `;;`. The `--app` and `--window` fla
 
 Supported actions: `click`, `drag`, `hover`, `type`, `keyboard-type`, `press`, `scroll`, `ocr-click`, `wait`.
 
-Per-action overrides:
-```bash
-forepaw batch "press opt+space ;; keyboard-type --app Raycast search term"
-```
-
-**Use batch for any multi-step interaction.** Separate CLI invocations return control to the terminal between commands, which steals focus from the target app. Batch keeps the app focused throughout the entire sequence. This is essential for workflows like typing into a text field after clicking it, or any click-then-type pattern.
-
-Browser URL bar example:
-```bash
-forepaw batch --app Orion "click 626,72 ;; keyboard-type example.com ;; press return"
-```
+**Use batch for any multi-step interaction.** Separate CLI invocations return control to the terminal between commands, which steals focus from the target app. Batch keeps the app focused throughout the entire sequence. This is essential for click-then-type patterns, browser URL bar entry, and any sequence where focus must be maintained.
 
 ### Newlines in text input
 
@@ -344,10 +320,10 @@ forepaw list-windows --app Zed
 # w-1234  Zed  "my-project"
 # w-1235  Zed  "other-project"
 
-forepaw screenshot --app Zed --window "my-project"   # by title substring
-forepaw screenshot --app Zed --window w-1234         # by window ID
-forepaw scroll down --app Zed --window "my-project"  # works with scroll too
-forepaw ocr --app Zed --window "my-project"           # and OCR
+forepaw screenshot --app Zed --window "my-project"    # by title substring
+forepaw screenshot --app Zed --window-id 1234          # by numeric ID
+forepaw scroll down --app Zed --window "my-project"   # works with scroll too
+forepaw ocr --app Zed --window "my-project"            # and OCR
 forepaw ocr-click "text" --app Zed --window "my-project"  # and ocr-click
 ```
 
@@ -355,27 +331,29 @@ Without `--window`, commands target the largest window for that app.
 
 The title shown in quotes in `list-windows` output is what you pass to `--window`. If the title matches multiple windows, forepaw returns an error listing all matches with their IDs.
 
-## When to use --app / --pid
+## When to use --app / --pid / --window / --window-id
 
 - **With --app**: activates the app by name before acting. Use for click, type, keyboard-type, press when targeting a specific app.
 - **With --pid**: activates the app by process ID. Use when you need unambiguous targeting (multiple instances, similar names). PIDs are shown in `list-apps` output.
-- **Without either**: sends input globally. Use for system hotkeys (Raycast, Spotlight) or typing into whatever is already focused.
+- **With --window**: targets by window title (case-insensitive substring match). Use when an app has multiple open windows.
+- **With --window-id**: targets by numeric window ID from `list-windows`. Accepts bare IDs (`1234`) and w-prefixed (`w-1234`).
+- **Without any**: sends input globally. Use for system hotkeys (Raycast, Spotlight) or typing into whatever is already focused.
 
-`--app` and `--pid` are mutually exclusive. Use `--app` by default; switch to `--pid` when name resolution is ambiguous.
+`--app` and `--pid` are mutually exclusive. `--window` and `--window-id` are mutually exclusive. Use `--app` by default; switch to `--pid` when name resolution is ambiguous.
 
 ## Important behaviors
 
 - **Always observe before acting.** Don't guess UI state.
-- **Refs are positional.** `@e3` means "the 3rd interactive element in depth-first order." If the UI changes (menu opens, dialog appears), refs shift. Re-snapshot after any action that changes the UI. Don't use `--depth` with a non-default value and expect refs to work with action commands -- `--depth` controls the tree walk, and action commands use the default depth (15).
+- **Refs are positional.** `@e3` means "the 3rd interactive element in depth-first order." If the UI changes (menu opens, dialog appears), refs shift. Re-snapshot after any action that changes the UI.
 - **Snapshot activates the app.** The snapshot command brings the app to the foreground so the AX tree matches what action commands will see. Some apps (especially browsers) expose different elements when active vs. background.
 - **Prefer `type @ref` over click + keyboard-type.** `type` focuses the element via AX and types into it directly. `keyboard-type` after a click can fail if the click didn't give the element AX focus. Use `keyboard-type` only inside batch (after coordinate clicks) or when no ref is available.
-- **Use batch for multi-step interactions.** Separate CLI invocations return control to the terminal, which steals focus from the target app. Any click-then-type or multi-action sequence should use batch. Even adding `--delay` for slow UI transitions.
-- **AX tree vs OCR.** Try `snapshot -i` first. Electron apps are auto-detected and their web content trees are enabled automatically. If the tree is still sparse after this, fall back to OCR.
+- **Use batch for multi-step interactions.** Separate CLI invocations return control to the terminal, which steals focus from the target app. Any click-then-type or multi-action sequence should use batch.
+- **AX tree vs OCR.** Try `snapshot -i` first. Electron apps are auto-detected and their web content trees are enabled automatically. If the tree is still sparse, fall back to OCR.
 - **App activation.** `--app` brings the app to the foreground. This means the user's screen will change. Warn them before switching apps if they didn't explicitly ask.
 - **Mouse clicks are physical.** OCR-click and mouse-fallback clicks move the actual cursor and click on screen. The user will see this happening.
-- **Coordinates are window-relative.** All coordinates in snapshots, OCR output, and action commands are relative to the window's top-left corner (0,0). This means coordinates don't change when the window moves. When `--app` is specified, `click` and `hover` validate that coordinates are within window bounds (0 to width/height). If you get a bounds error, re-snapshot. Without `--app`, `hover` uses screen-absolute coordinates.
+- **Coordinates are window-relative.** All coordinates in snapshots, OCR output, and action commands are relative to the window's top-left corner (0,0). This means coordinates don't change when the window moves. When `--app` is specified, `click` and `hover` validate that coordinates are within window bounds. Without `--app`, `hover` uses screen-absolute coordinates.
 - **Keystroke delay.** Typing is not instant (~8ms per character). Long text takes a moment.
-- **Wait timeout.** `wait` polls via OCR (screenshot + text recognition each poll). Keep intervals reasonable (1s+) to avoid hammering the system. The default 10s timeout covers most UI transitions.
+- **Wait timeout.** `wait` polls via OCR (screenshot + text recognition each poll). Keep intervals reasonable (1s+) to avoid hammering the system.
 - **Text starting with dashes.** If text for `keyboard-type`, `type`, `ocr-click`, or `wait` starts with `-` or `--`, use the `--text` option instead of a positional argument:
   ```bash
   forepaw keyboard-type --text "--this starts with dashes" --app Notes
@@ -389,30 +367,14 @@ The title shown in quotes in `list-windows` output is what you pass to `--window
 CEF apps (Spotify, Steam) have no AX tree. OCR finds text but not icon buttons (play, skip, heart, gear). Use these techniques:
 
 ### Region click/hover (preferred for icon buttons)
-Pass a 4-component target `x,y,w,h` to `click` or `hover` to target a rough region. forepaw finds the most visually prominent element by pixel saturation and clicks/hovers its center:
+Pass a 4-component target `x,y,w,h` to `click` or `hover` to target a rough area. forepaw finds the most visually prominent element by pixel saturation and clicks/hovers its center:
 ```bash
 forepaw click 310,420,80,70 --app Spotify   # clicks green play button in that region
 forepaw hover 325,410,60,60 --app Spotify   # hovers play button, triggers tooltip
-forepaw click 440,420,60,60 --app Spotify   # clicks shuffle icon in that region
 ```
-The agent provides a rough bounding box (doesn't need to be precise); forepaw handles pixel-level targeting. Works because colored UI elements (green play, blue links, red close) have high saturation against desaturated backgrounds (gray, black, white).
+The agent provides a rough bounding box; forepaw handles pixel-level targeting. Works because colored UI elements have high saturation against desaturated backgrounds.
 
-Output includes the detected coordinates: `clicked prominent element at 349,453 (in region 310,420 80x70)`
-
-Hover region triggers hover states and visual feedback. In CEF apps, follow up with a screenshot (not snapshot -- CEF has no AX tree) to visually confirm what's under the cursor or see tooltip text rendered on screen.
-
-### Double-click for list items
-In Spotify and similar apps, double-click a song title to play it:
-```bash
-forepaw ocr-click "Song Title" --app Spotify --double
-```
-
-### Grid overlay (for human debugging)
-`--grid N` overlays labeled coordinate gridlines on screenshots. Useful for humans verifying positions, but LLMs cannot accurately read pixel coordinates from grid labels -- use region click instead.
-```bash
-forepaw screenshot --app Spotify --grid 100
-forepaw screenshot --app Spotify --region 380,260,150,100 --grid 25
-```
+Output includes the detected coordinates: `clicked prominent element at 349,453 (in region 310,420 80x70)`.
 
 ### General strategy for CEF apps
 1. Use `ocr-click` for all text-labeled controls (tabs, menu items, links, song titles)
@@ -429,14 +391,16 @@ forepaw permissions          # check status
 forepaw permissions --request  # trigger system dialogs
 ```
 
-Two permissions needed:
+macOS needs two permissions:
 - **Accessibility** (System Settings > Privacy & Security > Accessibility) -- for snapshot, click, type
 - **Screen Recording** (System Settings > Privacy & Security > Screen & System Audio Recording) -- for screenshot, ocr, ocr-click
+
+Windows and Linux don't need permission setup (UIA/AT-SPI2 work without gates).
 
 ## Discovering apps and windows
 
 ```bash
-forepaw list-apps                  # running GUI apps with bundle IDs
+forepaw list-apps                  # running GUI apps
 forepaw list-windows --app Finder  # windows for an app
 ```
 
@@ -451,4 +415,4 @@ Ghostty (com.mitchellh.ghostty) * [pid: 1331]
 w-42  Finder  "Documents"  [312,139 1010x614]
 ```
 
-Use the exact app name from `list-apps` in `--app` flags. Use `list-windows` to find window titles/IDs for `--window`.
+Use the exact app name from `list-apps` in `--app` flags. Use `list-windows` to find window titles/IDs for `--window`/`--window-id`.

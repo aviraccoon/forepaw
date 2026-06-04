@@ -29,6 +29,7 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 | Linux backend (AT-SPI2, D-Bus) | `crates/forepaw/src/platform/linux/` |
 | AT-SPI2 role generator | `res/generate_atspi_roles.sh` → `crates/forepaw/src/platform/linux/role.rs` |
 | Test apps (SwiftUI, manual testing) | `TestApps/` |
+| Internal architecture doc | `docs/internals.md` |
 | Research docs | `docs/` |
 | Windows diagnostic scripts | `scripts/windows/` |
 | Nix flake (build, dev shell, formatter) | `flake.nix` |
@@ -71,7 +72,7 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 - Output is plain text by default, `forepaw -f json <command>` for structured JSON (global `--format` flag).
 - Element names: check `AXTitle`, then `AXDescription`, then `AXTitleUIElement` (points to a label element), then first `AXStaticText` child's `AXValue`. This chain (`computedName`) handles cells, rows, and other container elements.
 - Keystroke simulation needs inter-character delay (~8ms) for Electron apps. Without it, characters get dropped.
-- **Every feature or behavior change must update the agent skill** (`.agents/skills/forepaw/SKILL.md`) and `README.md`. The skill is how agents learn to use forepaw -- if a capability isn't documented there, it doesn't exist to them.
+- **Every feature or behavior change must update the agent skill** (`.agents/skills/forepaw/SKILL.md`), `README.md`, and `docs/internals.md`. The skill is how agents learn to use forepaw -- if a capability isn't documented there, it doesn't exist to them. The internals doc covers how things work under the hood -- keep it in sync with architecture and design changes.
 - **Load the forepaw skill before testing interactively.** The skill documents the observe-act loop, command patterns, and behavioral gotchas. Read it before running forepaw commands against real apps.
 - **Coordinate-based actions validate against window bounds.** `click_at_point` and `hover_at_point` reject coordinates outside the target window (errors, not clamps -- a misplaced click could be destructive). Any new coordinate-based action must validate when `--app` is specified.
 - Implement `std::str::FromStr` for string-parsed enums (clippy enforces this over custom `from_str` methods).

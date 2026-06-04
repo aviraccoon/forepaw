@@ -2,23 +2,25 @@
 
 A raccoon's paws on your desktop. Cross-platform automation CLI. Control any application through accessibility trees, OCR, and input simulation.
 
-Named after the raccoon's dexterous forepaws -- precise manipulation of UI elements without brute force.
+Named after the raccoon's dexterous forepaws: precise manipulation of UI elements without brute force.
 
 ## What is this?
 
-forepaw lets programs (and people, through programs) interact with any desktop application the same way a human would: reading what's on screen, clicking buttons, typing text, scrolling around. On macOS it reads the same accessibility tree that VoiceOver uses. On Windows it uses UI Automation (the same tree Narrator uses). Input simulation works through native platform APIs on both.
+forepaw lets programs (and people, through programs) interact with any desktop application the same way a human would: reading what's on screen, clicking buttons, typing text, scrolling around. On macOS it reads the same accessibility tree that VoiceOver uses. On Windows it uses UI Automation. On Linux it uses AT-SPI2.
 
-The original motivation was curiosity -- what would it take to let an AI agent use a desktop app? But the interesting part turned out to be bigger than that. An LLM with forepaw can operate applications on behalf of anyone: navigating complex UIs, filling out forms, reading screen content aloud, automating repetitive tasks. For blind and low-vision users, this means an AI assistant that can see and describe what's on screen, click the right buttons, and read back results -- using the same accessibility infrastructure that was always there, just with a more capable intermediary.
+Observation (snapshot, screenshot, OCR, hit-test) works on all three platforms. Actions (click, type, press) are implemented on macOS; Windows and Linux have observation complete with action stubs ready to be wired up. Contributions welcome.
+
+The original motivation was curiosity about what it would take to let an AI agent use a desktop app? But the interesting part turned out to be bigger than that. An LLM with forepaw can operate applications on behalf of anyone: navigating complex UIs, filling out forms, reading screen content aloud, automating repetitive tasks. For blind and low-vision users, this means an AI assistant that can see and describe what's on screen, click the right buttons, and read back results, using the same accessibility infrastructure that was always there with a more capable intermediary.
 
 forepaw is the paws. The brain is whatever you connect them to.
 
 ## Quick start
 
 ```bash
-# Build (requires Rust / cargo)
+# Build (requires Rust / cargo on macOS, cross-compilation for other platforms)
 cargo build
 
-# Grant permissions (Accessibility + Screen Recording)
+# Grant permissions (macOS only)
 cargo run -- permissions --request
 
 # See what's running
@@ -56,7 +58,7 @@ forepaw snapshot --app Finder -i --diff
 + button @e20 "Quick Look" (892,4 40x24)
 ```
 
-That's it. Snapshot gives you refs (`@e1`, `@e2`, ...), you use those refs to act, then snapshot again to see the result. Every ref is a handle to a real UI element -- a button, a text field, a menu item.
+That's it. Snapshot gives you refs (`@e1`, `@e2`, ...), you use those refs to act, then snapshot again to see the result. Every ref is a handle to a real UI element: a button, text field, or menu item.
 
 ## What it can do
 
@@ -83,13 +85,13 @@ That's it. Snapshot gives you refs (`@e1`, `@e2`, ...), you use those refs to ac
 | **Compose** | `batch --app Notes "click @e3 ;; keyboard-type hello ;; press return"` | Multiple actions in one invocation |
 | | `wait "Upload complete" --app App` | Poll until text appears on screen |
 
-All commands that take `--app` also accept `--pid` for targeting by process ID (mutually exclusive). Use `list-apps` to find PIDs, and `--pid` when multiple instances of the same app are running.
+All commands support `--format json` for structured output and `--verbose` for additional element metadata (native roles, identifiers, signatures). All commands that take `--app` also accept `--pid` for targeting by process ID (mutually exclusive). Use `list-apps` to find PIDs, and `--pid` when multiple instances of the same app are running.
 
-All coordinates are **window-relative** -- `(0,0)` is the top-left of the window, not the screen. Coordinates don't change when the window moves. Out-of-bounds coordinates are rejected (a misplaced click on the wrong app could be destructive).
+All coordinates are **window-relative**: `(0,0)` is the top-left of the window, not the screen. Coordinates don't change when the window moves. Out-of-bounds coordinates are rejected (a misplaced click on the wrong app could be destructive).
 
 ## Electron apps just work
 
-Some trash cans have a hidden compartment. Discord, Slack, VS Code, Cursor, Obsidian, Notion, Linear -- these Electron apps have a full accessibility tree inside, but they don't expose it unless asked. forepaw detects them automatically and flips the switch (via `AXManualAccessibility`, the same signal VoiceOver sends). No flags needed.
+Some trash cans have a hidden compartment. Discord, Slack, VS Code, Cursor, Obsidian, Notion, Linear: these Electron apps have a full accessibility tree inside, but they don't expose it unless asked. forepaw detects them automatically and flips the switch (via `AXManualAccessibility`, the same signal VoiceOver sends). No flags needed.
 
 Electron apps with icon libraries (Lucide, Tabler, FontAwesome, etc.) get automatic icon name resolution from CSS classes. An unnamed button with a `lucide-settings` class becomes `button @e5 "settings"`.
 
@@ -97,18 +99,17 @@ For the rare Electron app where the tree is still sparse, `ocr` and `ocr-click` 
 
 ## CEF apps (Spotify, Steam)
 
-Some apps use Chromium Embedded Framework instead of Electron. CEF doesn't respond to `AXManualAccessibility`, so the accessibility tree is empty. forepaw operates these through OCR and screenshots instead:
+Some apps (Spotify, Steam) use Chromium Embedded Framework (CEF) instead of Electron. CEF's accessibility tree is empty (`AXManualAccessibility`, the switch forepaw flips for Electron apps, doesn't help with CEF), so forepaw operates these through OCR and region targeting instead:
 
 ```bash
-forepaw ocr-click "LIBRARY" --app Steam             # text navigation works via OCR
-forepaw ocr-click "Shelter" --app Spotify --double  # double-click to play a song
-forepaw click 310,420,80,70 --app Spotify           # region click for icon buttons
-forepaw hover 325,410,60,60 --app Spotify           # region hover for tooltip discovery
+forepaw ocr-click "LIBRARY" --app Steam                         # text via OCR
+forepaw click 310,420,80,70 --app Spotify                       # region click for icon buttons
+forepaw ocr-click "Shelter" --app Spotify --double              # double-click to play
 ```
 
-**Region targeting** (`click x,y,w,h` / `hover x,y,w,h`) solves the icon button problem. LLMs can't predict precise pixel coordinates from screenshots, but they can draw rough bounding boxes. forepaw analyzes pixel saturation in the region, finds the centroid of the most colorful element (buttons are colored, backgrounds aren't), and clicks or hovers it. No vision model required. Hover region triggers hover states -- follow with a screenshot to see tooltip text rendered on screen.
+**Region targeting** (`click x,y,w,h` / `hover x,y,w,h`) solves icon buttons: LLMs draw rough bounding boxes, forepaw finds the most colorful element inside by pixel saturation. No vision model required. Follow region hover with a screenshot to capture tooltips.
 
-Multi-process apps like Steam render their UI in a helper process. forepaw discovers these windows automatically -- `--app Steam` just works.
+Multi-process apps like Steam render their UI in a helper process. forepaw discovers these windows automatically: `--app Steam` just works.
 
 ## Annotated screenshots
 
@@ -130,29 +131,26 @@ Labels are color-coded: green for buttons, yellow for text fields, blue for sele
 
 ## Snapshot diffing
 
-After an action, `--diff` shows what changed without re-reading the full tree:
+After any action, `--diff` shows what changed without re-reading the full tree:
 
 ```bash
-forepaw snapshot --app Finder -i        # auto-cached
-forepaw click @e3 --app Finder          # do something
-forepaw snapshot --app Finder -i --diff # what changed?
+forepaw snapshot --app Finder -i        # baseline (auto-cached)
+forepaw click @e3 --app Finder          # action
+forepaw snapshot --app Finder -i --diff # see the change
 ```
 
-Ref shifts are handled -- if a new element bumps all subsequent refs, unchanged elements still show as unchanged. `--context N` adds surrounding lines for spatial context.
+Ref shifts are handled automatically: new elements bumping subsequent refs don't produce false diffs. `--context N` for spatial context around changes.
 
 ## Batch actions
 
-A raccoon doesn't open the lid, walk away, come back, reach in, walk away, come back, grab the food. Separate CLI invocations return control to the terminal between commands, which steals focus from the target app. Batch keeps focus throughout:
+A raccoon doesn't open the lid, walk away, come back, reach in, walk away, come back, grab the food. Separate CLI invocations return control to the terminal between commands, stealing focus from the target app. Batch keeps focus throughout:
 
 ```bash
-# Click a text field, type into it, press Enter -- all without losing focus
 forepaw batch --app Notes "click @e3 ;; keyboard-type hello world ;; press return"
-
-# Navigate to a URL
 forepaw batch --app Orion "click 626,72 ;; keyboard-type example.com ;; press return"
 ```
 
-Actions are separated by `;;`. Default 100ms delay between them (`--delay` to adjust). `--app` applies to all actions unless overridden per-action.
+Actions are separated by `;;`. Default 100ms delay (`--delay` to adjust). `--app` applies to all actions unless overridden per-action.
 
 ## Multi-window support
 
@@ -169,34 +167,41 @@ Without `--window`, commands target the largest window. Ambiguous matches are re
 
 ## Requirements
 
-- macOS 14+ (Apple Silicon or Intel)
-- Two permissions on macOS, granted to your terminal app:
+### macOS 14+
+
+Apple Silicon or Intel. Two permissions:
 
 | Permission | Needed for | Where to grant |
 |-----------|-----------|---------------|
 | Accessibility | snapshot, click, type, hover | System Settings > Privacy & Security > Accessibility |
 | Screen Recording | screenshot, ocr, ocr-click | System Settings > Privacy & Security > Screen & System Audio Recording |
 
-Windows has no equivalent permission gates for UI Automation or input simulation.
-
 ```bash
 forepaw permissions          # check status
 forepaw permissions --request  # trigger system dialogs (macOS only)
 ```
+
+### Windows
+
+No permission gates. UI Automation, screenshots, and OCR work out of the box on Windows 10+.
+
+### Linux
+
+No permission gates. Requires a running AT-SPI2 bus (included in GNOME, KDE, and most desktop environments).
 
 ## Design decisions
 
 - **Accessibility-first.** Feel first, look second. A text tree is ~50 lines. A screenshot is ~1500 tokens. forepaw defaults to the cheaper, more precise option. OCR is the fallback, not the primary strategy.
 - **CLI, not library or daemon.** Works with any language, any agent framework, any automation tool that can shell out. No SDK lock-in, no protocol to implement.
 - **AX actions before mouse simulation.** `AXPress` doesn't move the physical cursor. More reliable, less disruptive. Mouse is the fallback.
-- **Platform-agnostic core.** The ref system, tree rendering, diffing, and output formatting live in `src/core/` with no platform imports. `src/platform/darwin/` handles macOS (AXUIElement, CGEvent, Vision OCR), `src/platform/windows/` handles Windows (UIA, Win32). A Linux backend (AT-SPI2) would plug in with the same CLI.
-- **Built for agents, useful for humans.** Raccoons are generalists. forepaw reads the same tree that VoiceOver does. Annotated screenshots make invisible structure visible -- useful for AI agents, but also for sighted people helping blind users debug UIs, developers auditing accessibility, or anyone trying to understand an unfamiliar app's interactive structure.
+- **Platform-agnostic core.** The ref system, tree rendering, diffing, and output formatting live in `src/core/` with no platform imports. `src/platform/darwin/` handles macOS (AXUIElement, CGEvent, Vision OCR), `src/platform/windows/` handles Windows (UIA, Win32), `src/platform/linux/` handles Linux (AT-SPI2, D-Bus). All three plug into the same CLI through the same trait.
+- **Built for agents, useful for humans.** Raccoons are generalists. forepaw reads the same tree that VoiceOver does. Annotated screenshots make invisible structure visible: useful for AI agents, but also for sighted people helping blind users debug UIs, developers auditing accessibility, or anyone trying to understand an unfamiliar app's interactive structure.
 
 ## Further reading
 
 | Document | Contents |
 |----------|----------|
-| `docs/internals.md` | How it works under the hood -- AX batching, name resolution, pruning, coordinate systems. With raccoons. |
+| `docs/internals.md` | How it works under the hood: AX batching, name resolution, pruning, coordinate systems. With raccoons. |
 | `docs/performance-macos.md` | Benchmark data across apps, what's fast, what's slow, why Music is cursed. |
 | `docs/cross-platform.md` | Linux and Windows feasibility research, AT-SPI2/UIA notes. |
 
@@ -214,7 +219,7 @@ Download from [releases](https://github.com/aviraccoon/forepaw/releases) for you
 | Linux (x86_64) | `forepaw-linux-x86_64.tar.gz` |
 | Linux (ARM64) | `forepaw-linux-arm64.tar.gz` |
 
-Linux binaries are statically linked (musl) -- they run on any distribution, including NixOS.
+Linux binaries are statically linked (musl): they run on any distribution, including NixOS.
 
 ### Nix
 
@@ -301,3 +306,7 @@ TestApps/                      # SwiftUI test apps for manual testing
 - Every new type or function in `src/core/` needs unit tests.
 - `mise run check` (lint + test) must pass before committing.
 - If you changed code behind a `cfg` gate for a platform you're not running on, run `mise run lint-all` to catch cross-target warnings.
+
+## License
+
+[Unlicense](https://unlicense.org/). Public domain. Raccoons don't believe in fences.
