@@ -29,6 +29,7 @@ use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
 /// Connects to the AT-SPI2 accessibility bus (discovered from the
 /// session bus at `org.a11y.Bus`) and uses `zbus::blocking` for
 /// all D-Bus communication.
+#[derive(Debug)]
 pub struct LinuxProvider {
     // No cached connection -- connections are established per-call
     // so the binary can be inspected (`--help`, `--version`)

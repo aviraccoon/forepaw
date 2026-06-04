@@ -64,6 +64,7 @@ impl std::fmt::Display for OutputFormat {
     }
 }
 
+#[derive(Debug)]
 pub struct OutputFormatter {
     pub format: OutputFormat,
 }

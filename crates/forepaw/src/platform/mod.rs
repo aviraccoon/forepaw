@@ -299,6 +299,7 @@ impl ImageFormat {
 }
 
 /// Parameters for screenshot operations.
+#[derive(Debug)]
 pub struct ScreenshotParams<'a> {
     pub app: Option<&'a AppTarget>,
     pub window: Option<&'a WindowTarget>,

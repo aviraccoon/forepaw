@@ -29,6 +29,7 @@ use crate::core::errors::ForepawError;
 use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
 
 /// macOS implementation of `DesktopProvider`.
+#[derive(Debug)]
 pub struct DarwinProvider;
 
 impl DarwinProvider {

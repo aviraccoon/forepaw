@@ -195,6 +195,7 @@ pub fn strip_refs(line: &str) -> String {
 }
 
 /// Compares two rendered snapshot texts, producing a line-level diff.
+#[derive(Debug)]
 pub struct SnapshotDiffer;
 
 impl SnapshotDiffer {

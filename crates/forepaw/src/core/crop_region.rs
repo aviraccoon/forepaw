@@ -1,6 +1,7 @@
 //! Describes a crop region for area screenshots.
 use crate::core::types::{Point, Rect};
 
+#[derive(Debug)]
 pub struct CropRegion {
     pub rect: Rect,
     pub padding: f64,

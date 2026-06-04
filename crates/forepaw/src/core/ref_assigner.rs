@@ -10,12 +10,14 @@ use crate::core::element_tree::{ElementNode, ElementRef, ElementRefInfo};
 use crate::core::signature::{element_signature, element_signature_with_bounds};
 
 /// Result of ref assignment.
+#[derive(Debug)]
 pub struct RefAssignment {
     pub root: ElementNode,
     pub refs: HashMap<ElementRef, ElementRefInfo>,
 }
 
 /// Assigns refs to interactive elements in depth-first order.
+#[derive(Debug)]
 pub struct RefAssigner;
 
 impl RefAssigner {

@@ -18,6 +18,7 @@ use crate::core::errors::ForepawError;
 use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
 
 /// Windows implementation of `DesktopProvider`.
+#[derive(Debug)]
 pub struct WindowsProvider;
 
 impl WindowsProvider {

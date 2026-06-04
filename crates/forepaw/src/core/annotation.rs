@@ -70,6 +70,7 @@ impl AnnotationStyle {
 }
 
 /// Collects annotations from an element tree.
+#[derive(Debug)]
 pub struct AnnotationCollector;
 
 impl AnnotationCollector {
@@ -136,6 +137,7 @@ impl Default for AnnotationCollector {
 }
 
 /// Formats the text legend for annotations.
+#[derive(Debug)]
 pub struct AnnotationLegend;
 
 impl AnnotationLegend {

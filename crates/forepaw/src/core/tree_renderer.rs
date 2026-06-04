@@ -2,6 +2,7 @@
 use crate::core::element_tree::ElementTree;
 use crate::core::types::Rect;
 
+#[derive(Debug)]
 pub struct TreeRenderer {
     verbose: bool,
 }

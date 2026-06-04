@@ -16,7 +16,7 @@ resolver = "2"
 unreachable_pub                 = "warn"
 unused_qualifications           = "warn"
 missing_docs                    = "allow"   # bookmark: enable when lib surface matters
-missing_debug_implementations   = "allow"   # bookmark: enable when lib surface matters
+missing_debug_implementations   = "warn"
 
 [workspace.lints.clippy]
 pedantic = { level = "deny", priority = -1 }

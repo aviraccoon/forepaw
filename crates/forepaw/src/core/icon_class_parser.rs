@@ -6,6 +6,7 @@
 /// prefixes to extract the semantic name.
 ///
 /// [`IconClassParser`]
+#[derive(Debug)]
 pub struct IconClassParser;
 
 impl IconClassParser {

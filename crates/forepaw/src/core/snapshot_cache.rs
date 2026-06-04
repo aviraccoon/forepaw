@@ -2,6 +2,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+#[derive(Debug)]
 pub struct SnapshotCache;
 
 impl SnapshotCache {
