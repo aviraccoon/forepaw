@@ -3,6 +3,17 @@ use clap::Parser;
 
 mod cli;
 
+/// Reset SIGPIPE to OS default so broken pipes silently terminate the process,
+/// matching standard Unix CLI behavior. Rust's runtime ignores SIGPIPE, which
+/// causes `println!`/`writeln!` to panic with `BrokenPipe` errors instead.
+fn reset_sigpipe() {
+    #[cfg(unix)]
+    // SAFETY: libc::signal with SIG_DFL is a well-defined signal handler reset.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
 use crate::cli::action::{
     Batch, Click, Drag, Hover, KeyboardType, OcrClick, Press, Scroll, Type, Wait,
 };
@@ -69,6 +80,8 @@ enum Commands {
 }
 
 fn main() -> anyhow::Result<()> {
+    reset_sigpipe();
+
     forepaw::log::init();
 
     let app = App::parse();
