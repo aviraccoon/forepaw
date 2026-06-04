@@ -4,11 +4,14 @@ use crate::core::types::Rect;
 /// Recognized text with its bounding box.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct OCRResult {
+    /// The recognized text.
     pub text: String,
+    /// Bounding box of the recognized text region.
     pub bounds: Rect,
 }
 
 impl OCRResult {
+    /// Create a new OCR result.
     pub fn new(text: impl Into<String>, bounds: Rect) -> Self {
         Self {
             text: text.into(),
@@ -69,12 +72,15 @@ pub fn find_case_insensitive_ranges(text: &str, query: &str) -> Vec<(usize, usiz
 /// Combined OCR output: recognized text results plus optional display screenshot.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct OCROutput {
+    /// All recognized text results.
     pub results: Vec<OCRResult>,
+    /// Path to the screenshot used for OCR, if saved.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub screenshot_path: Option<String>,
 }
 
 impl OCROutput {
+    /// Create new OCR output.
     #[must_use]
     pub fn new(results: Vec<OCRResult>, screenshot_path: Option<String>) -> Self {
         Self {

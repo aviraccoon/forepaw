@@ -1,4 +1,9 @@
-/// Forepaw: desktop automation CLI for AI agents.
+//! A raccoon's paws on your desktop. Cross-platform automation CLI.
+//!
+//! Control any desktop application through accessibility trees, OCR, and
+//! input simulation. Platform backends for macOS, Windows, and Linux are
+//! selected at compile time via `#[cfg]`.
+
 use clap::Parser;
 
 mod cli;

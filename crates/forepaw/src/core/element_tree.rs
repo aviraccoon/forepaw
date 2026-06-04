@@ -12,13 +12,18 @@ use crate::core::types::Rect;
 #[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
 pub struct ElementData {
+    /// The element's accessibility role.
     pub role: Role,
+    /// The element's accessible name, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// The element's current value, if any (e.g. text field contents).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    /// Interactive-element reference (e.g. "@e3"). None for structural elements.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reference: Option<ElementRef>,
+    /// Element bounds in screen coordinates.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
     /// Whether the element is enabled (interactive). `None` if the platform
@@ -72,11 +77,13 @@ pub struct ElementData {
     /// `None` for elements not going through `RefAssigner`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature_bounds: Option<u64>,
+    /// Platform-specific attributes (key-value pairs for verbose output).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub attributes: Vec<(String, String)>,
 }
 
 impl ElementData {
+    /// Create a new `ElementData` with the given role and default values.
     pub fn new(role: Role) -> Self {
         Self {
             role,
@@ -97,66 +104,79 @@ impl ElementData {
         }
     }
 
+    /// Set the accessible name (consumes `self`, builder pattern).
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
+    /// Set the accessible name from an `Option` (consumes `self`, builder pattern).
     pub fn with_name_opt(mut self, name: Option<String>) -> Self {
         self.name = name;
         self
     }
 
+    /// Set the current value (consumes `self`, builder pattern).
     pub fn with_value(mut self, value: impl Into<String>) -> Self {
         self.value = Some(value.into());
         self
     }
 
+    /// Set the element ref (consumes `self`, builder pattern).
     pub fn with_reference(mut self, reference: ElementRef) -> Self {
         self.reference = Some(reference);
         self
     }
 
+    /// Set the element bounds (consumes `self`, builder pattern).
     pub fn with_bounds(mut self, bounds: Rect) -> Self {
         self.bounds = Some(bounds);
         self
     }
 
+    /// Set the element bounds from an `Option` (consumes `self`, builder pattern).
     pub fn with_bounds_opt(mut self, bounds: Option<Rect>) -> Self {
         self.bounds = bounds;
         self
     }
 
+    /// Set the enabled state (consumes `self`, builder pattern).
     pub fn with_enabled(mut self, enabled: bool) -> Self {
         self.enabled = Some(enabled);
         self
     }
 
+    /// Set the focused state (consumes `self`, builder pattern).
     pub fn with_focused(mut self, focused: bool) -> Self {
         self.focused = Some(focused);
         self
     }
 
+    /// Set the selected state (consumes `self`, builder pattern).
     pub fn with_selected(mut self, selected: bool) -> Self {
         self.selected = Some(selected);
         self
     }
 
+    /// Set the accessible description (consumes `self`, builder pattern).
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Set the native role string (consumes `self`, builder pattern).
     pub fn with_native_role(mut self, native_role: impl Into<String>) -> Self {
         self.native_role = Some(native_role.into());
         self
     }
 
+    /// Set the platform identifier (consumes `self`, builder pattern).
     pub fn with_identifier(mut self, identifier: impl Into<String>) -> Self {
         self.identifier = Some(identifier.into());
         self
     }
 
+    /// Add a platform-specific attribute (consumes `self`, builder pattern).
     pub fn with_attribute(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.attributes.push((key.into(), value.into()));
         self
@@ -173,7 +193,9 @@ impl ElementData {
 #[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
 pub struct ElementNode {
+    /// Element data (role, name, value, bounds, etc.).
     pub data: ElementData,
+    /// Child elements in the accessibility tree.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Self>,
 }
@@ -187,11 +209,13 @@ impl ElementNode {
         }
     }
 
+    /// Set the children (consumes `self`, builder pattern).
     pub fn with_children(mut self, children: Vec<Self>) -> Self {
         self.children = children;
         self
     }
 
+    /// Add a child node.
     pub fn add_child(&mut self, child: Self) {
         self.children.push(child);
     }
@@ -207,7 +231,9 @@ impl ElementNode {
 #[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
 pub struct ElementTree {
+    /// The application name this tree was captured from.
     pub app: String,
+    /// Root node of the accessibility tree.
     pub root: ElementNode,
     /// All refs assigned in this snapshot, in order.
     #[serde(skip_serializing)]
@@ -221,6 +247,7 @@ pub struct ElementTree {
 }
 
 impl ElementTree {
+    /// Create a new tree for the given app with the given root.
     pub fn new(app: impl Into<String>, root: ElementNode) -> Self {
         Self {
             app: app.into(),
@@ -231,6 +258,7 @@ impl ElementTree {
         }
     }
 
+    /// Store the ref map from this snapshot.
     pub fn with_references(
         mut self,
         refs: std::collections::HashMap<ElementRef, ElementRefInfo>,
@@ -239,11 +267,13 @@ impl ElementTree {
         self
     }
 
+    /// Set the window bounds for this tree.
     pub fn with_window_bounds(mut self, bounds: Rect) -> Self {
         self.window_bounds = Some(bounds);
         self
     }
 
+    /// Attach timing info to this tree.
     pub fn with_timing(mut self, timing: SnapshotTiming) -> Self {
         self.timing = Some(timing);
         self
@@ -262,6 +292,7 @@ pub struct SnapshotTiming {
 }
 
 impl SnapshotTiming {
+    /// Create new timing info.
     #[must_use]
     pub fn new(total_ms: f64, node_count: usize, root: ElementNode) -> Self {
         Self {
@@ -360,10 +391,12 @@ impl SnapshotTiming {
 /// Opaque reference to an interactive element, valid until the next snapshot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ElementRef {
+    /// Unique numeric identifier within a snapshot.
     pub id: i32,
 }
 
 impl ElementRef {
+    /// Create a new element ref with the given ID.
     #[must_use]
     pub fn new(id: i32) -> Self {
         Self { id }
@@ -396,12 +429,15 @@ impl fmt::Display for ElementRef {
 /// Info stored alongside a ref for action dispatch.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ElementRefInfo {
+    /// The element's role.
     pub role: Role,
+    /// The element's accessible name, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
 impl ElementRefInfo {
+    /// Create a new `ElementRefInfo` with the given role and name.
     #[must_use]
     pub fn new(role: Role, name: Option<String>) -> Self {
         Self { role, name }

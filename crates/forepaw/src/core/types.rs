@@ -1,32 +1,41 @@
 //! Platform-agnostic geometric types.
-/// Platform-agnostic geometric types.
-///
-/// These replace platform-specific types (`CGPoint`, `CGRect`) so the core
-/// crate stays dependency-free. Platform backends convert to/from their
-/// native types at the boundary.
+//!
+//! These replace platform-specific types (`CGPoint`, `CGRect`) so the core
+//! crate stays dependency-free. Platform backends convert to/from their
+//! native types at the boundary.
 
+/// A point in 2D space (screen or window coordinates).
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
 pub struct Point {
+    /// X coordinate (screen-space or window-space).
     pub x: f64,
+    /// Y coordinate (screen-space or window-space).
     pub y: f64,
 }
 
 impl Point {
+    /// Create a new point.
     #[must_use]
     pub fn new(x: f64, y: f64) -> Self {
         Self { x, y }
     }
 }
 
+/// A rectangle with origin and size (screen or window coordinates).
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
 pub struct Rect {
+    /// Left edge X coordinate.
     pub x: f64,
+    /// Top edge Y coordinate.
     pub y: f64,
+    /// Width of the rectangle.
     pub width: f64,
+    /// Height of the rectangle.
     pub height: f64,
 }
 
 impl Rect {
+    /// Create a new rectangle.
     #[must_use]
     pub fn new(x: f64, y: f64, width: f64, height: f64) -> Self {
         Self {

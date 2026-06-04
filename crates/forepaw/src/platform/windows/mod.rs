@@ -22,6 +22,7 @@ use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
 pub struct WindowsProvider;
 
 impl WindowsProvider {
+    /// Create a new Windows platform provider.
     #[must_use]
     pub fn new() -> Self {
         screenshot::init_dpi_awareness();

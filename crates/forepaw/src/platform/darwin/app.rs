@@ -194,12 +194,16 @@ pub fn list_apps() -> Result<Vec<AppInfo>, ForepawError> {
 /// A resolved window with its `CGWindowID`, title, and bounds.
 #[derive(Debug)]
 pub struct ResolvedWindow {
+    /// CoreGraphics window ID.
     pub window_id: u32,
+    /// Window title bar text.
     pub title: String,
+    /// Window bounds in screen coordinates.
     pub bounds: Rect,
 }
 
 impl ResolvedWindow {
+    /// Return the top-left origin point.
     #[must_use]
     pub fn origin(&self) -> Point {
         Point {
@@ -208,6 +212,7 @@ impl ResolvedWindow {
         }
     }
 
+    /// Return the center point.
     #[must_use]
     pub fn center(&self) -> Point {
         Point {

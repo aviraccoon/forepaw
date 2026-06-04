@@ -18,11 +18,16 @@ use crate::platform::darwin::ffi::{
 // Error type
 // ---------------------------------------------------------------------------
 
+/// Errors that can occur during annotation rendering.
 #[derive(Debug)]
 pub enum AnnotationError {
+    /// Failed to load the source image from disk.
     ImageLoadFailed(String),
+    /// Failed to create a CoreGraphics bitmap context.
     ContextCreationFailed,
+    /// Failed to render the annotated image.
     RenderFailed,
+    /// Failed to save the annotated image to disk.
     SaveFailed(String),
 }
 

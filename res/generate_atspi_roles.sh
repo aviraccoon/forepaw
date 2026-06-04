@@ -29,6 +29,8 @@ BEGIN {
   print "// Source: https://gitlab.gnome.org/GNOME/at-spi2-core/-/raw/HEAD/atspi/atspi-constants.h"
   print "// To regenerate: bash res/generate_atspi_roles.sh > crates/forepaw/src/platform/linux/role.rs"
   print ""
+  print "//! AT-SPI2 role constants and mapping to cross-platform [`Role`] values."
+  print ""
   print "#![expect("
   print "    clippy::match_same_arms,"
   print "    reason = \"AT-SPI2 roles legitimately map to the same Role\""

@@ -2,6 +2,8 @@
 // Source: https://gitlab.gnome.org/GNOME/at-spi2-core/-/raw/HEAD/atspi/atspi-constants.h
 // To regenerate: bash res/generate_atspi_roles.sh > crates/forepaw/src/platform/linux/role.rs
 
+//! AT-SPI2 role constants and mapping to cross-platform [`Role`] values.
+
 #![expect(
     clippy::match_same_arms,
     reason = "AT-SPI2 roles legitimately map to the same Role"

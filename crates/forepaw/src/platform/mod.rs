@@ -97,9 +97,12 @@ impl std::fmt::Display for AppTarget {
 /// Info about a running application.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AppInfo {
+    /// The application's display name.
     pub name: String,
+    /// Bundle identifier (e.g. "com.apple.finder"). Platform-dependent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bundle_id: Option<String>,
+    /// Process ID.
     pub pid: i32,
     /// Whether this is the currently active (frontmost) application.
     pub is_active: bool,
@@ -140,9 +143,13 @@ impl WindowTarget {
 /// Info about a visible window.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct WindowInfo {
+    /// Platform-specific window identifier (e.g. "w-1234").
     pub id: String,
+    /// Window title bar text.
     pub title: String,
+    /// Owning application name.
     pub app: String,
+    /// Window bounds in screen coordinates.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
     /// Window display state.
@@ -177,11 +184,14 @@ impl std::fmt::Display for WindowState {
 /// Result of an action (click, type, press, etc.).
 #[derive(Debug, Clone)]
 pub struct ActionResult {
+    /// Whether the action completed successfully.
     pub success: bool,
+    /// Optional human-readable message (error or status).
     pub message: Option<String>,
 }
 
 impl ActionResult {
+    /// Create a success result with no message.
     #[must_use]
     pub fn ok() -> Self {
         Self {
@@ -190,6 +200,7 @@ impl ActionResult {
         }
     }
 
+    /// Create a success result with a status message.
     pub fn ok_msg(msg: impl Into<String>) -> Self {
         Self {
             success: true,
@@ -197,6 +208,7 @@ impl ActionResult {
         }
     }
 
+    /// Create a failure result with an error message.
     pub fn fail(msg: impl Into<String>) -> Self {
         Self {
             success: false,
@@ -226,11 +238,15 @@ pub struct AncestorInfo {
 /// (e.g. `AXUIElementCopyElementAtPosition` returns the deepest child).
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HitTestResult {
+    /// The element's accessibility role.
     pub role: Role,
+    /// The element's accessible name, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// The element's current value, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    /// Element bounds in screen coordinates.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
     /// Available actions on this element (e.g. `Press`, `ShowMenu`).
@@ -248,9 +264,13 @@ pub struct HitTestResult {
 /// Options controlling screenshot output format and quality.
 #[derive(Debug, Clone)]
 pub struct ScreenshotOptions {
+    /// Output image format.
     pub format: ImageFormat,
+    /// JPEG/WebP quality (1-100).
     pub quality: u32,
+    /// Upscale factor for OCR-quality screenshots.
     pub scale: u32,
+    /// Whether to include the cursor in the screenshot.
     pub cursor: bool,
 }
 
@@ -268,9 +288,13 @@ impl Default for ScreenshotOptions {
 /// Image format for screenshots.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
+    /// PNG (lossless).
     Png,
+    /// JPEG (lossy, configurable quality).
     Jpeg,
+    /// WebP (lossy or lossless depending on encoder).
     Webp,
+    /// Best available format for the platform (JPEG fallback).
     BestAvailable,
 }
 
@@ -288,6 +312,7 @@ impl std::str::FromStr for ImageFormat {
 }
 
 impl ImageFormat {
+    /// Return the file extension for this format (e.g. "png", "jpg", "webp").
     #[must_use]
     pub fn file_extension(&self) -> &str {
         match self {
@@ -301,20 +326,30 @@ impl ImageFormat {
 /// Parameters for screenshot operations.
 #[derive(Debug)]
 pub struct ScreenshotParams<'a> {
+    /// The application to capture (full screen if None).
     pub app: Option<&'a AppTarget>,
+    /// Specific window within the app to capture.
     pub window: Option<&'a WindowTarget>,
+    /// Annotation style (text / refs only).
     pub style: Option<AnnotationStyle>,
+    /// Only annotate the given refs.
     pub only: Option<&'a [ElementRef]>,
+    /// Screenshot output options.
     pub options: &'a ScreenshotOptions,
+    /// Crop region to capture.
     pub crop: Option<&'a CropRegion>,
+    /// Grid overlay spacing for alignment annotations.
     pub grid_spacing: Option<u32>,
 }
 
 /// Result of a screenshot operation.
 #[derive(Debug, Clone)]
 pub struct ScreenshotResult {
+    /// File path of the saved screenshot.
     pub path: String,
+    /// Element annotations (if style was requested).
     pub annotations: Option<Vec<Annotation>>,
+    /// Legend text explaining annotation colors.
     pub legend: Option<String>,
 }
 
@@ -325,13 +360,21 @@ pub struct ScreenshotResult {
     reason = "snapshot options accumulate flags"
 )]
 pub struct SnapshotOptions {
+    /// Only include interactive elements (button, text field, etc.).
     pub interactive_only: bool,
+    /// Maximum tree depth to traverse.
     pub max_depth: usize,
+    /// Compact output (omit structural elements).
     pub compact: bool,
+    /// Skip the menu bar element.
     pub skip_menu_bar: bool,
+    /// Skip zero-size elements (invisible placeholders).
     pub skip_zero_size: bool,
+    /// Skip offscreen elements.
     pub skip_offscreen: bool,
+    /// Window bounds for relative coordinate output.
     pub window_bounds: Option<Rect>,
+    /// Print timing information.
     pub timing: bool,
 }
 
@@ -351,6 +394,7 @@ impl Default for SnapshotOptions {
 }
 
 impl SnapshotOptions {
+    /// Default maximum tree depth.
     pub const DEFAULT_DEPTH: usize = 15;
 }
 
@@ -661,9 +705,14 @@ pub trait DesktopProvider: Send + Sync {
     ) -> Result<HitTestResult, ForepawError>;
 
     // Permissions
+    /// Check whether accessibility permissions are granted.
     fn has_permissions(&self) -> bool;
+    /// Check whether screen recording permission is granted.
     fn has_screen_recording_permission(&self) -> bool;
+    /// Validate that screen recording is functional (may prompt on first call).
     fn validate_screen_recording(&self) -> bool;
+    /// Request accessibility permissions (may prompt the user).
     fn request_permissions(&self) -> bool;
+    /// Request screen recording permission (may prompt the user).
     fn request_screen_recording_permission(&self) -> bool;
 }

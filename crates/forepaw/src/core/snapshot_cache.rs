@@ -2,10 +2,12 @@
 use std::fs;
 use std::path::PathBuf;
 
+/// Caches rendered snapshot text to temp files for diffing.
 #[derive(Debug)]
 pub struct SnapshotCache;
 
 impl SnapshotCache {
+    /// Create a new cache.
     #[must_use]
     pub fn new() -> Self {
         Self

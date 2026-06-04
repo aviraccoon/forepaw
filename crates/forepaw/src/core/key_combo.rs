@@ -4,9 +4,13 @@
 /// Keyboard modifier keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Modifier {
+    /// Command (⌘) key.
     Command,
+    /// Shift (⇧) key.
     Shift,
+    /// Option (⌥) / Alt key.
     Option,
+    /// Control (⌃) key.
     Control,
 }
 
@@ -41,11 +45,14 @@ impl Modifier {
 /// A key combination (key + optional modifiers).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyCombo {
+    /// The primary key name (e.g. "s", "return", "escape").
     pub key: String,
+    /// Active modifier keys (cmd, shift, etc.).
     pub modifiers: Vec<Modifier>,
 }
 
 impl KeyCombo {
+    /// Create a new key combo.
     pub fn new(key: impl Into<String>, modifiers: Vec<Modifier>) -> Self {
         Self {
             key: key.into(),
@@ -82,18 +89,23 @@ impl KeyCombo {
 /// Mouse button for click actions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseButton {
+    /// Primary (left) mouse button.
     Left,
+    /// Secondary (right) mouse button.
     Right,
 }
 
 /// Click behavior modifiers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClickOptions {
+    /// Which mouse button to press.
     pub button: MouseButton,
+    /// Number of clicks (1 = single, 2 = double, etc.).
     pub click_count: u32,
 }
 
 impl ClickOptions {
+    /// Create a new `ClickOptions`.
     #[must_use]
     pub fn new(button: MouseButton, click_count: u32) -> Self {
         Self {
@@ -102,6 +114,7 @@ impl ClickOptions {
         }
     }
 
+    /// Return a default single-left-click option.
     #[must_use]
     pub fn normal() -> Self {
         Self {
@@ -110,6 +123,7 @@ impl ClickOptions {
         }
     }
 
+    /// Return a single-right-click option.
     #[must_use]
     pub fn right_click() -> Self {
         Self {
@@ -118,6 +132,7 @@ impl ClickOptions {
         }
     }
 
+    /// Return a double-left-click option.
     #[must_use]
     pub fn double_click() -> Self {
         Self {
@@ -136,11 +151,17 @@ impl Default for ClickOptions {
 /// Options for drag operations.
 #[derive(Debug, Clone)]
 pub struct DragOptions {
+    /// Number of interpolation steps for the drag path.
     pub steps: u32,
+    /// Duration of the drag in seconds.
     pub duration: f64,
+    /// Keyboard modifiers to hold during the drag.
     pub modifiers: Vec<Modifier>,
+    /// Trackpad pressure (macOS, optional).
     pub pressure: Option<f64>,
+    /// Whether to use the right mouse button for the drag.
     pub right_button: bool,
+    /// Whether to close the path (return to start).
     pub close_path: bool,
 }
 

@@ -6,10 +6,12 @@
 /// prefixes to extract the semantic name.
 ///
 /// [`IconClassParser`]
+/// Parses CSS class names to extract semantic icon names.
 #[derive(Debug)]
 pub struct IconClassParser;
 
 impl IconClassParser {
+    /// Create a new parser.
     #[must_use]
     pub fn new() -> Self {
         Self

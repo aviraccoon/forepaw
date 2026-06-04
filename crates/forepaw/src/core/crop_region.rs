@@ -1,13 +1,17 @@
 //! Describes a crop region for area screenshots.
 use crate::core::types::{Point, Rect};
 
+/// A rectangular crop region with optional padding.
 #[derive(Debug)]
 pub struct CropRegion {
+    /// The crop rectangle in screen coordinates.
     pub rect: Rect,
+    /// Padding around the rectangle (in points).
     pub padding: f64,
 }
 
 impl CropRegion {
+    /// Create a new crop region.
     #[must_use]
     pub fn new(rect: Rect, padding: f64) -> Self {
         Self { rect, padding }

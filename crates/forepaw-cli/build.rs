@@ -1,3 +1,5 @@
+//! Build-time git SHA embedder.
+
 use std::process::Command;
 
 /// Embed the git commit SHA into the binary at build time.

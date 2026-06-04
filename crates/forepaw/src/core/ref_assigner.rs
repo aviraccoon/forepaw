@@ -12,7 +12,9 @@ use crate::core::signature::{element_signature, element_signature_with_bounds};
 /// Result of ref assignment.
 #[derive(Debug)]
 pub struct RefAssignment {
+    /// Root of the annotated tree.
     pub root: ElementNode,
+    /// Map from refs to element info (role, name).
     pub refs: HashMap<ElementRef, ElementRefInfo>,
 }
 
@@ -21,6 +23,7 @@ pub struct RefAssignment {
 pub struct RefAssigner;
 
 impl RefAssigner {
+    /// Create a new ref assigner.
     #[must_use]
     pub fn new() -> Self {
         Self

@@ -4,12 +4,16 @@
 /// Image format for screenshots.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
+    /// PNG (lossless).
     Png,
+    /// JPEG (lossy, configurable quality).
     Jpeg,
+    /// WebP (lossy or lossless).
     Webp,
 }
 
 impl ImageFormat {
+    /// Return the file extension for this format.
     #[must_use]
     pub fn file_extension(&self) -> &'static str {
         match self {
@@ -19,6 +23,7 @@ impl ImageFormat {
         }
     }
 
+    /// Return all available formats.
     #[must_use]
     pub fn all() -> &'static [Self] {
         &[Self::Png, Self::Jpeg, Self::Webp]
@@ -51,9 +56,13 @@ impl std::str::FromStr for ImageFormat {
 /// Screenshot output options.
 #[derive(Debug, Clone)]
 pub struct ScreenshotOptions {
+    /// Output image format.
     pub format: ImageFormat,
+    /// JPEG/WebP quality (1-100).
     pub quality: u32,
+    /// Upscale factor.
     pub scale: u32,
+    /// Whether to include the cursor.
     pub cursor: bool,
 }
 

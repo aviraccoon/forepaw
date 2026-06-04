@@ -6,14 +6,20 @@ use crate::core::types::Rect;
 /// A single element annotation: a labeled marker on a screenshot.
 #[derive(Debug, Clone)]
 pub struct Annotation {
+    /// The element ref (e.g. @e3).
     pub reference: ElementRef,
+    /// Sequential display number for annotation labels (1-based).
     pub display_number: usize,
+    /// The element's role.
     pub role: Role,
+    /// The element's accessible name, if any.
     pub name: Option<String>,
+    /// Element bounds in window-relative coordinates.
     pub bounds: Rect,
 }
 
 impl Annotation {
+    /// Create a new annotation.
     #[must_use]
     pub fn new(
         reference: ElementRef,
@@ -63,6 +69,7 @@ impl std::str::FromStr for AnnotationStyle {
 }
 
 impl AnnotationStyle {
+    /// Return all available annotation styles.
     #[must_use]
     pub fn all() -> &'static [Self] {
         &[Self::Badges, Self::Labeled, Self::Spotlight]
@@ -74,6 +81,7 @@ impl AnnotationStyle {
 pub struct AnnotationCollector;
 
 impl AnnotationCollector {
+    /// Create a new collector.
     #[must_use]
     pub fn new() -> Self {
         Self
@@ -141,6 +149,7 @@ impl Default for AnnotationCollector {
 pub struct AnnotationLegend;
 
 impl AnnotationLegend {
+    /// Create a new legend formatter.
     #[must_use]
     pub fn new() -> Self {
         Self

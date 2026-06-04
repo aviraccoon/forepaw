@@ -7,24 +7,32 @@
 /// A single line in a diff result.
 #[derive(Debug, Clone)]
 pub struct DiffLine {
+    /// Whether the line was added, removed, or unchanged.
     pub kind: DiffLineKind,
+    /// The line content (with refs preserved).
     pub text: String,
 }
 
+/// Classification of a diff line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiffLineKind {
+    /// Line present only in the new snapshot.
     Added,
+    /// Line present only in the old snapshot.
     Removed,
+    /// Line present in both (unchanged).
     Unchanged,
 }
 
 /// Result of comparing two rendered snapshot texts.
 #[derive(Debug, Clone)]
 pub struct SnapshotDiff {
+    /// The diffed lines.
     pub lines: Vec<DiffLine>,
 }
 
 impl SnapshotDiff {
+    /// Create a new diff from the given lines.
     #[must_use]
     pub fn new(lines: Vec<DiffLine>) -> Self {
         Self { lines }
@@ -57,11 +65,13 @@ impl SnapshotDiff {
             .collect()
     }
 
+    /// Whether there are no changes (no added or removed lines).
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.added().is_empty() && self.removed().is_empty()
     }
 
+    /// A human-readable summary string (e.g. "2 added, 1 removed, 5 unchanged").
     #[must_use]
     pub fn summary(&self) -> String {
         let a = self.added().len();
@@ -199,6 +209,7 @@ pub fn strip_refs(line: &str) -> String {
 pub struct SnapshotDiffer;
 
 impl SnapshotDiffer {
+    /// Create a new differ.
     #[must_use]
     pub fn new() -> Self {
         Self

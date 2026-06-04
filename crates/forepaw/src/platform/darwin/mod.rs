@@ -33,6 +33,7 @@ use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
 pub struct DarwinProvider;
 
 impl DarwinProvider {
+    /// Create a new Darwin platform provider.
     #[must_use]
     pub fn new() -> Self {
         Self

@@ -2,17 +2,21 @@
 use crate::core::element_tree::ElementTree;
 use crate::core::types::Rect;
 
+/// Renders an `ElementNode` tree as indented text.
 #[derive(Debug)]
 pub struct TreeRenderer {
+    /// Whether to show verbose output (native role, identifier, attributes).
     verbose: bool,
 }
 
 impl TreeRenderer {
+    /// Create a new renderer.
     #[must_use]
     pub fn new(verbose: bool) -> Self {
         Self { verbose }
     }
 
+    /// Render the tree as a formatted string.
     #[must_use]
     pub fn render(&self, tree: &ElementTree) -> String {
         let mut lines: Vec<String> = Vec::new();

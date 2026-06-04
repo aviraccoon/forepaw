@@ -3,15 +3,28 @@ use std::fmt;
 
 use crate::core::element_tree::ElementRef;
 
+/// Errors that can occur during forepaw operations.
 #[derive(Debug)]
 pub enum ForepawError {
+    /// The specified application is not running.
     AppNotFound(String),
+    /// An element ref is no longer valid (snapshot is stale).
     StaleRef(ElementRef),
+    /// A user-facing action (click, type, press) failed.
     ActionFailed(String),
+    /// Accessibility permission has not been granted.
     PermissionDenied,
+    /// Screen recording permission has not been granted.
     ScreenRecordingDenied,
+    /// No window matched the given query.
     WindowNotFound(String),
-    AmbiguousWindow { query: String, matches: String },
+    /// Multiple windows matched the given query.
+    AmbiguousWindow {
+        /// The ambiguous query string.
+        query: String,
+        /// Matching windows (formatted for display).
+        matches: String,
+    },
 }
 
 impl fmt::Display for ForepawError {

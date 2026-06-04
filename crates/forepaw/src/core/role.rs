@@ -19,66 +19,123 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Role {
     // -- Interactive (receive refs) --
+    /// A clickable button.
     Button,
+    /// A single-line text entry field.
     TextField,
+    /// A multi-line text entry area.
     TextArea,
+    /// A secure (password) text field.
     SecureTextField,
+    /// A checkbox that can be checked or unchecked.
     CheckBox,
+    /// A radio button in a mutually-exclusive group.
     RadioButton,
+    /// A draggable slider for selecting a numeric value.
     Slider,
+    /// A combo box (editable text + dropdown list).
     ComboBox,
+    /// A pop-up button (dropdown menu).
     PopUpButton,
+    /// A menu button that opens a menu when pressed.
     MenuButton,
+    /// A hyperlink.
     Link,
+    /// An item in a menu.
     MenuItem,
+    /// A checkable menu item.
     MenuItemCheckBox,
+    /// A radio-style menu item.
     MenuItemRadio,
+    /// A tab in a tab group.
     Tab,
+    /// An on/off toggle switch.
     Switch,
+    /// A stepper/incrementor (up/down arrows).
     Incrementor,
+    /// A color well for picking colors.
     ColorWell,
+    /// An item in an outline/tree view.
     TreeItem,
+    /// A cell in a table or grid.
     Cell,
+    /// An item in the macOS Dock.
     DockItem,
+    /// A scroll bar.
     ScrollBar,
 
     // -- Structural (no refs) --
+    /// A top-level window.
     Window,
+    /// An application root.
     Application,
+    /// A generic grouping container.
     Group,
+    /// Static, non-interactive text.
     StaticText,
+    /// An image.
     Image,
+    /// A menu (dropdown or context).
     Menu,
+    /// A menu bar at the top of the screen or window.
     MenuBar,
+    /// A toolbar.
     Toolbar,
+    /// A table / grid.
     Table,
+    /// A list.
     List,
+    /// An outline / tree view.
     Outline,
+    /// A tab group (tab bar).
     TabGroup,
+    /// A scrollable area.
     ScrollArea,
+    /// A split pane / group.
     SplitGroup,
+    /// A row in a table or outline.
     Row,
+    /// A column in a table or outline.
     Column,
+    /// A column header.
     ColumnHeader,
+    /// A row header.
     RowHeader,
+    /// A heading (h1–h6).
     Heading,
+    /// A paragraph of text.
     Paragraph,
+    /// A visual separator / divider.
     Separator,
+    /// A status bar.
     StatusBar,
+    /// A dialog or popover.
     Dialog,
+    /// An alert dialog.
     Alert,
+    /// A frame / panel.
     Frame,
+    /// An internal frame (MDI child window).
     InternalFrame,
+    /// A web content area.
     WebArea,
+    /// A tooltip popup.
     Tooltip,
+    /// A calendar / date picker.
     Calendar,
+    /// A date picker control.
     DatePicker,
+    /// A color chooser dialog.
     ColorChooser,
+    /// An icon.
     Icon,
+    /// A label.
     Label,
+    /// A progress indicator / bar.
     ProgressIndicator,
 
     // -- Fallback --
+    /// An unknown or unsupported role.
     Unknown,
 }
 
@@ -252,10 +309,15 @@ impl Role {
 /// Category for color-coding elements by type in screenshot annotations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnnotationCategory {
+    /// Button-like elements (`Button`, `MenuButton`, `DockItem`, `Incrementor`).
     Button,
+    /// Text input elements (`TextField`, `TextArea`, `SecureTextField`).
     TextInput,
+    /// Selection elements (`CheckBox`, `RadioButton`, `Slider`, etc.).
     Selection,
+    /// Navigation elements (`Link`, `Tab`, `MenuItem`, `TreeItem`, etc.).
     Navigation,
+    /// Everything else (structural elements, Unknown).
     Other,
 }
 

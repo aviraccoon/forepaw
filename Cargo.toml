@@ -15,7 +15,7 @@ resolver = "2"
 [workspace.lints.rust]
 unreachable_pub                 = "warn"
 unused_qualifications           = "warn"
-missing_docs                    = "allow"   # bookmark: enable when lib surface matters
+missing_docs                    = "warn"
 missing_debug_implementations   = "warn"
 
 [workspace.lints.clippy]

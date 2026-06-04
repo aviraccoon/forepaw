@@ -31,10 +31,15 @@
 /// Log levels ordered from least to most verbose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Level {
+    /// Error: a serious problem.
     Error = 1,
+    /// Warn: a potential problem.
     Warn = 2,
+    /// Info: a notable event.
     Info = 3,
+    /// Debug: detailed diagnostic information.
     Debug = 4,
+    /// Trace: extremely verbose logging.
     Trace = 5,
 }
 

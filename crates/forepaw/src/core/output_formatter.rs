@@ -5,13 +5,17 @@
 #[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
 pub struct OutputError {
+    /// Machine-readable error code.
     pub code: &'static str,
+    /// Human-readable error message.
     pub message: String,
+    /// Optional recovery suggestion.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggestion: Option<String>,
 }
 
 impl OutputError {
+    /// Create a new error with a code and message.
     pub fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
@@ -20,16 +24,23 @@ impl OutputError {
         }
     }
 
+    /// Add a recovery suggestion.
     pub fn with_suggestion(mut self, suggestion: impl Into<String>) -> Self {
         self.suggestion = Some(suggestion.into());
         self
     }
 
+    /// Permission denied.
     pub const PERM_DENIED: &'static str = "PERM_DENIED";
+    /// Application not found.
     pub const APP_NOT_FOUND: &'static str = "APP_NOT_FOUND";
+    /// Element not found in accessibility tree.
     pub const ELEMENT_NOT_FOUND: &'static str = "ELEMENT_NOT_FOUND";
+    /// Reference is no longer valid.
     pub const STALE_REF: &'static str = "STALE_REF";
+    /// Action could not be completed.
     pub const ACTION_FAILED: &'static str = "ACTION_FAILED";
+    /// Invalid command arguments.
     pub const INVALID_ARGS: &'static str = "INVALID_ARGS";
 }
 
@@ -64,17 +75,21 @@ impl std::fmt::Display for OutputFormat {
     }
 }
 
+/// Formats CLI command output as text or JSON.
 #[derive(Debug)]
 pub struct OutputFormatter {
+    /// Output format to use.
     pub format: OutputFormat,
 }
 
 impl OutputFormatter {
+    /// Create a new formatter with the given format.
     #[must_use]
     pub fn new(format: OutputFormat) -> Self {
         Self { format }
     }
 
+    /// Format a command result into a string.
     #[must_use]
     pub fn format(
         &self,
