@@ -11,7 +11,14 @@ description: Release a new version of forepaw. Use when asked to tag, release, o
    ```
    ## v0.X.0 "Codename" (YYYY-MM-DD)
    ```
-   Codenames come from the extended raccoon family: raccoons, possums, coatis, kinkajous, olingos, ringtails, tanuki, civets, binturongs, red pandas, etc. Keep it playful.
+   Codenames should be playful and reflect the release's character. They don't have to be real raccoon-family species — invent a hybrid, borrow from memes, make a pun, or come up with something that captures the release's spirit. Examples (real and invented):
+
+- Pure animal species: `Coatis`, `Kinkajous`, `Binturong`
+- Nicknames: `Trash Panda`, `Masked Bandit`
+- Invented hybrids: `The Trash Crab` (Trash Panda + Rust crab for a Rust rewrite)
+- Playful phrases: `Ferris Goes Foraging`, `Everything is Crab`
+
+The only rule: it should be playful and fit the release's vibe. Avoid being boring or purely technical (no `v0.4.0 "Cross-Platform"`).
 
 2. **Update version in `Cargo.toml`** -- change the `version` field:
    ```toml
