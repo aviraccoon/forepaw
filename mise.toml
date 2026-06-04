@@ -18,23 +18,23 @@ run = "cargo test --workspace"
 description = "Lint and test"
 run = [
     "cargo fmt -- --check",
-    "cargo clippy --workspace -- -D warnings",
+    "cargo clippy --workspace --all-targets -- -D warnings",
     "cargo test --workspace",
 ]
 
 [tasks.lint]
 description = "Lint current platform (clippy)"
-run = "cargo clippy --workspace -- -D warnings"
+run = "cargo clippy --workspace --all-targets -- -D warnings"
 
 [tasks.lint-all]
 description = "Lint all platform targets (needs rustup targets installed)"
 run = [
-    "cargo clippy --workspace --target aarch64-apple-darwin -- -D warnings",
-    "cargo clippy --workspace --target x86_64-apple-darwin -- -D warnings",
-    "cargo clippy --workspace --target x86_64-pc-windows-msvc -- -D warnings",
-    "cargo clippy --workspace --target aarch64-pc-windows-msvc -- -D warnings",
-    "cargo clippy --workspace --target aarch64-unknown-linux-musl -- -D warnings",
-    "cargo clippy --workspace --target x86_64-unknown-linux-musl -- -D warnings",
+    "cargo clippy --workspace --all-targets --target aarch64-apple-darwin -- -D warnings",
+    "cargo clippy --workspace --all-targets --target x86_64-apple-darwin -- -D warnings",
+    "cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings",
+    "cargo clippy --workspace --all-targets --target aarch64-pc-windows-msvc -- -D warnings",
+    "cargo clippy --workspace --all-targets --target aarch64-unknown-linux-musl -- -D warnings",
+    "cargo clippy --workspace --all-targets --target x86_64-unknown-linux-musl -- -D warnings",
 ]
 
 [tasks.lint-strict]

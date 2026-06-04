@@ -364,10 +364,10 @@ mod tests {
     #[test]
     fn non_empty_returns_none_for_empty() {
         assert_eq!(non_empty(None::<&String>), None);
-        assert_eq!(non_empty(Some(&"".to_string())), None);
+        assert_eq!(non_empty(Some(&String::new())), None);
         assert_eq!(
-            non_empty(Some(&"hello".to_string())),
-            Some("hello".to_string())
+            non_empty(Some(&"hello".to_owned())),
+            Some("hello".to_owned())
         );
     }
 

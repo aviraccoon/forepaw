@@ -164,36 +164,52 @@ mod tests {
         assert_eq!(ranges, vec![(6, 12)]);
     }
 
+    #[expect(
+        clippy::string_slice,
+        reason = "byte_offset is a validated UTF-8 boundary from find_case_insensitive_ranges"
+    )]
     #[test]
     fn byte_range_to_utf16_offset_acii() {
         let text = "hello world";
         // byte 6 == UTF-16 offset 6 (ASCII is 1:1)
         let byte_offset = 6;
-        let utf16_off: usize = text[..byte_offset].chars().map(|c| c.len_utf16()).sum();
+        let utf16_off: usize = text[..byte_offset].chars().map(char::len_utf16).sum();
         assert_eq!(utf16_off, 6);
     }
 
+    #[expect(
+        clippy::string_slice,
+        reason = "byte_offset is a validated UTF-8 boundary from find_case_insensitive_ranges"
+    )]
     #[test]
     fn byte_range_to_utf16_offset_multibyte() {
         let text = "é test"; // é is 2 bytes in UTF-8, 1 code unit in UTF-16
                              // byte offset 3 = char index 2 (skip é + space)
         let byte_offset = 3;
-        let utf16_off: usize = text[..byte_offset].chars().map(|c| c.len_utf16()).sum();
+        let utf16_off: usize = text[..byte_offset].chars().map(char::len_utf16).sum();
         // é is 2 UTF-8 bytes but 1 UTF-16 code unit, space is 1:1
         assert_eq!(utf16_off, 2); // 1 (é) + 1 (space) = 2
     }
 
+    #[expect(
+        clippy::string_slice,
+        reason = "byte_offset is a validated UTF-8 boundary from find_case_insensitive_ranges"
+    )]
     #[test]
     fn byte_range_to_utf16_offset_emoji() {
         // "🦝" is 4 bytes in UTF-8 but 2 UTF-16 code units (surrogate pair)
         let text = "🦝 test";
         // byte offset 5 = after 🦝 + space
         let byte_offset = 5;
-        let utf16_off: usize = text[..byte_offset].chars().map(|c| c.len_utf16()).sum();
+        let utf16_off: usize = text[..byte_offset].chars().map(char::len_utf16).sum();
         // 🦝 is 2 UTF-16 code units, space is 1, total = 3
         assert_eq!(utf16_off, 3);
     }
 
+    #[expect(
+        clippy::string_slice,
+        reason = "byte_start/byte_end are validated UTF-8 boundaries from find_case_insensitive_ranges"
+    )]
     #[test]
     fn find_ranges_utf16_mismatch_demonstrated() {
         // Verifies that UTF-8 byte offsets and UTF-16 code unit offsets
@@ -204,10 +220,10 @@ mod tests {
 
         let text = "é test";
         let (byte_start, byte_end) = ranges[0];
-        let utf16_start: usize = text[..byte_start].chars().map(|c| c.len_utf16()).sum();
+        let utf16_start: usize = text[..byte_start].chars().map(char::len_utf16).sum();
         let utf16_len: usize = text[byte_start..byte_end]
             .chars()
-            .map(|c| c.len_utf16())
+            .map(char::len_utf16)
             .sum();
 
         // Byte offset 3 → UTF-16 offset 2 (é=1 + space=1)

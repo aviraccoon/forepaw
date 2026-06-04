@@ -864,7 +864,7 @@ mod tests {
     fn make_entry(id: u32, title: &str, w: f64, h: f64) -> WindowEntry {
         WindowEntry {
             id,
-            title: title.to_string(),
+            title: title.to_owned(),
             bounds: Rect::new(0.0, 0.0, w, h),
         }
     }
@@ -875,7 +875,7 @@ mod tests {
     fn resolved_window_origin() {
         let rw = ResolvedWindow {
             window_id: 42,
-            title: "Test".to_string(),
+            title: "Test".to_owned(),
             bounds: Rect::new(100.0, 200.0, 800.0, 600.0),
         };
         assert_eq!(rw.origin(), Point::new(100.0, 200.0));
@@ -885,7 +885,7 @@ mod tests {
     fn resolved_window_center() {
         let rw = ResolvedWindow {
             window_id: 42,
-            title: "Test".to_string(),
+            title: "Test".to_owned(),
             bounds: Rect::new(100.0, 200.0, 800.0, 600.0),
         };
         assert_eq!(rw.center(), Point::new(500.0, 500.0));

@@ -391,7 +391,7 @@ mod tests {
         assert!(Level::Error as u8 <= Level::Info as u8);
         assert!(Level::Warn as u8 <= Level::Info as u8);
         assert!(Level::Info as u8 <= Level::Info as u8);
-        assert!(!(Level::Debug as u8 <= Level::Info as u8));
-        assert!(!(Level::Trace as u8 <= Level::Info as u8));
+        assert!(Level::Debug as u8 > Level::Info as u8);
+        assert!(Level::Trace as u8 > Level::Info as u8);
     }
 }

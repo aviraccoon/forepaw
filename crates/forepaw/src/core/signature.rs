@@ -170,61 +170,61 @@ mod tests {
 
     #[test]
     fn known_answer_empty() {
-        assert_eq!(fnv1a_test(b""), 0xcbf29ce484222325);
+        assert_eq!(fnv1a_test(b""), 0xcbf2_9ce4_8422_2325);
     }
 
     #[test]
     fn known_answer_single_byte() {
-        assert_eq!(fnv1a_test(b"a"), 0xaf63dc4c8601ec8c);
-        assert_eq!(fnv1a_test(b"b"), 0xaf63df4c8601f1a5);
-        assert_eq!(fnv1a_test(b"c"), 0xaf63de4c8601eff2);
+        assert_eq!(fnv1a_test(b"a"), 0xaf63_dc4c_8601_ec8c);
+        assert_eq!(fnv1a_test(b"b"), 0xaf63_df4c_8601_f1a5);
+        assert_eq!(fnv1a_test(b"c"), 0xaf63_de4c_8601_eff2);
     }
 
     #[test]
     fn known_answer_short_strings() {
-        assert_eq!(fnv1a_test(b"foo"), 0xdcb27518fed9d577);
-        assert_eq!(fnv1a_test(b"foobar"), 0x85944171f73967e8);
-        assert_eq!(fnv1a_test(b"hello"), 0xa430d84680aabd0b);
+        assert_eq!(fnv1a_test(b"foo"), 0xdcb2_7518_fed9_d577);
+        assert_eq!(fnv1a_test(b"foobar"), 0x8594_4171_f739_67e8);
+        assert_eq!(fnv1a_test(b"hello"), 0xa430_d846_80aa_bd0b);
     }
 
     #[test]
     fn known_answer_with_nulls() {
-        assert_eq!(fnv1a_test(b"\0"), 0xaf63bd4c8601b7df);
-        assert_eq!(fnv1a_test(b"foo\0"), 0xdd1270790c25b935);
-        assert_eq!(fnv1a_test(b"foobar\0"), 0x34531ca7168b8f38);
+        assert_eq!(fnv1a_test(b"\0"), 0xaf63_bd4c_8601_b7df);
+        assert_eq!(fnv1a_test(b"foo\0"), 0xdd12_7079_0c25_b935);
+        assert_eq!(fnv1a_test(b"foobar\0"), 0x3453_1ca7_168b_8f38);
     }
 
     #[test]
     fn known_answer_chongo() {
         assert_eq!(
             fnv1a_test(b"chongo <Landon Curt Noll> /\\../\\"),
-            0x2c8f4c9af81bcf06
+            0x2c8f_4c9a_f81b_cf06
         );
         assert_eq!(
             fnv1a_test(b"http://en.wikipedia.org/wiki/Fowler_Noll_Vo_hash"),
-            0xd9b957fb7fe794c5
+            0xd9b9_57fb_7fe7_94c5
         );
     }
 
     #[test]
     fn known_answer_overflow_adjacent() {
         // Byte sequences that exercise carry propagation in wrapping_mul
-        assert_eq!(fnv1a_test(b"\xff\x00\x00\x01"), 0x6961196491cc682d);
-        assert_eq!(fnv1a_test(b"\x01\x00\x00\xff"), 0xad2bb1774799dfe9);
-        assert_eq!(fnv1a_test(b"\xff\x00\x00\x02"), 0x6961166491cc6314);
-        assert_eq!(fnv1a_test(b"\x02\x00\x00\xff"), 0x8d1bb3904a3b1236);
+        assert_eq!(fnv1a_test(b"\xff\x00\x00\x01"), 0x6961_1964_91cc_682d);
+        assert_eq!(fnv1a_test(b"\x01\x00\x00\xff"), 0xad2b_b177_4799_dfe9);
+        assert_eq!(fnv1a_test(b"\xff\x00\x00\x02"), 0x6961_1664_91cc_6314);
+        assert_eq!(fnv1a_test(b"\x02\x00\x00\xff"), 0x8d1b_b390_4a3b_1236);
     }
 
     #[test]
     fn known_answer_ip_addresses() {
-        assert_eq!(fnv1a_test(b"127.0.0.1"), 0xaabafe7104d914be);
-        assert_eq!(fnv1a_test(b"127.0.0.2"), 0xaabafd7104d9130b);
+        assert_eq!(fnv1a_test(b"127.0.0.1"), 0xaaba_fe71_04d9_14be);
+        assert_eq!(fnv1a_test(b"127.0.0.2"), 0xaaba_fd71_04d9_130b);
     }
 
     #[test]
     fn known_answer_repeated_bytes() {
         let bytes: Vec<u8> = (0..10).flat_map(|_| b"21701".iter().copied()).collect();
-        assert_eq!(fnv1a_test(&bytes), 0xc4112ffb337a82fb);
+        assert_eq!(fnv1a_test(&bytes), 0xc411_2ffb_337a_82fb);
     }
 
     // -----------------------------------------------------------------------

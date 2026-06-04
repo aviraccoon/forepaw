@@ -1153,7 +1153,7 @@ mod tests {
             .collect();
         assert_eq!(
             collect_positional_text(&args, 1),
-            Some("hello world".to_string())
+            Some("hello world".to_owned())
         );
     }
 
@@ -1165,7 +1165,7 @@ mod tests {
             .collect();
         assert_eq!(
             collect_positional_text(&args, 1),
-            Some("actual text".to_string())
+            Some("actual text".to_owned())
         );
     }
 
@@ -1185,7 +1185,7 @@ mod tests {
         let args: Vec<String> = ["hello", "world"].iter().map(ToString::to_string).collect();
         assert_eq!(
             collect_positional_text(&args, 0),
-            Some("hello world".to_string())
+            Some("hello world".to_owned())
         );
     }
 

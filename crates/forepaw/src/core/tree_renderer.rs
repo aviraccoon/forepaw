@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn truncates_long_values() {
-        let long_value: String = "x".repeat(100);
+        let long_value = "x".repeat(100);
         let tree = ElementTree::new(
             "App",
             ElementNode::new(ElementData::new(Role::TextField).with_value(&long_value)),

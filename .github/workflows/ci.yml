@@ -36,7 +36,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Lint
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Test
         run: cargo test --workspace
@@ -45,7 +45,7 @@ jobs:
         run: cargo check --target x86_64-apple-darwin
 
       - name: Lint x86_64
-        run: cargo clippy --target x86_64-apple-darwin --workspace -- -D warnings
+        run: cargo clippy --all-targets --target x86_64-apple-darwin --workspace -- -D warnings
 
       - name: Build release
         run: cargo build --release --bin forepaw
@@ -84,7 +84,7 @@ jobs:
         run: cargo check --target aarch64-pc-windows-msvc
 
       - name: Lint ARM64
-        run: cargo clippy --target aarch64-pc-windows-msvc --workspace -- -D warnings
+        run: cargo clippy --all-targets --target aarch64-pc-windows-msvc --workspace -- -D warnings
 
       - name: Test
         run: cargo test --workspace
@@ -93,7 +93,7 @@ jobs:
         run: cargo check --target x86_64-pc-windows-msvc
 
       - name: Lint x86_64
-        run: cargo clippy --target x86_64-pc-windows-msvc --workspace -- -D warnings
+        run: cargo clippy --all-targets --target x86_64-pc-windows-msvc --workspace -- -D warnings
 
       - name: Build release
         run: cargo build --release --bin forepaw
@@ -134,13 +134,13 @@ jobs:
         run: nix develop .# --command cargo check --target x86_64-unknown-linux-musl
 
       - name: Lint musl x86_64
-        run: nix develop .# --command cargo clippy --target x86_64-unknown-linux-musl --workspace -- -D warnings
+        run: nix develop .# --command cargo clippy --all-targets --target x86_64-unknown-linux-musl --workspace -- -D warnings
 
       - name: Check musl aarch64
         run: nix develop .# --command cargo check --target aarch64-unknown-linux-musl
 
       - name: Lint musl aarch64
-        run: nix develop .# --command cargo clippy --target aarch64-unknown-linux-musl --workspace -- -D warnings
+        run: nix develop .# --command cargo clippy --all-targets --target aarch64-unknown-linux-musl --workspace -- -D warnings
 
       - name: Test
         run: nix develop .# --command cargo test --workspace

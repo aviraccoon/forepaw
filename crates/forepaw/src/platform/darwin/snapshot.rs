@@ -1126,8 +1126,8 @@ mod tests {
     #[test]
     fn non_empty_returns_some_for_nonempty() {
         assert_eq!(
-            non_empty(Some(&"hello".to_string())),
-            Some("hello".to_string())
+            non_empty(Some(&"hello".to_owned())),
+            Some("hello".to_owned())
         );
     }
 

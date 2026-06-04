@@ -68,6 +68,10 @@ mod tests {
         assert!(cache.load("NonexistentApp-99999").is_none());
     }
 
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "millis since epoch fits in u32 for centuries; test-only collision avoidance"
+    )]
     fn rand_random_suffix() -> u32 {
         // Simple non-crypto random for test namespacing
         std::time::SystemTime::now()
