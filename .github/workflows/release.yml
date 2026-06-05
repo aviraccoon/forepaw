@@ -161,16 +161,16 @@ jobs:
 
           **Windows (x86_64)**
           \`\`\`powershell
-          curl -LO https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-windows-x86_64.zip
+          curl.exe -LO https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-windows-x86_64.zip
           Expand-Archive forepaw-windows-x86_64.zip
-          mv forepaw.exe ~/bin/
+          .\forepaw.exe
           \`\`\`
 
           **Windows (ARM64)**
           \`\`\`powershell
-          curl -LO https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-windows-arm64.zip
+          curl.exe -LO https://github.com/aviraccoon/forepaw/releases/download/${GITHUB_REF_NAME}/forepaw-windows-arm64.zip
           Expand-Archive forepaw-windows-arm64.zip
-          mv forepaw.exe ~/bin/
+          .\forepaw.exe
           \`\`\`
 
           **Linux (x86_64)**
@@ -186,7 +186,7 @@ jobs:
           \`\`\`
 
           Linux binaries are statically linked (musl) and work on any distribution, including NixOS.
-          Windows binaries are cross-compiled from macOS -- no Windows SDK needed on your machine.
+          Windows binaries are built natively on Windows CI runners (x86_64 and ARM64).
           INSTALL
 
       - name: Release
