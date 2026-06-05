@@ -42,13 +42,26 @@ The only rule: it should be playful and fit the release's vibe. Avoid being bori
    git commit -m "release: v0.X.0 \"Codename\""
    ```
 
-6. **Tag and push**:
+6. **Tag**:
    ```bash
    git tag v0.X.0
+   ```
+
+7. **Verify tag points to the right commit** — the tag should be on the commit that has the version bump + CHANGELOG entry, not on any infra-only commits made before or after it. Check that the CHANGELOG entry exists at the tagged commit:
+   ```bash
+   git show v0.X.0:CHANGELOG.md | grep "^## v0\.X\.0"
+   ```
+   If this returns nothing, you tagged the wrong commit (the tag is on an infra-only commit or a parent that doesn't have the new CHANGELOG entry). Find the right commit and move the tag:
+   ```bash
+   git tag -f v0.X.0 <correct-commit-hash>
+   ```
+
+8. **Push**:
+   ```bash
    git push origin main --tags
    ```
 
-7. **CI handles the rest** -- `.github/workflows/release.yml`:
+9. **CI handles the rest** -- `.github/workflows/release.yml`:
    - Builds release binaries on macOS, Windows, and Linux
    - Extracts release notes from CHANGELOG.md
    - Uploads to GitHub Releases with install instructions
@@ -56,7 +69,7 @@ The only rule: it should be playful and fit the release's vibe. Avoid being bori
 
    The CLI binary crate (`forepaw-cli`) has `publish = false` and is distributed via GitHub Releases, not crates.io.
 
-8. **Update Nix package** (in the system repo) -- update `packages/forepaw.nix` with the new version and tarball SHA256 from the release.
+10. **Update Nix package** (in the system repo) -- update `packages/forepaw.nix` with the new version and tarball SHA256 from the release.
 
 ## Version scheme
 
