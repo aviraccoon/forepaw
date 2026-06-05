@@ -21,6 +21,39 @@ use crate::core::ocr_result::OCROutput;
 use crate::core::role::Role;
 use crate::core::types::{Point, Rect};
 
+/// Create a [`DesktopProvider`] for the current platform.
+///
+/// Convenience function that selects the correct platform backend at compile
+/// time. Callers don't need `#[cfg]` blocks — just call `forepaw::provider()`
+/// and use the trait methods.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use forepaw::provider;
+///
+/// let provider = provider();
+/// let apps = provider.list_apps().unwrap();
+/// ```
+#[must_use]
+pub fn provider() -> Box<dyn DesktopProvider> {
+    #[cfg(target_os = "macos")]
+    {
+        Box::new(darwin::DarwinProvider::new())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Box::new(windows::WindowsProvider::new())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Box::new(linux::LinuxProvider::new())
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+compile_error!("forepaw requires macOS, Windows, or Linux");
+
 /// Identifies a target application unambiguously.
 ///
 /// `Name` uses the platform's fuzzy resolution (display name, bundle ID,

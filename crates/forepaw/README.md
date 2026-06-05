@@ -18,40 +18,15 @@ connect them to.
 forepaw = "0.4"
 ```
 
-```rust
-use forepaw::platform::DesktopProvider;
+See the [`basic-usage` example](examples/basic-usage.rs) for a complete,
+compiler-verified example:
+
+```rust,no_run
+use forepaw::provider;
 use forepaw::platform::AppTarget;
 
-// Pick the backend for the current platform
-#[cfg(target_os = "macos")]
-let provider = forepaw::platform::darwin::DarwinProvider::new();
-
-#[cfg(target_os = "windows")]
-let provider = forepaw::platform::windows::WindowsProvider::new();
-
-#[cfg(target_os = "linux")]
-let provider = forepaw::platform::linux::LinuxProvider::new();
-
-let provider = &provider as &dyn DesktopProvider;
-
-// List running apps
-let apps = provider.list_apps()?;
-
-// Read the accessibility tree
-let tree = provider.snapshot(
-    &AppTarget::name("Finder"),
-    None,
-    &Default::default(),
-)?;
-
-// Click an element by ref
-provider.click_ref(element_ref, &AppTarget::name("Finder"), &Default::default())?;
-
-// OCR
-let ocr = provider.ocr(Some(&AppTarget::name("Notes")), None, None, None)?;
-for result in &ocr.results {
-    println!("{}: {:?}", result.text, result.bounds);
-}
+let provider = provider();
+let apps = provider.list_apps().unwrap();
 ```
 
 ## What's in the box
