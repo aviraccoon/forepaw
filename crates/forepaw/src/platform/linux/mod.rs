@@ -88,7 +88,7 @@ impl DesktopProvider for LinuxProvider {
         _app: Option<&AppTarget>,
         _window: Option<&WindowTarget>,
         _find: Option<&str>,
-        _screenshot_options: Option<&crate::platform::ScreenshotOptions>,
+        _screenshot_options: Option<&crate::core::encoder_detection::ScreenshotOptions>,
     ) -> Result<crate::core::ocr_result::OCROutput, ForepawError> {
         // TODO: shell out to tesseract CLI
         Err(ForepawError::ActionFailed(

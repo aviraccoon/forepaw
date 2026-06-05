@@ -1,7 +1,10 @@
 //! Image format and encoder detection.
-/// Image format and encoder detection.
-///
+
 /// Image format for screenshots.
+///
+/// Used by screenshot operations and encoder detection.
+/// `BestAvailable` is a sentinel that resolves to the best concrete format
+/// at screenshot time (WebP if `cwebp` is installed, otherwise JPEG).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
     /// PNG (lossless).
@@ -10,28 +13,48 @@ pub enum ImageFormat {
     Jpeg,
     /// WebP (lossy or lossless).
     Webp,
+    /// Best available format for the platform (JPEG fallback).
+    BestAvailable,
 }
 
 impl ImageFormat {
+    /// If `BestAvailable`, resolve to the best concrete format. Otherwise, pass through.
+    #[must_use]
+    pub fn resolve(&self) -> Self {
+        match self {
+            Self::BestAvailable => Self::best_available_concrete(),
+            other => *other,
+        }
+    }
+
     /// Return the file extension for this format.
+    /// For `BestAvailable`, resolves first so the extension matches the
+    /// actual format that will be used.
     #[must_use]
     pub fn file_extension(&self) -> &'static str {
+        self.resolve().file_extension_inner()
+    }
+
+    fn file_extension_inner(self) -> &'static str {
         match self {
             Self::Png => "png",
             Self::Jpeg => "jpg",
             Self::Webp => "webp",
+            Self::BestAvailable => {
+                unreachable!("file_extension_inner called on BestAvailable — use resolve() first")
+            }
         }
     }
 
-    /// Return all available formats.
+    /// Return all concrete (non-sentinel) formats.
     #[must_use]
     pub fn all() -> &'static [Self] {
         &[Self::Png, Self::Jpeg, Self::Webp]
     }
 
-    /// Best available format: WebP if cwebp installed, else JPEG.
+    /// Best available concrete format: WebP if cwebp installed, else JPEG.
     #[must_use]
-    pub fn best_available() -> Self {
+    pub fn best_available_concrete() -> Self {
         if is_command_available("cwebp") {
             Self::Webp
         } else {
@@ -69,7 +92,7 @@ pub struct ScreenshotOptions {
 impl Default for ScreenshotOptions {
     fn default() -> Self {
         Self {
-            format: ImageFormat::best_available(),
+            format: ImageFormat::BestAvailable,
             quality: 85,
             scale: 1,
             cursor: true,
@@ -133,9 +156,23 @@ mod tests {
     }
 
     #[test]
-    fn best_available_is_jpeg_or_webp() {
-        let best = ImageFormat::best_available();
+    fn best_available_concrete_is_jpeg_or_webp() {
+        let best = ImageFormat::best_available_concrete();
         assert!(best == ImageFormat::Jpeg || best == ImageFormat::Webp);
+    }
+
+    #[test]
+    fn best_available_resolves_correctly() {
+        let resolved = ImageFormat::BestAvailable.resolve();
+        assert!(
+            resolved == ImageFormat::Jpeg || resolved == ImageFormat::Webp,
+            "BestAvailable should resolve to Jpeg or Webp, got {resolved:?}"
+        );
+        // file_extension after resolve matches the concrete format
+        assert_eq!(
+            resolved.file_extension(),
+            ImageFormat::best_available_concrete().file_extension()
+        );
     }
 
     #[test]

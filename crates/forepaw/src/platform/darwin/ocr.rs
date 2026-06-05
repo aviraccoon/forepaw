@@ -11,12 +11,13 @@ use objc2_core_foundation::CGRect;
 use objc2_foundation::{NSDictionary, NSRange, NSString};
 use objc2_vision::{VNImageRequestHandler, VNRecognizeTextRequest, VNRequestTextRecognitionLevel};
 
+use crate::core::encoder_detection::ScreenshotOptions;
 use crate::core::errors::ForepawError;
 use crate::core::ocr_result::{OCROutput, OCRResult};
 use crate::core::types::Rect;
 use crate::platform::darwin::app;
 use crate::platform::darwin::ffi::{self, CGPointFFI};
-use crate::platform::{AppTarget, ScreenshotOptions, WindowTarget};
+use crate::platform::{AppTarget, WindowTarget};
 
 /// Run OCR on an app window (or full screen).
 ///
@@ -36,7 +37,7 @@ pub fn ocr(
 ) -> Result<OCROutput, ForepawError> {
     // Capture at 2x for accurate OCR
     let ocr_options = ScreenshotOptions {
-        format: crate::platform::ImageFormat::Png,
+        format: crate::core::encoder_detection::ImageFormat::Png,
         scale: 2,
         quality: 100,
         cursor: false,

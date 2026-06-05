@@ -11,10 +11,11 @@ use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::System::Threading::{CreateEventW, SetEvent, WaitForSingleObject};
 use windows::Win32::System::WinRT::IMemoryBufferByteAccess;
 
+use crate::core::encoder_detection::ScreenshotOptions;
 use crate::core::errors::ForepawError;
 use crate::core::ocr_result::{OCROutput, OCRResult};
 use crate::core::types::Rect;
-use crate::platform::{AppTarget, ScreenshotOptions, WindowTarget};
+use crate::platform::{AppTarget, WindowTarget};
 
 /// Run OCR on an app window (or full screen).
 ///

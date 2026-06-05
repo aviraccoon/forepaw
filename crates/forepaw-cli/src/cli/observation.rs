@@ -6,12 +6,11 @@ use crate::cli::GlobalArgs;
 use forepaw::core::annotation::AnnotationStyle;
 use forepaw::core::crop_region::CropRegion;
 use forepaw::core::element_tree::ElementRef;
+use forepaw::core::encoder_detection::{ImageFormat, ScreenshotOptions};
 use forepaw::core::snapshot_cache::SnapshotCache;
 use forepaw::core::snapshot_diff::SnapshotDiffer;
 use forepaw::core::tree_renderer::TreeRenderer;
-use forepaw::platform::{
-    AncestorInfo, DesktopProvider, HitTestResult, ImageFormat, ScreenshotOptions, SnapshotOptions,
-};
+use forepaw::platform::{AncestorInfo, DesktopProvider, HitTestResult, SnapshotOptions};
 
 /// Maximum length for a displayed value or name in hit-test output.
 /// Terminal content, web page text, and large text fields can be

@@ -79,7 +79,7 @@ impl DesktopProvider for DarwinProvider {
         app: Option<&AppTarget>,
         window: Option<&WindowTarget>,
         find: Option<&str>,
-        screenshot_options: Option<&crate::platform::ScreenshotOptions>,
+        screenshot_options: Option<&crate::core::encoder_detection::ScreenshotOptions>,
     ) -> Result<crate::core::ocr_result::OCROutput, ForepawError> {
         ocr::ocr(app, window, find, screenshot_options)
     }

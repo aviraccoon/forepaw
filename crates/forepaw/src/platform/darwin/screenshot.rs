@@ -10,6 +10,7 @@ use std::process::Command;
 use crate::core::annotation::{AnnotationCollector, AnnotationLegend};
 use crate::core::crop_region::CropRegion;
 use crate::core::element_tree::ElementRef;
+use crate::core::encoder_detection::{ImageFormat, ScreenshotOptions};
 use crate::core::errors::ForepawError;
 use crate::core::types::{Point, Rect};
 use crate::platform::darwin::annotation;
@@ -17,7 +18,7 @@ use crate::platform::darwin::app;
 use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI, CGSizeFFI};
 use crate::platform::darwin::snapshot;
 use crate::platform::ScreenshotResult;
-use crate::platform::{ScreenshotOptions, ScreenshotParams, SnapshotOptions};
+use crate::platform::{ScreenshotParams, SnapshotOptions};
 
 /// Generate a unique temp file tag for screenshot filenames.
 #[must_use]
@@ -153,18 +154,19 @@ pub fn post_process_screenshot(
     options: &ScreenshotOptions,
     suffix: &str,
 ) -> Result<String, ForepawError> {
+    let format = options.format.resolve();
     let needs_scale = options.scale == 1;
-    let needs_format = options.format != crate::platform::ImageFormat::Png;
+    let needs_format = format != ImageFormat::Png;
 
     if !needs_scale && !needs_format {
         return Ok(raw_path.to_owned());
     }
 
-    let ext = options.format.file_extension();
+    let ext = format.file_extension();
     let output_path = format!("/tmp/forepaw-{tag}{suffix}.{ext}");
 
     // WebP: scale with sips first if needed, then convert with cwebp
-    if options.format == crate::platform::ImageFormat::Webp {
+    if format == ImageFormat::Webp {
         let mut scaled_path = raw_path.to_owned();
 
         if needs_scale {

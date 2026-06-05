@@ -294,67 +294,7 @@ pub struct HitTestResult {
     pub pid: i32,
 }
 
-/// Options controlling screenshot output format and quality.
-#[derive(Debug, Clone)]
-pub struct ScreenshotOptions {
-    /// Output image format.
-    pub format: ImageFormat,
-    /// JPEG/WebP quality (1-100).
-    pub quality: u32,
-    /// Upscale factor for OCR-quality screenshots.
-    pub scale: u32,
-    /// Whether to include the cursor in the screenshot.
-    pub cursor: bool,
-}
-
-impl Default for ScreenshotOptions {
-    fn default() -> Self {
-        Self {
-            format: ImageFormat::BestAvailable,
-            quality: 85,
-            scale: 1,
-            cursor: true,
-        }
-    }
-}
-
-/// Image format for screenshots.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ImageFormat {
-    /// PNG (lossless).
-    Png,
-    /// JPEG (lossy, configurable quality).
-    Jpeg,
-    /// WebP (lossy or lossless depending on encoder).
-    Webp,
-    /// Best available format for the platform (JPEG fallback).
-    BestAvailable,
-}
-
-impl std::str::FromStr for ImageFormat {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "png" => Ok(Self::Png),
-            "jpeg" | "jpg" => Ok(Self::Jpeg),
-            "webp" => Ok(Self::Webp),
-            _ => Err(()),
-        }
-    }
-}
-
-impl ImageFormat {
-    /// Return the file extension for this format (e.g. "png", "jpg", "webp").
-    #[must_use]
-    pub fn file_extension(&self) -> &str {
-        match self {
-            Self::Png => "png",
-            Self::Jpeg | Self::BestAvailable => "jpg",
-            Self::Webp => "webp",
-        }
-    }
-}
+use crate::core::encoder_detection::ScreenshotOptions;
 
 /// Parameters for screenshot operations.
 #[derive(Debug)]
