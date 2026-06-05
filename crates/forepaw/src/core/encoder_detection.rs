@@ -6,6 +6,7 @@
 /// `BestAvailable` is a sentinel that resolves to the best concrete format
 /// at screenshot time (WebP if `cwebp` is installed, otherwise JPEG).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ImageFormat {
     /// PNG (lossless).
     Png,
@@ -21,6 +22,10 @@ impl ImageFormat {
     /// If `BestAvailable`, resolve to the best concrete format. Otherwise, pass through.
     #[must_use]
     pub fn resolve(&self) -> Self {
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "new variants should resolve to themselves"
+        )]
         match self {
             Self::BestAvailable => Self::best_available_concrete(),
             other => *other,

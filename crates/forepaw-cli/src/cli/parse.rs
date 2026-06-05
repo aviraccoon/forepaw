@@ -131,12 +131,12 @@ mod tests {
 
     #[test]
     fn resolve_text_neither() {
-        assert!(resolve_text(None::<&str>, None::<&str>, "test").is_err());
+        resolve_text(None::<&str>, None::<&str>, "test").unwrap_err();
     }
 
     #[test]
     fn resolve_text_both() {
-        assert!(resolve_text(Some("a"), Some("b"), "test").is_err());
+        resolve_text(Some("a"), Some("b"), "test").unwrap_err();
     }
 
     #[test]

@@ -340,7 +340,7 @@ fn save_png(rgba_pixels: &[u8], width: u32, height: u32, path: &str) -> Result<(
 
     // Create parent directory if needed
     if let Some(parent) = Path::new(path).parent() {
-        fs::create_dir_all(parent).ok();
+        drop(fs::create_dir_all(parent));
     }
 
     img.save(path)

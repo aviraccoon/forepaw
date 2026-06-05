@@ -30,7 +30,7 @@ use super::role::control_type_to_role;
 pub fn init_com() {
     // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
-        CoInitializeEx(None, COINIT_MULTITHREADED).ok().ok();
+        drop(CoInitializeEx(None, COINIT_MULTITHREADED).ok());
     }
 }
 

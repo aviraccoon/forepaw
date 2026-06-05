@@ -136,7 +136,7 @@ pub fn ocr(
             )?,
         )
     } else {
-        std::fs::remove_file(&screenshot_result.path).ok();
+        drop(std::fs::remove_file(&screenshot_result.path));
         None
     };
 
@@ -344,15 +344,16 @@ pub fn resolve_ocr_text(
     if matches.len() > 1 && index.is_none() {
         let mut listing = format!("Multiple matches for '{text}':\n");
         for (i, m) in matches.iter().enumerate() {
-            writeln!(
+            // write! to String is infallible, discard is intentional.
+            #[expect(clippy::let_underscore_must_use)]
+            let _ = writeln!(
                 listing,
                 "  --index {}: '{}' at {:.0},{:.0}",
                 i + 1,
                 m.text,
                 m.center().0,
                 m.center().1
-            )
-            .ok();
+            );
         }
         listing += "Use --index N to pick one.";
         return Err(ForepawError::ActionFailed(listing));

@@ -71,6 +71,7 @@ pub fn find_case_insensitive_ranges(text: &str, query: &str) -> Vec<(usize, usiz
 
 /// Combined OCR output: recognized text results plus optional display screenshot.
 #[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
 pub struct OCROutput {
     /// All recognized text results.
     pub results: Vec<OCRResult>,

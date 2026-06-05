@@ -129,6 +129,7 @@ impl std::fmt::Display for AppTarget {
 
 /// Info about a running application.
 #[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
 pub struct AppInfo {
     /// The application's display name.
     pub name: String,
@@ -175,6 +176,7 @@ impl WindowTarget {
 
 /// Info about a visible window.
 #[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
 pub struct WindowInfo {
     /// Platform-specific window identifier (e.g. "w-1234").
     pub id: String,
@@ -192,6 +194,7 @@ pub struct WindowInfo {
 
 /// Visual state of a window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
 pub enum WindowState {
     /// Normal windowed mode.
     Normal,
@@ -216,6 +219,7 @@ impl std::fmt::Display for WindowState {
 
 /// Result of an action (click, type, press, etc.).
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ActionResult {
     /// Whether the action completed successfully.
     pub success: bool,
@@ -317,6 +321,7 @@ pub struct ScreenshotParams<'a> {
 
 /// Result of a screenshot operation.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ScreenshotResult {
     /// File path of the saved screenshot.
     pub path: String,

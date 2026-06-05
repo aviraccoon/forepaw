@@ -33,7 +33,7 @@ impl SnapshotCache {
     /// Remove cached snapshot for an app.
     pub fn clear(&self, app: &str) {
         let path = Self::cache_path(app);
-        fs::remove_file(path).ok();
+        drop(fs::remove_file(path));
     }
 
     fn cache_path(app: &str) -> PathBuf {

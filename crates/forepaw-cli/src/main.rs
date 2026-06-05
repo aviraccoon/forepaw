@@ -4,6 +4,11 @@
 //! input simulation. Platform backends for macOS, Windows, and Linux are
 //! selected at compile time via `#[cfg]`.
 
+#![expect(
+    clippy::print_stdout,
+    reason = "CLI binary, stdout is the output channel"
+)]
+
 use clap::Parser;
 
 mod cli;

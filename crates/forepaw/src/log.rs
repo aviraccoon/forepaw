@@ -30,6 +30,7 @@
 
 /// Log levels ordered from least to most verbose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
 pub enum Level {
     /// Error: a serious problem.
     Error = 1,

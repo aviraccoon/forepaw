@@ -20,6 +20,7 @@ use crate::platform::darwin::ffi::{
 
 /// Errors that can occur during annotation rendering.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum AnnotationError {
     /// Failed to load the source image from disk.
     ImageLoadFailed(String),

@@ -46,6 +46,7 @@ impl Annotation {
 
 /// Visual style for screenshot annotations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum AnnotationStyle {
     /// Small numbered badges at element positions.
     Badges,

@@ -913,6 +913,10 @@ mod tests {
     fn window_id_not_found() {
         let windows = vec![make_entry(100, "Doc", 800.0, 600.0)];
         let err = match_window_by_id(&windows, "999").unwrap_err();
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "test assertion: only WindowNotFound is valid here"
+        )]
         match err {
             ForepawError::WindowNotFound(q) => assert_eq!(q, "999"),
             other => panic!("expected WindowNotFound, got {other:?}"),
@@ -943,6 +947,10 @@ mod tests {
             make_entry(200, "Document 2", 800.0, 600.0),
         ];
         let err = match_window_by_title(&windows, "Document").unwrap_err();
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "test assertion: only AmbiguousWindow is valid here"
+        )]
         match err {
             ForepawError::AmbiguousWindow { query, matches: _ } => {
                 assert_eq!(query, "Document");
@@ -955,6 +963,10 @@ mod tests {
     fn window_title_no_match() {
         let windows = vec![make_entry(100, "Doc", 800.0, 600.0)];
         let err = match_window_by_title(&windows, "nonexistent").unwrap_err();
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "test assertion: only WindowNotFound is valid here"
+        )]
         match err {
             ForepawError::WindowNotFound(q) => assert_eq!(q, "nonexistent"),
             other => panic!("expected WindowNotFound, got {other:?}"),

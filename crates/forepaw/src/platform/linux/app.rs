@@ -150,6 +150,10 @@ pub(super) fn get_property(
 
     let body = reply.body();
     let value: Value<'_> = body.deserialize().ok()?;
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "external zvariant::Value enum, only Str is useful here"
+    )]
     match value {
         Value::Str(s) => {
             let s = s.to_string();
@@ -431,6 +435,10 @@ fn get_accessible_property(
     let value: Value<'_> = body.deserialize().map_err(|e| {
         ForepawError::ActionFailed(format!("Properties.Get({property}) deserialization: {e}"))
     })?;
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "external zvariant::Value enum, only Str is expected"
+    )]
     match value {
         Value::Str(s) => Ok(s.to_string()),
         other => Err(ForepawError::ActionFailed(format!(

@@ -43,7 +43,7 @@ mod tests {
 
     #[test]
     fn usize_to_i32_rejects_overflow() {
-        assert!(usize_to_i32(i32::MAX as usize + 1).is_err());
+        usize_to_i32(i32::MAX as usize + 1).unwrap_err();
     }
 
     #[test]
@@ -53,11 +53,11 @@ mod tests {
 
     #[test]
     fn i64_to_i32_rejects_overflow() {
-        assert!(i64_to_i32(i64::from(i32::MAX) + 1).is_err());
+        i64_to_i32(i64::from(i32::MAX) + 1).unwrap_err();
     }
 
     #[test]
     fn i64_to_i32_rejects_underflow() {
-        assert!(i64_to_i32(i64::from(i32::MIN) - 1).is_err());
+        i64_to_i32(i64::from(i32::MIN) - 1).unwrap_err();
     }
 }

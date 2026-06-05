@@ -2,6 +2,8 @@
 //!
 //! Run with: `cargo run --example basic-usage -p forepaw`
 
+#![expect(clippy::print_stdout, reason = "example output")]
+
 use forepaw::platform::{AppTarget, SnapshotOptions};
 use forepaw::provider;
 

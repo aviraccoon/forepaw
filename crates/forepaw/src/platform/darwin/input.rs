@@ -459,13 +459,12 @@ fn post_scroll_event(delta_y: i32, delta_x: i32) -> Result<(), ForepawError> {
 fn move_mouse_to_scroll_target(point: CGPointFFI) {
     // SAFETY: post_mouse_event with valid coordinates, error ignored (non-critical).
     unsafe {
-        post_mouse_event(
+        drop(post_mouse_event(
             ffi::K_CG_EVENT_MOUSE_MOVED,
             point,
             ffi::K_CG_MOUSE_BUTTON_LEFT,
             None,
-        )
-        .ok();
+        ));
     }
     thread::sleep(Duration::from_millis(50));
 }
@@ -689,7 +688,13 @@ fn perform_mouse_drag(path: &[CGPointFFI], options: &DragOptions) -> Result<(), 
 
             // SAFETY: post_drag_event posts a drag event with valid parameters.
             unsafe {
-                post_drag_event(drag_type, point, cg_button, flags, options.pressure).ok();
+                drop(post_drag_event(
+                    drag_type,
+                    point,
+                    cg_button,
+                    flags,
+                    options.pressure,
+                ));
             }
             thread::sleep(Duration::from_secs_f64(step_delay));
         }

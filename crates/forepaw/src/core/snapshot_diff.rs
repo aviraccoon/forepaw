@@ -15,6 +15,7 @@ pub struct DiffLine {
 
 /// Classification of a diff line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DiffLineKind {
     /// Line present only in the new snapshot.
     Added,

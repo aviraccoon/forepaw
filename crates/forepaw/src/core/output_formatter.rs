@@ -4,6 +4,7 @@
 /// Error with code, message, and optional suggestion.
 #[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
+#[non_exhaustive]
 pub struct OutputError {
     /// Machine-readable error code.
     pub code: &'static str,
@@ -46,6 +47,7 @@ impl OutputError {
 
 /// Output format for CLI commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum OutputFormat {
     /// Human-readable text (default).
     #[default]
@@ -221,7 +223,7 @@ mod tests {
     fn format_enum_from_str() {
         assert_eq!("text".parse::<OutputFormat>(), Ok(OutputFormat::Text));
         assert_eq!("json".parse::<OutputFormat>(), Ok(OutputFormat::Json));
-        assert!("xml".parse::<OutputFormat>().is_err());
+        "xml".parse::<OutputFormat>().unwrap_err();
     }
 
     #[test]

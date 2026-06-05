@@ -17,6 +17,7 @@ use std::fmt;
 /// The [`Display`](std::fmt::Display) impl produces the lowercase form
 /// used in tree output (`button`, `textfield`, etc.).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Role {
     // -- Interactive (receive refs) --
     /// A clickable button.
@@ -177,6 +178,10 @@ impl Role {
     /// Category for color-coding in screenshot annotations.
     #[must_use]
     pub fn annotation_category(self) -> AnnotationCategory {
+        #[expect(
+            clippy::wildcard_enum_match_arm,
+            reason = "uncategorized roles default to Other"
+        )]
         match self {
             Self::Button | Self::MenuButton | Self::DockItem | Self::Incrementor => {
                 AnnotationCategory::Button
@@ -308,6 +313,7 @@ impl Role {
 
 /// Category for color-coding elements by type in screenshot annotations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum AnnotationCategory {
     /// Button-like elements (`Button`, `MenuButton`, `DockItem`, `Incrementor`).
     Button,

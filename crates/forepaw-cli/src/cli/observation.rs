@@ -153,7 +153,7 @@ impl Snapshot {
         // Always cache text rendering for future diffs
         let tree_renderer = TreeRenderer::new(false);
         let rendered = tree_renderer.render(&tree);
-        cache.save(&cache_key, &rendered).ok();
+        drop(cache.save(&cache_key, &rendered));
 
         Ok(())
     }

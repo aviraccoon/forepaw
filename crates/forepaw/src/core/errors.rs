@@ -5,6 +5,7 @@ use crate::core::element_tree::ElementRef;
 
 /// Errors that can occur during forepaw operations.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ForepawError {
     /// The specified application is not running.
     AppNotFound(String),

@@ -53,3 +53,15 @@ string_add                = "warn"
 ref_option                = "warn"
 use_self                  = "warn"
 str_to_string             = "warn"
+print_stdout              = "warn"
+unused_result_ok          = "warn"
+assertions_on_result_states = "warn"
+wildcard_enum_match_arm   = "warn"
+
+# -- Audited lints (not enabled, applied one-time) --------------------
+# exhaustive_structs/enums: #[non_exhaustive] added selectively to public API
+#   types. Error enums, growing enums (Role, ImageFormat), and result structs.
+#   Options/data-bag structs (SnapshotOptions, ClickOptions, etc.) are left
+#   exhaustive since callers set all fields via struct literal syntax.
+# pattern_type_mismatch: conflicts with needless_borrowed_reference, fights
+#   Rust's ergonomics for marginal ownership clarity. Not worth enabling.

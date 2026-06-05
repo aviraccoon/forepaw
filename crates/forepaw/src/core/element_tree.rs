@@ -11,6 +11,7 @@ use crate::core::types::Rect;
 /// often unnecessary (indexing, state comparison, audit rules).
 #[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
+#[non_exhaustive]
 pub struct ElementData {
     /// The element's accessibility role.
     pub role: Role,
@@ -230,6 +231,7 @@ impl ElementNode {
 /// The full accessibility tree for a window/app.
 #[derive(Debug, Clone, serde::Serialize)]
 #[must_use]
+#[non_exhaustive]
 pub struct ElementTree {
     /// The application name this tree was captured from.
     pub app: String,

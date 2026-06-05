@@ -78,6 +78,7 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 - Implement `std::str::FromStr` for string-parsed enums (clippy enforces this over custom `from_str` methods).
 - Use `anyhow::Result` in CLI command methods; use `Result<_, ForepawError>` in platform/trait methods.
 - **Per-site `#[expect]` for cast lints, never fn-wide.** Fn-wide `#[expect(clippy::cast_*)]` silently suppresses new casts added later. Always annotate the specific `as` expression with `#[expect(clippy::cast_X, reason = "why this is safe")]`. For display-only casts (format strings), prefer eliminating the cast entirely by formatting f64 directly with `{:.0}` instead of casting to `i32`/`i64` first.
+- **`#[non_exhaustive]` on public API types.** Error enums, growing enums (`Role`, `ImageFormat`), and result structs that may gain fields. Options/data-bag structs with all-public fields (e.g. `SnapshotOptions`, `ClickOptions`) stay exhaustive — callers use struct literal syntax with `..Default::default()`. New public types should follow this pattern. See `Cargo.toml` "Audited lints" section for full rationale.
 - `forepaw-audit` and other companion tools depend on the `forepaw` library crate (not subprocess/JSON). Keep the lib surface clean.
 - **Debug logging**: `FOREPAW_LOG=debug` or `FOREPAW_LOG=snapshot=debug`. Zero-deps, uses `RUST_LOG` as fallback. See `src/log.rs`.
 - **Read docs and skill files in full before acting on them.** Skimming leads to stale assumptions and wrong edits.

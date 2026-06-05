@@ -213,10 +213,10 @@ pub fn post_process_screenshot(
         }
 
         if scaled_path != raw_path {
-            fs::remove_file(&scaled_path).ok();
+            drop(fs::remove_file(&scaled_path));
         }
         if output_path != raw_path {
-            fs::remove_file(raw_path).ok();
+            drop(fs::remove_file(raw_path));
         }
         return Ok(output_path);
     }
@@ -256,7 +256,7 @@ pub fn post_process_screenshot(
     }
 
     if output_path != raw_path {
-        fs::remove_file(raw_path).ok();
+        drop(fs::remove_file(raw_path));
     }
 
     Ok(output_path)
@@ -315,7 +315,7 @@ pub fn apply_crop(
             crate::core::cast::i64_to_i32(crop_rect.3)?,
         ),
     )?;
-    fs::remove_file(input_path).ok();
+    drop(fs::remove_file(input_path));
     Ok(cropped_path)
 }
 
@@ -472,7 +472,7 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     )
     .map_err(|e| ForepawError::ActionFailed(e.to_string()))?;
 
-    fs::remove_file(&raw_path).ok();
+    drop(fs::remove_file(&raw_path));
 
     // Crop the annotated image if requested
     let mut current_annotated = annotated_path;
@@ -537,7 +537,7 @@ fn render_plain(
             origin_offset,
         )
         .map_err(|e| ForepawError::ActionFailed(e.to_string()))?;
-        fs::remove_file(&current_path).ok();
+        drop(fs::remove_file(&current_path));
         current_path = grid_path;
     }
 
