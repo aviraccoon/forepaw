@@ -15,3 +15,4 @@ DerivedData/
 # General
 .DS_Store
 .direnv/
+_local/

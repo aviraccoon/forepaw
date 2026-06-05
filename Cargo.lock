@@ -640,7 +640,7 @@ dependencies = [
 
 [[package]]
 name = "forepaw"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "block2",
  "image",
@@ -660,7 +660,7 @@ dependencies = [
 
 [[package]]
 name = "forepaw-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
