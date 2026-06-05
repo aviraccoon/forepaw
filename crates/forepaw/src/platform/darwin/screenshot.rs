@@ -10,7 +10,7 @@ use std::process::Command;
 use crate::core::annotation::{AnnotationCollector, AnnotationLegend};
 use crate::core::crop_region::CropRegion;
 use crate::core::element_tree::ElementRef;
-use crate::core::encoder_detection::{ImageFormat, ScreenshotOptions};
+use crate::core::encoder_detection::{ImageFormat, ImageOutput, ScreenshotOptions};
 use crate::core::errors::ForepawError;
 use crate::core::types::{Point, Rect};
 use crate::platform::darwin::annotation;
@@ -18,7 +18,7 @@ use crate::platform::darwin::app;
 use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI, CGSizeFFI};
 use crate::platform::darwin::snapshot;
 use crate::platform::ScreenshotResult;
-use crate::platform::{ScreenshotParams, SnapshotOptions};
+use crate::platform::{ScreenshotImage, ScreenshotParams, SnapshotOptions};
 
 /// Generate a unique temp file tag for screenshot filenames.
 #[must_use]
@@ -454,7 +454,7 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
         let current_path =
             apply_crop_if_needed(&raw_path, &tag, params.crop, resolved_window.as_ref())?;
         return Ok(ScreenshotResult {
-            path: current_path,
+            image: finalize_image(current_path, params.options)?,
             annotations: None,
             legend: Some("No interactive elements found".into()),
         });
@@ -498,7 +498,7 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
         post_process_screenshot(&current_annotated, &tag, params.options, "-annotated")?;
 
     Ok(ScreenshotResult {
-        path: final_path,
+        image: finalize_image(final_path, params.options)?,
         annotations: Some(annotations),
         legend: Some(legend),
     })
@@ -543,7 +543,7 @@ fn render_plain(
 
     let final_path = post_process_screenshot(&current_path, tag, options, "")?;
     Ok(ScreenshotResult {
-        path: final_path,
+        image: finalize_image(final_path, options)?,
         annotations: None,
         legend: None,
     })
@@ -563,5 +563,28 @@ fn apply_crop_if_needed(
             apply_crop(crop, &window_size, scale, raw_path, tag, "")
         }
         _ => Ok(raw_path.to_owned()),
+    }
+}
+
+/// Convert a temp file path into the requested output format.
+///
+/// For `ImageOutput::Path`, returns the path as-is (caller owns cleanup).
+/// For `ImageOutput::Bytes`, reads the file, deletes it, and returns the data.
+fn finalize_image(
+    path: String,
+    options: &ScreenshotOptions,
+) -> Result<ScreenshotImage, ForepawError> {
+    match options.output {
+        ImageOutput::Path => Ok(ScreenshotImage::Path(path)),
+        ImageOutput::Bytes => {
+            let data = fs::read(&path).map_err(|e| {
+                ForepawError::ActionFailed(format!("failed to read screenshot: {e}"))
+            })?;
+            drop(fs::remove_file(&path));
+            Ok(ScreenshotImage::Bytes {
+                data,
+                format: options.format.resolve(),
+            })
+        }
     }
 }

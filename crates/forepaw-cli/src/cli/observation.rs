@@ -6,7 +6,7 @@ use crate::cli::GlobalArgs;
 use forepaw::core::annotation::AnnotationStyle;
 use forepaw::core::crop_region::CropRegion;
 use forepaw::core::element_tree::ElementRef;
-use forepaw::core::encoder_detection::{ImageFormat, ScreenshotOptions};
+use forepaw::core::encoder_detection::{ImageFormat, ImageOutput, ScreenshotOptions};
 use forepaw::core::snapshot_cache::SnapshotCache;
 use forepaw::core::snapshot_diff::SnapshotDiffer;
 use forepaw::core::tree_renderer::TreeRenderer;
@@ -253,8 +253,14 @@ impl Screenshot {
                 #[serde(skip_serializing_if = "Option::is_none")]
                 legend: Option<String>,
             }
+            let path = match &result.image {
+                forepaw::platform::ScreenshotImage::Path(p) => p.clone(),
+                forepaw::platform::ScreenshotImage::Bytes { .. } | _ => {
+                    return Err(anyhow::Error::msg("CLI does not support bytes output"));
+                }
+            };
             let output = ScreenshotResult {
-                path: result.path,
+                path,
                 legend: result.legend,
             };
             println!(
@@ -262,7 +268,13 @@ impl Screenshot {
                 serde_json::to_string(&output).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
             );
         } else {
-            println!("{}", result.path);
+            let path = match &result.image {
+                forepaw::platform::ScreenshotImage::Path(p) => p.clone(),
+                forepaw::platform::ScreenshotImage::Bytes { .. } | _ => {
+                    return Err(anyhow::Error::msg("CLI does not support bytes output"));
+                }
+            };
+            println!("{path}");
             if let Some(legend) = &result.legend {
                 println!("{legend}");
             }
@@ -293,6 +305,7 @@ impl Screenshot {
             quality: self.quality.unwrap_or(85),
             scale: self.scale.unwrap_or(1),
             cursor: !self.no_cursor,
+            output: ImageOutput::default(),
         }
     }
 
@@ -617,6 +630,7 @@ impl Ocr {
             quality: self.quality.unwrap_or(85),
             scale: self.scale.unwrap_or(1),
             cursor: !self.no_cursor,
+            output: ImageOutput::default(),
         }
     }
 }

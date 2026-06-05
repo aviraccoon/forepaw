@@ -298,7 +298,7 @@ pub struct HitTestResult {
     pub pid: i32,
 }
 
-use crate::core::encoder_detection::ScreenshotOptions;
+use crate::core::encoder_detection::{ImageFormat, ScreenshotOptions};
 
 /// Parameters for screenshot operations.
 #[derive(Debug)]
@@ -323,12 +323,27 @@ pub struct ScreenshotParams<'a> {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct ScreenshotResult {
-    /// File path of the saved screenshot.
-    pub path: String,
+    /// The captured image data.
+    pub image: ScreenshotImage,
     /// Element annotations (if style was requested).
     pub annotations: Option<Vec<Annotation>>,
     /// Legend text explaining annotation colors.
     pub legend: Option<String>,
+}
+
+/// The captured image, either as a file path or in-memory bytes.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub enum ScreenshotImage {
+    /// File path of the saved screenshot.
+    Path(String),
+    /// In-memory image bytes with the resolved format.
+    Bytes {
+        /// Raw image data.
+        data: Vec<u8>,
+        /// The format the bytes are encoded in.
+        format: ImageFormat,
+    },
 }
 
 /// Options for snapshot (accessibility tree walk).

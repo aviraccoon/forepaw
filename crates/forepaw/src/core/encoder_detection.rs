@@ -51,6 +51,25 @@ impl ImageFormat {
         }
     }
 
+    /// Return the MIME type for this format.
+    ///
+    /// For `BestAvailable`, resolves first.
+    #[must_use]
+    pub fn mime_type(&self) -> &'static str {
+        self.resolve().mime_type_inner()
+    }
+
+    fn mime_type_inner(self) -> &'static str {
+        match self {
+            Self::Png => "image/png",
+            Self::Jpeg => "image/jpeg",
+            Self::Webp => "image/webp",
+            Self::BestAvailable => {
+                unreachable!("mime_type_inner called on BestAvailable — use resolve() first")
+            }
+        }
+    }
+
     /// Return all concrete (non-sentinel) formats.
     #[must_use]
     pub fn all() -> &'static [Self] {
@@ -81,6 +100,16 @@ impl std::str::FromStr for ImageFormat {
     }
 }
 
+/// Where to deliver the screenshot image.
+#[derive(Debug, Clone, Default)]
+pub enum ImageOutput {
+    /// Save to a temp file and return the path.
+    #[default]
+    Path,
+    /// Return the image data in memory.
+    Bytes,
+}
+
 /// Screenshot output options.
 #[derive(Debug, Clone)]
 pub struct ScreenshotOptions {
@@ -92,6 +121,8 @@ pub struct ScreenshotOptions {
     pub scale: u32,
     /// Whether to include the cursor.
     pub cursor: bool,
+    /// Where to deliver the image: file path or in-memory bytes.
+    pub output: ImageOutput,
 }
 
 impl Default for ScreenshotOptions {
@@ -101,6 +132,7 @@ impl Default for ScreenshotOptions {
             quality: 85,
             scale: 1,
             cursor: true,
+            output: ImageOutput::Path,
         }
     }
 }
@@ -114,6 +146,7 @@ impl ScreenshotOptions {
             quality: 85,
             scale: 2,
             cursor: true,
+            output: ImageOutput::Path,
         }
     }
 }

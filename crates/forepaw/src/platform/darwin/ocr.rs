@@ -41,6 +41,7 @@ pub fn ocr(
         scale: 2,
         quality: 100,
         cursor: false,
+        output: crate::core::encoder_detection::ImageOutput::Path,
     };
 
     let screenshot_params = crate::platform::ScreenshotParams {
@@ -54,16 +55,22 @@ pub fn ocr(
     };
     let screenshot_result = crate::platform::darwin::screenshot::screenshot(&screenshot_params)?;
 
+    let screenshot_path = match &screenshot_result.image {
+        crate::platform::ScreenshotImage::Path(p) => p.clone(),
+        crate::platform::ScreenshotImage::Bytes { .. } => {
+            return Err(ForepawError::ActionFailed(
+                "OCR requires file-based screenshot output".into(),
+            ));
+        }
+    };
+
     // Load the image using NSImage to get pixel dimensions
     let ns_image = objc2_app_kit::NSImage::initWithContentsOfFile(
         objc2_app_kit::NSImage::alloc(),
-        &NSString::from_str(&screenshot_result.path),
+        &NSString::from_str(&screenshot_path),
     )
     .ok_or_else(|| {
-        ForepawError::ActionFailed(format!(
-            "Failed to load screenshot: {}",
-            screenshot_result.path
-        ))
+        ForepawError::ActionFailed(format!("Failed to load screenshot: {screenshot_path}"))
     })?;
 
     let reps = ns_image.representations();
@@ -76,7 +83,7 @@ pub fn ocr(
     )]
     let image_height = rep.pixelsHigh() as f64;
 
-    let c_path = std::ffi::CString::new(screenshot_result.path.clone())
+    let c_path = std::ffi::CString::new(screenshot_path.clone())
         .map_err(|_e| ForepawError::ActionFailed("Invalid screenshot path".into()))?;
 
     // Get CGImage from the NSImage representation
@@ -129,14 +136,14 @@ pub fn ocr(
         let tag = crate::platform::darwin::screenshot::temp_tag();
         Some(
             crate::platform::darwin::screenshot::post_process_screenshot(
-                &screenshot_result.path,
+                &screenshot_path,
                 &tag,
                 display_options,
                 "",
             )?,
         )
     } else {
-        drop(std::fs::remove_file(&screenshot_result.path));
+        drop(std::fs::remove_file(&screenshot_path));
         None
     };
 

@@ -66,7 +66,7 @@ impl DesktopProvider for WindowsProvider {
     ) -> Result<crate::platform::ScreenshotResult, ForepawError> {
         let path = screenshot::screenshot(params.app, params.window)?;
         Ok(crate::platform::ScreenshotResult {
-            path,
+            image: crate::platform::ScreenshotImage::Path(path),
             annotations: None,
             legend: None,
         })
