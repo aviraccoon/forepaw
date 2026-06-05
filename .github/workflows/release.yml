@@ -205,3 +205,20 @@ jobs:
             dist/forepaw-windows-arm64.zip
             dist/forepaw-windows-arm64.zip.sha256
           body_path: dist/release-notes.md
+
+  publish:
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Authenticate with crates.io
+        id: auth
+        uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
+      - name: Publish forepaw library crate
+        run: cargo publish -p forepaw --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

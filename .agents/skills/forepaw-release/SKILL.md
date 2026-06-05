@@ -48,7 +48,13 @@ The only rule: it should be playful and fit the release's vibe. Avoid being bori
    git push origin main --tags
    ```
 
-7. **CI handles the rest** -- `.github/workflows/release.yml` builds a release binary on `macos-26`, extracts release notes from CHANGELOG.md, and uploads to GitHub Releases with install instructions.
+7. **CI handles the rest** -- `.github/workflows/release.yml`:
+   - Builds release binaries on macOS, Windows, and Linux
+   - Extracts release notes from CHANGELOG.md
+   - Uploads to GitHub Releases with install instructions
+   - Publishes `forepaw` library crate to crates.io via Trusted Publishing (OIDC)
+
+   The CLI binary crate (`forepaw-cli`) has `publish = false` and is distributed via GitHub Releases, not crates.io.
 
 8. **Update Nix package** (in the system repo) -- update `packages/forepaw.nix` with the new version and tarball SHA256 from the release.
 

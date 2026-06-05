@@ -8,6 +8,7 @@ name = "forepaw-cli"
 version = "0.3.0"
 edition = "2021"
 license = "Unlicense"
+publish = false
 description = "CLI for forepaw desktop automation."
 readme = "README.md"
 repository = "https://github.com/aviraccoon/forepaw"
