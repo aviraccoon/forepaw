@@ -9,6 +9,7 @@ use crate::core::errors::ForepawError;
 use crate::core::key_combo::{ClickOptions, DragOptions, KeyCombo, Modifier, MouseButton};
 use crate::core::types::Point;
 use crate::platform::darwin::app::{self, ResolvedWindow};
+use crate::platform::darwin::cf_convert::cf_string_from_str;
 use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI};
 use crate::platform::darwin::key_code;
 use crate::platform::darwin::snapshot;
@@ -207,7 +208,7 @@ pub fn click_element(
         // SAFETY: AXUIElementPerformAction on valid element, action_str released.
         #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         let action = unsafe {
-            let action_str = app::cf_string_from_str("AXPress");
+            let action_str = cf_string_from_str("AXPress");
             let result = ffi::AXUIElementPerformAction(element, action_str);
             ffi::CFRelease(action_str as ffi::CFTypeRef);
             result
@@ -257,7 +258,7 @@ pub fn click_element(
         // SAFETY: AXUIElementPerformAction on valid element, action_str released.
         #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
         let action = unsafe {
-            let action_str = app::cf_string_from_str("AXPress");
+            let action_str = cf_string_from_str("AXPress");
             let result = ffi::AXUIElementPerformAction(element, action_str);
             ffi::CFRelease(action_str as ffi::CFTypeRef);
             result
@@ -347,7 +348,7 @@ pub fn set_value_on_element(
     // SAFETY: AXUIElementSetAttributeValue on valid element. attr and cf_value released.
     #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
     let result = unsafe {
-        let attr = app::cf_string_from_str("AXValue");
+        let attr = cf_string_from_str("AXValue");
         let r = ffi::AXUIElementSetAttributeValue(element, attr, cf_value);
         ffi::CFRelease(attr as ffi::CFTypeRef);
         ffi::CFRelease(cf_value);
@@ -365,11 +366,11 @@ pub fn set_value_on_element(
     )]
     // SAFETY: AXRaise + AXFocused set on valid element, attrs released.
     unsafe {
-        let raise_action = app::cf_string_from_str("AXRaise");
+        let raise_action = cf_string_from_str("AXRaise");
         let _ = ffi::AXUIElementPerformAction(element, raise_action);
         ffi::CFRelease(raise_action as ffi::CFTypeRef);
 
-        let focus_attr = app::cf_string_from_str("AXFocused");
+        let focus_attr = cf_string_from_str("AXFocused");
         let cf_true = ffi::kCFBooleanTrue;
         let _ = ffi::AXUIElementSetAttributeValue(element, focus_attr, cf_true);
         ffi::CFRelease(focus_attr as ffi::CFTypeRef);

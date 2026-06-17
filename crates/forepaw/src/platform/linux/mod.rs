@@ -325,4 +325,12 @@ impl DesktopProvider for LinuxProvider {
     fn request_screen_recording_permission(&self) -> bool {
         true
     }
+
+    fn get_text_attributes(
+        &self,
+        _app: &AppTarget,
+        _reference: crate::core::element_tree::ElementRef,
+    ) -> Result<Option<crate::core::text_attrs::TextAttrsResult>, ForepawError> {
+        Ok(None)
+    }
 }

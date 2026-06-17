@@ -37,17 +37,17 @@ Each property read (`GetRole`, `GetName`, `GetExtents`, `GetChildren`, `GetState
 
 ### Batched attribute fetching
 
-> **The raccoon version:** A raccoon could pick up one french fry at a time, or it could grab the whole container. We grab the whole container. One trip to the trash can per item instead of seventeen.
+> **The raccoon version:** A raccoon could pick up one french fry at a time, or it could grab the whole container. We grab the whole container. One trip to the trash can per item instead of a couple dozen.
 
-On macOS, `AXUIElementCopyMultipleAttributeValues` fetches 17 attributes per element in a single Mach IPC round-trip:
+On macOS, `AXUIElementCopyMultipleAttributeValues` fetches the full batched attribute set per element in a single Mach IPC round-trip. The attribute list is declared once in `darwin/snapshot.rs` via a `define_attrs!` macro that emits both a `#[repr(usize)] Attr` enum and the matching `AX*` name slice from a single `(Variant, "AXName")` list — adding an attribute is one line, and the enum variant becomes the index used everywhere (`attrs.string(Attr::Title)`), so index constants can never drift from the name array.
 
-| Index | Attribute | Purpose |
-|-------|-----------|--------|
-| 0-7 | Role, Title, Description, Value, Position, Size, Children, Subrole | Core tree structure |
-| 8-12 | TitleUIElement, Help, PlaceholderValue, DOMClassList, RoleDescription | Name resolution fallbacks |
-| 13-16 | Enabled, Focused, Selected, Identifier | Element state and identity |
+The batch covers three groups:
 
-Fetching all 17 in one call avoids up to 9 extra IPC calls per element compared to fetching each individually. The impact is dramatic on slow AX responders — Music.app went from ~50s to ~12s.
+- **Core tree structure & name resolution**: Role, Title, Description, Value, Position, Size, Children, Subrole, TitleUIElement, Help, PlaceholderValue, DOMClassList, RoleDescription.
+- **Element state & identity**: Enabled, Focused, Selected, Identifier.
+- **Extra context** (collected into each element's `attributes` bag by `collect_extra_attributes`, surfaced in verbose/JSON output): Orientation, Expanded, MinValue, MaxValue, ValueIncrement, URL, SortDirection, Index, Required, ElementBusy, DisclosureLevel, AccessKey, Filename.
+
+Fetching the whole batch in one call avoids one IPC per attribute per element. The impact is dramatic on slow AX responders — Music.app went from ~50s to ~12s.
 
 On Windows, each property is an individual COM call. A `CacheRequest` could batch them via `IUIAutomation::CreateCacheRequest` + `BuildUpdatedCache`, but that's not wired yet. On Linux, each property is an individual D-Bus call — no batch equivalent exists.
 
@@ -75,6 +75,14 @@ UIA provides `CurrentName()` directly for most elements. When empty, fallback ch
 #### Linux
 
 AT-SPI2 exposes `Name` as a D-Bus property (via `org.freedesktop.DBus.Properties.Get` on `org.a11y.atspi.Accessible`). Fallback chain: `Description` → first child's `Name` (if `Role == STATIC`) → `HelpText`.
+
+## Text attributes
+
+> **The raccoon version:** Sometimes it's not enough to know there's writing on the box — you want to know if it's scrawled in marker, printed in bold, or glowing red. forepaw reads the typography and color of text elements so consumers can inspect styling (or check contrast) without re-deriving it from pixels.
+
+`DesktopProvider::get_text_attributes(app, reference)` returns per-run font, color, and decoration info for a text element, as a platform-agnostic `TextAttrsResult` (`core::text_attrs.rs`). Text with mixed formatting is split into `TextAttrsRun` entries, each carrying its own `TextAttributes` (font family/name/size, foreground and background color as `#RRGGBB[AA]`, strikethrough/underline and their colors, superscript, shadow, natural language) over a character range.
+
+On macOS this is parsed from `AXAttributedStringForRange` (a parameterized attribute on `AXStaticText`/`AXTextArea`). `CGColor`→hex and other CoreFoundation conversions live in `darwin/cf_convert.rs`. Windows (`UIA TextPattern.ForegroundColor`/`BackgroundColor`) and Linux (AT-SPI2 `Text` interface `TEXT_ATTR_*`) currently return `None` — to be implemented. The method is library-only: there is no CLI subcommand for it, since the text-attribute values aren't useful as standalone CLI output.
 
 ## Typed role enum
 
@@ -135,7 +143,7 @@ Elements carry four state fields populated by each platform backend:
 
 State fields are `Option<bool>` — `None` means the platform doesn't provide this property. Non-`None` values appear in tree rendering as tags: `disabled`, `focused`, `selected`. Description appears in verbose mode only.
 
-On macOS, these four fields are fetched in the same batch `AXUIElementCopyMultipleAttributeValues` call as the other 13 attributes — no additional IPC cost.
+On macOS, these four fields come from the same batched `AXUIElementCopyMultipleAttributeValues` call as the rest of the attribute set — no additional IPC cost.
 
 Note: `AXFocused` returns `true` for both "this element can receive focus" and "this element currently has focus" on macOS (a known W3C Core-AAM spec issue). The actual focused element is available via `AXFocusedUIElement` on the application element, which is a separate IPC call not made during tree walking.
 
@@ -447,6 +455,7 @@ crates/forepaw/src/
 │   ├── tree_pruning.rs      # PruningOptions, should_prune
 │   ├── signature.rs         # FNV-1a content hashing
 │   ├── icon_class_parser.rs # CSS class → icon name
+│   ├── text_attrs.rs       # TextAttributes / TextAttrsRun / TextAttrsResult
 │   ├── coordinate_validation.rs
 │   ├── crop_region.rs       # Rect padding and scale conversion
 │   ├── key_combo.rs         # Key combo parsing, ClickOptions, DragOptions
@@ -455,9 +464,9 @@ crates/forepaw/src/
 │   └── errors.rs            # ForepawError enum
 ├── platform/
 │   ├── mod.rs               # DesktopProvider trait
-│   ├── darwin/              # macOS backend (12 modules, ~6800 lines)
-│   ├── windows/             # Windows backend (7 modules, ~2100 lines)
-│   └── linux/               # Linux backend (5 modules, ~1700 lines)
+│   ├── darwin/              # macOS backend
+│   ├── windows/             # Windows backend
+│   └── linux/               # Linux backend
 └── log.rs                   # Zero-dependency structured logging
 
 crates/forepaw-cli/src/

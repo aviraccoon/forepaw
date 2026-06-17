@@ -10,22 +10,20 @@ use std::path::Path;
 use objc2::rc::Retained;
 use objc2::Message;
 use objc2_app_kit::NSRunningApplication;
-use objc2_foundation::NSString;
 
 use crate::core::errors::ForepawError;
 use crate::core::types::{Point, Rect};
+use crate::platform::darwin::cf_convert::{
+    cf_string_from_str, get_dict_bounds_ref, get_dict_i32_ref, get_dict_string_ref,
+};
 use crate::platform::darwin::ffi::{
     kCGWindowBounds, kCGWindowLayer, kCGWindowName, kCGWindowNumber, kCGWindowOwnerName,
     kCGWindowOwnerPID, AXIsProcessTrusted, AXUIElementCreateApplication, AXUIElementRef,
     AXUIElementSetAttributeValue, CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef,
-    CFDictionaryGetTypeID, CFDictionaryGetValue, CFDictionaryRef, CFGetTypeID, CFIndex,
-    CFNumberGetTypeID, CFNumberGetValue, CFNumberRef, CFRelease, CFStringGetCString,
-    CFStringGetCStringPtr, CFStringGetTypeID, CFStringRef, CFTypeRef, CGDisplayBounds,
-    CGGetOnlineDisplayList, CGWindowListCopyWindowInfo, CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY,
-    K_CF_NUMBER_DOUBLE_TYPE, K_CF_NUMBER_SINT32_TYPE, K_CF_STRING_ENCODING_UTF8,
-    K_CG_NULL_WINDOW_ID,
+    CFDictionaryRef, CFRelease, CFTypeRef, CGDisplayBounds, CGGetOnlineDisplayList,
+    CGWindowListCopyWindowInfo, CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY, K_CG_NULL_WINDOW_ID,
 };
-use crate::platform::darwin::snapshot::{fetch_batch_attributes, ATTR_CHILDREN, ATTR_ROLE};
+use crate::platform::darwin::snapshot::{fetch_batch_attributes, Attr};
 use crate::platform::{AppInfo, WindowInfo, WindowState, WindowTarget};
 
 // ---------------------------------------------------------------------------
@@ -337,7 +335,7 @@ pub fn list_windows(
         // Filter by PID set if applicable
         if let Some(ref pids) = allowed_pids {
             // SAFETY: dict accessor on valid CFDictionary.
-            let owner_pid = unsafe { get_dict_i32(info, kCGWindowOwnerPID) };
+            let owner_pid = unsafe { get_dict_i32_ref(info, kCGWindowOwnerPID) };
             match owner_pid {
                 Some(pid) if pids.contains(&pid) => {}
                 _ => continue,
@@ -345,11 +343,11 @@ pub fn list_windows(
         }
 
         // SAFETY: dict accessor on valid CFDictionary.
-        let owner_name = unsafe { get_dict_string(info, kCGWindowOwnerName) };
+        let owner_name = unsafe { get_dict_string_ref(info, kCGWindowOwnerName) };
         // SAFETY: dict accessor on valid CFDictionary.
-        let window_id = unsafe { get_dict_i32(info, kCGWindowNumber) };
+        let window_id = unsafe { get_dict_i32_ref(info, kCGWindowNumber) };
         // SAFETY: dict accessor on valid CFDictionary.
-        let title = unsafe { get_dict_string(info, kCGWindowName) }.unwrap_or_default();
+        let title = unsafe { get_dict_string_ref(info, kCGWindowName) }.unwrap_or_default();
 
         let (Some(owner), Some(id_num)) = (owner_name, window_id) else {
             continue;
@@ -366,12 +364,12 @@ pub fn list_windows(
 
         // Skip phantom/tiny windows
         // SAFETY: dict accessor on valid CFDictionary.
-        if let Some(bounds) = unsafe { get_dict_bounds(info, kCGWindowBounds) } {
+        if let Some(bounds) = unsafe { get_dict_bounds_ref(info, kCGWindowBounds) } {
             if bounds.width < 10.0 || bounds.height < 10.0 {
                 continue;
             }
             // SAFETY: dict accessor on valid CFDictionary.
-            let layer = unsafe { get_dict_i32(info, kCGWindowLayer) };
+            let layer = unsafe { get_dict_i32_ref(info, kCGWindowLayer) };
             let state = detect_window_state(&bounds, layer);
             result.push(WindowInfo {
                 id: format!("w-{id_num}"),
@@ -501,19 +499,15 @@ unsafe fn collect_windows(
         if info.is_null() {
             continue;
         }
-        // SAFETY: dict accessor on valid CFDictionary.
-        let _owner_pid = match get_dict_i32(info, unsafe { kCGWindowOwnerPID }) {
+        let _owner_pid = match get_dict_i32_ref(info, kCGWindowOwnerPID) {
             Some(p) if pid_matches(p) => p,
             _ => continue,
         };
-        // SAFETY: accessing a global CFStringRef constant.
-        let bounds_key = unsafe { kCGWindowBounds };
-        let bounds = match get_dict_bounds(info, bounds_key) {
+        let bounds = match get_dict_bounds_ref(info, kCGWindowBounds) {
             Some(b) if b.width >= 10.0 && b.height >= 10.0 => b,
             _ => continue,
         };
-        // SAFETY: dict accessor on valid CFDictionary.
-        let window_id = get_dict_i32(info, unsafe { kCGWindowNumber })
+        let window_id = get_dict_i32_ref(info, kCGWindowNumber)
             .and_then(|id| {
                 #[expect(clippy::cast_sign_loss, reason = "window ID validated > 0 before cast")]
                 if id > 0 {
@@ -523,8 +517,7 @@ unsafe fn collect_windows(
                 }
             })
             .unwrap_or(0);
-        // SAFETY: dict accessor on valid CFDictionary.
-        let title = get_dict_string(info, unsafe { kCGWindowName }).unwrap_or_default();
+        let title = get_dict_string_ref(info, kCGWindowName).unwrap_or_default();
 
         entries.push(WindowEntry {
             id: window_id,
@@ -678,158 +671,6 @@ fn collect_helper_pids(bundle_id: &str, main_pid: i32) -> HashSet<i32> {
 }
 
 // ---------------------------------------------------------------------------
-// CFDictionary helpers
-// ---------------------------------------------------------------------------
-
-/// # Safety
-///
-/// `dict` must be a valid `CFDictionaryRef`. `key` must be a valid `CFStringRef`.
-/// Both must remain valid for the duration of this call.
-pub unsafe fn get_dict_string(dict: CFDictionaryRef, key: CFStringRef) -> Option<String> {
-    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
-    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
-    unsafe {
-        let val = CFDictionaryGetValue(dict, key.cast::<std::ffi::c_void>());
-        if val.is_null() {
-            return None;
-        }
-        // Check if it's actually a CFString
-        if CFGetTypeID(val as CFTypeRef) != CFStringGetTypeID() {
-            return None;
-        }
-        // CFStringGetCStringPtr only works for "null-fast" strings (pure ASCII/UTF-8).
-        // For non-ASCII characters (emojis, CJK, etc.) it returns NULL. Use the
-        // slower CFStringGetCString as a fallback, which handles all encodings.
-        let ptr = CFStringGetCStringPtr(val as CFStringRef, K_CF_STRING_ENCODING_UTF8);
-        if !ptr.is_null() {
-            return std::ffi::CStr::from_ptr(ptr)
-                .to_str()
-                .ok()
-                .map(String::from);
-        }
-        // Fallback: copy into a buffer
-        let mut buf = [0_u8; 1024];
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "buffer length fits in CFIndex (i64)"
-        )]
-        let buf_len = buf.len() as CFIndex;
-        if CFStringGetCString(
-            val as CFStringRef,
-            buf.as_mut_ptr().cast::<std::ffi::c_char>(),
-            buf_len,
-            K_CF_STRING_ENCODING_UTF8,
-        ) {
-            let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-            buf.get(..len)
-                .and_then(|slice| std::str::from_utf8(slice).ok())
-                .map(String::from)
-        } else {
-            None
-        }
-    }
-}
-
-unsafe fn get_dict_i32(dict: CFDictionaryRef, key: CFStringRef) -> Option<i32> {
-    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
-    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
-    unsafe {
-        let val = CFDictionaryGetValue(dict, key.cast::<std::ffi::c_void>());
-        if val.is_null() {
-            return None;
-        }
-        if CFGetTypeID(val as CFTypeRef) != CFNumberGetTypeID() {
-            return None;
-        }
-        let mut result: i32 = 0;
-        if CFNumberGetValue(
-            val as CFNumberRef,
-            K_CF_NUMBER_SINT32_TYPE,
-            (&raw mut result).cast::<std::ffi::c_void>(),
-        ) != 0
-        {
-            Some(result)
-        } else {
-            None
-        }
-    }
-}
-
-unsafe fn get_dict_bounds(dict: CFDictionaryRef, key: CFStringRef) -> Option<Rect> {
-    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
-    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
-    unsafe {
-        let val = CFDictionaryGetValue(dict, key.cast::<std::ffi::c_void>());
-        if val.is_null() {
-            return None;
-        }
-        // The bounds value is a CFDictionary with X, Y, Width, Height keys
-        if CFGetTypeID(val as CFTypeRef) != CFDictionaryGetTypeID() {
-            return None;
-        }
-        let bounds_dict = val as CFDictionaryRef;
-        let x = get_dict_f64_local(bounds_dict, "X").unwrap_or(0.0);
-        let y = get_dict_f64_local(bounds_dict, "Y").unwrap_or(0.0);
-        let w = get_dict_f64_local(bounds_dict, "Width").unwrap_or(0.0);
-        let h = get_dict_f64_local(bounds_dict, "Height").unwrap_or(0.0);
-        Some(Rect {
-            x,
-            y,
-            width: w,
-            height: h,
-        })
-    }
-}
-
-/// Local helper to get an f64 from a `CFDictionary` with a string key.
-unsafe fn get_dict_f64_local(dict: CFDictionaryRef, key: &str) -> Option<f64> {
-    // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
-    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]
-    unsafe {
-        let cf_key = cf_string_from_str(key);
-        let val = CFDictionaryGetValue(dict, cf_key.cast::<std::ffi::c_void>());
-        CFRelease(cf_key as CFTypeRef);
-        if val.is_null() {
-            return None;
-        }
-        if CFGetTypeID(val as CFTypeRef) != CFNumberGetTypeID() {
-            return None;
-        }
-        let mut result: f64 = 0.0;
-        if CFNumberGetValue(
-            val as CFNumberRef,
-            K_CF_NUMBER_DOUBLE_TYPE,
-            (&raw mut result).cast::<std::ffi::c_void>(),
-        ) != 0
-        {
-            Some(result)
-        } else {
-            None
-        }
-    }
-}
-
-/// Create a `CFString` from a Rust &str.
-///
-/// The returned `CFStringRef` is a new reference that the caller must
-/// release with `CFRelease`. `NSString` is toll-free bridged with `CFString`,
-/// so we can create an `NSString` and cast its pointer.
-#[must_use]
-pub fn cf_string_from_str(s: &str) -> CFStringRef {
-    // NSString::from_str creates an autoreleased string.
-    // We retain it manually so the caller owns it.
-    let ns = NSString::from_str(s);
-    let ptr = Retained::as_ptr(&ns) as CFStringRef;
-    // Prevent Drop from releasing -- caller takes ownership via CFRelease
-    #[expect(
-        clippy::mem_forget,
-        reason = "transfer ownership to caller via CFRelease"
-    )]
-    std::mem::forget(ns);
-    ptr
-}
-
-// ---------------------------------------------------------------------------
 // Electron tree check
 // ---------------------------------------------------------------------------
 
@@ -845,14 +686,14 @@ fn has_populated_web_area(element: AXUIElementRef, depth: usize, max_depth: usiz
         return false;
     };
 
-    let role = attrs.string(ATTR_ROLE);
+    let role = attrs.string(Attr::Role);
 
     if role.as_deref() == Some("AXWebArea") {
-        let children = attrs.children(ATTR_CHILDREN);
+        let children = attrs.children(Attr::Children);
         return !children.is_empty();
     }
 
-    let children = attrs.children(ATTR_CHILDREN);
+    let children = attrs.children(Attr::Children);
     for child in &children {
         if has_populated_web_area(*child, depth + 1, max_depth) {
             return true;

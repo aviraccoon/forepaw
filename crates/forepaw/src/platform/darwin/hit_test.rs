@@ -12,7 +12,8 @@ use crate::core::role::Role;
 use crate::core::types::{Point, Rect};
 use crate::platform::{AncestorInfo, AppTarget, HitTestResult};
 
-use super::app::{cf_string_from_str, find_app_by_target};
+use super::app::find_app_by_target;
+use super::cf_convert::{cf_string_from_str, cf_string_to_rust};
 use super::ffi::{
     kCFNull, AXError, AXUIElementCopyActionNames, AXUIElementCopyAttributeValue,
     AXUIElementCopyElementAtPosition, AXUIElementCreateApplication, AXUIElementCreateSystemWide,
@@ -20,9 +21,8 @@ use super::ffi::{
     CFGetTypeID, CFRelease, CFStringGetTypeID, CFStringRef, CFTypeRef,
 };
 use super::snapshot::{
-    cf_string_to_rust, fetch_batch_attributes, get_ax_string_attr, get_element_position,
-    get_element_size, non_empty, ATTR_DESCRIPTION, ATTR_POSITION, ATTR_ROLE, ATTR_SIZE, ATTR_TITLE,
-    ATTR_VALUE,
+    fetch_batch_attributes, get_ax_string_attr, get_element_position, get_element_size, non_empty,
+    Attr,
 };
 
 /// Performs a hit test at the given screen coordinates.
@@ -81,20 +81,20 @@ pub fn element_at_point(
 
     let role = attrs
         .as_ref()
-        .and_then(|a| a.string(ATTR_ROLE))
+        .and_then(|a| a.string(Attr::Role))
         .map_or(Role::Unknown, |s| super::role::ax_role_to_role(&s));
     let name = attrs
         .as_ref()
-        .and_then(|a| non_empty(a.string(ATTR_TITLE).as_ref()))
+        .and_then(|a| non_empty(a.string(Attr::Title).as_ref()))
         .or_else(|| {
             attrs
                 .as_ref()
-                .and_then(|a| non_empty(a.string(ATTR_DESCRIPTION).as_ref()))
+                .and_then(|a| non_empty(a.string(Attr::Description).as_ref()))
         });
-    let value = attrs.as_ref().and_then(|a| a.value_string(ATTR_VALUE));
+    let value = attrs.as_ref().and_then(|a| a.value_string(Attr::Value));
     let bounds = attrs
         .as_ref()
-        .and_then(|a| a.bounds(ATTR_POSITION, ATTR_SIZE));
+        .and_then(|a| a.bounds(Attr::Position, Attr::Size));
 
     // 5. Fetch available actions
     let actions = get_action_names(hit_element);

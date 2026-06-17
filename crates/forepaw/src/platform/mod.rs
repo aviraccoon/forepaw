@@ -708,4 +708,22 @@ pub trait DesktopProvider: Send + Sync {
     fn request_permissions(&self) -> bool;
     /// Request screen recording permission (may prompt the user).
     fn request_screen_recording_permission(&self) -> bool;
+
+    // Text attributes (font, color, decoration)
+
+    /// Get text formatting attributes for a text element.
+    ///
+    /// Returns text-level attributes (font, color, decoration) if the element
+    /// is a text container and the platform supports text attribute queries.
+    /// Returns `None` for non-text elements or when the attribute information
+    /// is not available.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree.
+    fn get_text_attributes(
+        &self,
+        app: &AppTarget,
+        reference: ElementRef,
+    ) -> Result<Option<crate::core::text_attrs::TextAttrsResult>, ForepawError>;
 }

@@ -16,6 +16,7 @@ mod ffi;
 
 pub mod annotation;
 pub mod app;
+pub mod cf_convert;
 pub mod hit_test;
 pub mod input;
 pub mod key_code;
@@ -24,6 +25,7 @@ pub mod role;
 pub mod saliency;
 pub mod screenshot;
 pub mod snapshot;
+pub mod text_attrs;
 
 use crate::core::errors::ForepawError;
 use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
@@ -311,7 +313,10 @@ impl DesktopProvider for DarwinProvider {
                 continue;
             }
             // SAFETY: info is a valid CFDictionary from the window list.
-            if let Some(owner) = unsafe { app::get_dict_string(info, ffi::kCGWindowOwnerName) } {
+            if let Some(owner) =
+                // SAFETY: get_dict_string_ref reads from a valid CFDictionary.
+                unsafe { cf_convert::get_dict_string_ref(info, ffi::kCGWindowOwnerName) }
+            {
                 if third_party.iter().any(|name| *name == owner) {
                     found_app_window = true;
                     break 'outer;
@@ -336,7 +341,7 @@ impl DesktopProvider for DarwinProvider {
         // system calls. prompt_key is a CFString we own. All CF objects are
         // released before returning.
         unsafe {
-            let prompt_key = app::cf_string_from_str("AXTrustedCheckOptionPrompt");
+            let prompt_key = cf_convert::cf_string_from_str("AXTrustedCheckOptionPrompt");
             let prompt_val = ffi::kCFBooleanTrue;
 
             let keys = [prompt_key.cast::<std::ffi::c_void>()];
@@ -360,5 +365,17 @@ impl DesktopProvider for DarwinProvider {
     fn request_screen_recording_permission(&self) -> bool {
         // SAFETY: CGRequestScreenCaptureAccess is a system call that prompts the user.
         unsafe { ffi::CGRequestScreenCaptureAccess() != 0 }
+    }
+
+    fn get_text_attributes(
+        &self,
+        app: &AppTarget,
+        reference: crate::core::element_tree::ElementRef,
+    ) -> Result<Option<crate::core::text_attrs::TextAttrsResult>, ForepawError> {
+        // Resolve ref to AX element, then extract text attributes.
+        let element = snapshot::resolve_ref_element(reference.id, app)?;
+        // SAFETY: element is a valid AXUIElementRef from resolve_ref_element.
+        let attrs = unsafe { text_attrs::get_text_attributes(element) };
+        Ok(attrs)
     }
 }

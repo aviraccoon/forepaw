@@ -21,6 +21,7 @@ pub mod signature;
 pub mod snapshot_cache;
 pub mod snapshot_diff;
 pub mod temp;
+pub mod text_attrs;
 pub mod tree_pruning;
 pub mod tree_renderer;
 pub mod types;

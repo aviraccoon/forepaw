@@ -8,7 +8,7 @@ use std::ptr;
 
 use crate::core::annotation::{Annotation, AnnotationStyle};
 use crate::core::role::AnnotationCategory;
-use crate::platform::darwin::app;
+use crate::platform::darwin::cf_convert;
 use crate::platform::darwin::ffi::{
     self, CFAttributedStringRef, CGColorRef, CGColorSpaceRef, CGContextRef, CGPointFFI, CGRectFFI,
     CGSizeFFI, CTFontRef,
@@ -109,7 +109,7 @@ fn category_color(color_space: CGColorSpaceRef, category: &AnnotationCategory) -
 
 /// Create a `CTFont` by name and size.
 fn create_font(name: &str, size: f64) -> CTFontRef {
-    let cf_name = app::cf_string_from_str(name);
+    let cf_name = cf_convert::cf_string_from_str(name);
     // SAFETY: CTFontCreateWithName with valid CFString name.
     let font = unsafe { ffi::CTFontCreateWithName(cf_name as ffi::CFStringRef, size, ptr::null()) };
     // SAFETY: CFRelease on a valid CFType we own.
@@ -123,7 +123,7 @@ fn create_attributed_string(
     font: CTFontRef,
     color: Option<CGColorRef>,
 ) -> CFAttributedStringRef {
-    let cf_text = app::cf_string_from_str(text);
+    let cf_text = cf_convert::cf_string_from_str(text);
 
     // SAFETY: FFI calls on valid CoreGraphics/CoreFoundation objects.
     #[expect(clippy::multiple_unsafe_ops_per_block, reason = "multiple FFI calls")]

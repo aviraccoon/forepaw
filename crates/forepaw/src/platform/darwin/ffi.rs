@@ -34,7 +34,7 @@ pub(super) struct CFArray(c_void);
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct CFDictionary(c_void);
+pub(super) struct CFDictionary(c_void);
 
 #[repr(C)]
 #[derive(Debug)]
@@ -200,6 +200,26 @@ extern "C" {
     pub(super) fn AXUIElementCopyActionNames(
         element: AXUIElementRef,
         action_names: *mut CFArrayRef,
+    ) -> AXError;
+
+    // Parameterized attributes (for text-level attributes)
+    pub(super) fn AXUIElementCopyParameterizedAttributeValue(
+        element: AXUIElementRef,
+        parameterized_attribute: CFStringRef,
+        parameter: CFTypeRef,
+        result: *mut CFTypeRef,
+    ) -> AXError;
+
+    pub(super) fn AXValueCreate(the_type: AXValueType, value_ptr: *const c_void) -> AXValueRef;
+
+    pub(super) fn AXUIElementCopyAttributeNames(
+        element: AXUIElementRef,
+        names: *mut CFArrayRef,
+    ) -> AXError;
+
+    pub(super) fn AXUIElementCopyParameterizedAttributeNames(
+        element: AXUIElementRef,
+        names: *mut CFArrayRef,
     ) -> AXError;
 }
 
@@ -458,6 +478,9 @@ extern "C" {
         rgb_color_space: CGColorSpaceRef,
         components: *const CGFloat,
     ) -> CGColorRef;
+    pub(super) fn CGColorGetTypeID() -> CFTypeID;
+    pub(super) fn CGColorGetNumberOfComponents(color: CGColorRef) -> usize;
+    pub(super) fn CGColorGetComponents(color: CGColorRef) -> *const CGFloat;
     pub(super) fn CGImageDestinationCreateWithURL(
         url: *const c_void,
         format: *const c_void,
@@ -587,6 +610,15 @@ pub(super) struct CFAttributedString(c_void);
 
 pub(super) type CFAttributedStringRef = *const CFAttributedString;
 
+/// CoreFoundation range struct.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub(super) struct CFRange {
+    pub location: CFIndex,
+    pub length: CFIndex,
+}
+pub(super) type CFRangeType = CFRange;
+
 #[link(name = "CoreText", kind = "framework")]
 extern "C" {
     pub(super) fn CTFontCreateWithName(
@@ -606,6 +638,16 @@ extern "C" {
         string: CFStringRef,
         attributes: CFDictionaryRef,
     ) -> CFAttributedStringRef;
+
+    pub(super) fn CFAttributedStringGetString(a_str: CFAttributedStringRef) -> CFStringRef;
+
+    pub(super) fn CFAttributedStringGetAttributes(
+        a_str: CFAttributedStringRef,
+        loc: CFIndex,
+        effective_range: *mut CFRangeType,
+    ) -> CFDictionaryRef;
+
+    pub(super) fn CFAttributedStringGetTypeID() -> CFTypeID;
 }
 
 // CoreText attribute key constants (defined as CFStringRef globals)

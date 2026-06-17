@@ -1,7 +1,7 @@
 //! AX tree snapshot: walk the accessibility tree and build an `ElementTree`.
 //!
 //! Uses batched attribute fetching (`AXUIElementCopyMultipleAttributeValues`)
-//! to fetch 13 attributes per element in a single IPC call. This is the key
+//! to fetch attributes per element in a single IPC call. This is the key
 //! optimization for slow AX responders like Music (~4x speedup).
 
 use std::collections::HashMap;
@@ -19,64 +19,69 @@ use crate::debug;
 use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
 
 use super::app::{
-    cf_string_from_str, electron_tree_is_populated, enable_electron_accessibility,
-    find_app_by_target, find_window, is_electron_app,
+    electron_tree_is_populated, enable_electron_accessibility, find_app_by_target, find_window,
+    is_electron_app,
 };
+use super::cf_convert::{cf_string_from_str, cf_string_to_rust, number_to_rust_string};
 use super::ffi::{
     kCFNull, kCFTypeArrayCallBacks, AXError, AXUIElementCopyAttributeValue,
     AXUIElementCopyMultipleAttributeValues, AXUIElementCreateApplication, AXUIElementRef,
     AXValueGetValue, AXValueRef, AXValueType, CFArrayCreate, CFArrayGetCount, CFArrayGetTypeID,
     CFArrayGetValueAtIndex, CFArrayRef, CFBooleanGetTypeID, CFBooleanGetValue, CFBooleanRef,
     CFGetTypeID, CFIndex, CFNumberGetTypeID, CFNumberGetValue, CFNumberRef, CFRelease, CFRetain,
-    CFStringGetCString, CFStringGetCStringPtr, CFStringGetLength, CFStringGetTypeID, CFStringRef,
-    CFTypeRef, CGPointFFI, CGSizeFFI, K_CF_NUMBER_DOUBLE_TYPE, K_CF_NUMBER_SINT32_TYPE,
-    K_CF_STRING_ENCODING_UTF8,
+    CFStringGetTypeID, CFStringRef, CFTypeRef, CGPointFFI, CGSizeFFI, K_CF_NUMBER_SINT32_TYPE,
 };
 use super::role::ax_role_to_role;
 
 const DEFAULT_DEPTH: usize = 15;
 const ELECTRON_DEPTH: usize = 25;
 
-// Batch attribute indices -- must match BATCH_ATTR_NAMES order.
-pub(super) const ATTR_ROLE: usize = 0;
-pub(super) const ATTR_TITLE: usize = 1;
-pub(super) const ATTR_DESCRIPTION: usize = 2;
-pub(super) const ATTR_VALUE: usize = 3;
-pub(super) const ATTR_POSITION: usize = 4;
-pub(super) const ATTR_SIZE: usize = 5;
-pub(super) const ATTR_CHILDREN: usize = 6;
-const ATTR_SUBROLE: usize = 7;
-const ATTR_TITLE_UI_ELEMENT: usize = 8;
-const ATTR_HELP: usize = 9;
-const ATTR_PLACEHOLDER_VALUE: usize = 10;
-const ATTR_DOM_CLASS_LIST: usize = 11;
-const ATTR_ROLE_DESCRIPTION: usize = 12;
-const ATTR_ENABLED: usize = 13;
-const ATTR_FOCUSED: usize = 14;
-const ATTR_SELECTED: usize = 15;
-const ATTR_IDENTIFIER: usize = 16;
-const ATTR_COUNT: usize = 17;
+// Batch attributes — define both the enum and the AX name mapping from one source.
+macro_rules! define_attrs {
+    ($(($name:ident, $ax_name:literal)),* $(,)?) => {
+        #[repr(usize)]
+        #[derive(Debug, Clone, Copy)]
+        pub(super) enum Attr {
+            $($name),*
+        }
 
-/// Attribute names for batch fetching.
-const BATCH_ATTR_NAMES: [&str; ATTR_COUNT] = [
-    "AXRole",             // 0
-    "AXTitle",            // 1
-    "AXDescription",      // 2
-    "AXValue",            // 3
-    "AXPosition",         // 4
-    "AXSize",             // 5
-    "AXChildren",         // 6
-    "AXSubrole",          // 7
-    "AXTitleUIElement",   // 8
-    "AXHelp",             // 9
-    "AXPlaceholderValue", // 10
-    "AXDOMClassList",     // 11
-    "AXRoleDescription",  // 12
-    "AXEnabled",          // 13
-    "AXFocused",          // 14
-    "AXSelected",         // 15
-    "AXIdentifier",       // 16
-];
+        /// All AX attribute names in discriminant order, for batch fetching.
+        const ATTR_NAMES: &[&str] = &[$($ax_name),*];
+    };
+}
+
+define_attrs! {
+    (Role, "AXRole"),
+    (Title, "AXTitle"),
+    (Description, "AXDescription"),
+    (Value, "AXValue"),
+    (Position, "AXPosition"),
+    (Size, "AXSize"),
+    (Children, "AXChildren"),
+    (Subrole, "AXSubrole"),
+    (TitleUIElement, "AXTitleUIElement"),
+    (Help, "AXHelp"),
+    (PlaceholderValue, "AXPlaceholderValue"),
+    (DOMClassList, "AXDOMClassList"),
+    (RoleDescription, "AXRoleDescription"),
+    (Enabled, "AXEnabled"),
+    (Focused, "AXFocused"),
+    (Selected, "AXSelected"),
+    (Identifier, "AXIdentifier"),
+    (Orientation, "AXOrientation"),
+    (Expanded, "AXExpanded"),
+    (MinValue, "AXMinValue"),
+    (MaxValue, "AXMaxValue"),
+    (ValueIncrement, "AXValueIncrement"),
+    (Url, "AXURL"),
+    (SortDirection, "AXSortDirection"),
+    (Index, "AXIndex"),
+    (Required, "AXRequired"),
+    (ElementBusy, "AXElementBusy"),
+    (DisclosureLevel, "AXDisclosureLevel"),
+    (AccessKey, "AXAccessKey"),
+    (Filename, "AXFilename"),
+}
 
 /// Cached `CFArray` of attribute name strings for batch fetching.
 /// Created once on first use, never freed.
@@ -93,10 +98,8 @@ unsafe impl Sync for SendableCFArray {}
 fn get_batch_attr_array() -> CFArrayRef {
     BATCH_ATTR_ARRAY
         .get_or_init(|| {
-            let cf_strings: Vec<CFStringRef> = BATCH_ATTR_NAMES
-                .iter()
-                .map(|s| cf_string_from_str(s))
-                .collect();
+            let cf_strings: Vec<CFStringRef> =
+                ATTR_NAMES.iter().map(|s| cf_string_from_str(s)).collect();
             let ptrs: Vec<*const std::ffi::c_void> =
                 cf_strings.iter().map(|s| (*s).cast()).collect();
             // SAFETY: CFArrayCreate produces an immutable array from valid CFStrings.
@@ -326,19 +329,16 @@ impl BatchAttrs {
         Self { array }
     }
 
-    /// Get the raw `CFTypeRef` at the given index, or None if missing/kCFNull.
-    fn raw(&self, idx: usize) -> Option<CFTypeRef> {
-        if idx >= ATTR_COUNT {
-            return None;
-        }
-        // SAFETY: index is in bounds (checked above), self.array is valid CFArray.
+    /// Get the raw `CFTypeRef` at the given attribute, or None if missing/kCFNull.
+    fn raw(&self, attr: Attr) -> Option<CFTypeRef> {
+        // SAFETY: attr is a valid Attr discriminant (0..23), self.array is valid CFArray.
         unsafe {
             #[expect(
                 clippy::cast_possible_wrap,
-                reason = "AX child index fits in CFIndex (i64)"
+                reason = "Attr discriminant fits in CFIndex (i64)"
             )]
-            let cf_index = idx as CFIndex;
-            let val = CFArrayGetValueAtIndex(self.array, cf_index);
+            let idx = attr as usize as CFIndex;
+            let val = CFArrayGetValueAtIndex(self.array, idx);
             if val.is_null() {
                 return None;
             }
@@ -351,8 +351,8 @@ impl BatchAttrs {
     }
 
     /// Extract a String attribute.
-    pub(super) fn string(&self, idx: usize) -> Option<String> {
-        let val = self.raw(idx)?;
+    pub(super) fn string(&self, attr: Attr) -> Option<String> {
+        let val = self.raw(attr)?;
         #[expect(
             clippy::multiple_unsafe_ops_per_block,
             reason = "type check + conversion"
@@ -367,9 +367,9 @@ impl BatchAttrs {
         }
     }
 
-    /// Extract the value attribute (index 3), which can be `CFString` or `CFNumber`.
-    pub(super) fn value_string(&self, idx: usize) -> Option<String> {
-        let val = self.raw(idx)?;
+    /// Extract the value attribute, which can be `CFString` or `CFNumber`.
+    pub(super) fn value_string(&self, attr: Attr) -> Option<String> {
+        let val = self.raw(attr)?;
         #[expect(
             clippy::multiple_unsafe_ops_per_block,
             reason = "type dispatch + conversion"
@@ -388,8 +388,8 @@ impl BatchAttrs {
     }
 
     /// Extract a `CGPoint` from an `AXValue` attribute.
-    fn point(&self, idx: usize) -> Option<Point> {
-        let val = self.raw(idx)?;
+    fn point(&self, attr: Attr) -> Option<Point> {
+        let val = self.raw(attr)?;
         // SAFETY: AXValueGetValue reads a CGPoint from a valid AXValue.
         unsafe {
             let mut pt = CGPointFFI { x: 0.0, y: 0.0 };
@@ -407,8 +407,8 @@ impl BatchAttrs {
     }
 
     /// Extract a `CGSize` from an `AXValue` attribute.
-    fn size_val(&self, idx: usize) -> Option<(f64, f64)> {
-        let val = self.raw(idx)?;
+    fn size_val(&self, attr: Attr) -> Option<(f64, f64)> {
+        let val = self.raw(attr)?;
         // SAFETY: AXValueGetValue reads a CGSize from a valid AXValue.
         unsafe {
             let mut sz = CGSizeFFI {
@@ -428,16 +428,16 @@ impl BatchAttrs {
         }
     }
 
-    /// Build a Rect from position (`pos_idx`) and size (`size_idx`) attributes.
-    pub(super) fn bounds(&self, pos_idx: usize, size_idx: usize) -> Option<Rect> {
-        let pt = self.point(pos_idx)?;
-        let (w, h) = self.size_val(size_idx)?;
+    /// Build a Rect from position and size attributes.
+    pub(super) fn bounds(&self, pos: Attr, size: Attr) -> Option<Rect> {
+        let pt = self.point(pos)?;
+        let (w, h) = self.size_val(size)?;
         Some(Rect::new(pt.x, pt.y, w, h))
     }
 
     /// Extract a bool from a `CFBoolean` attribute.
-    fn bool_val(&self, idx: usize) -> Option<bool> {
-        let val = self.raw(idx)?;
+    fn bool_val(&self, attr: Attr) -> Option<bool> {
+        let val = self.raw(attr)?;
         #[expect(
             clippy::multiple_unsafe_ops_per_block,
             reason = "type check + bool conversion"
@@ -467,8 +467,8 @@ impl BatchAttrs {
     }
 
     /// Extract child `AXUIElement` refs from the `AXChildren` attribute.
-    pub(super) fn children(&self, idx: usize) -> Vec<AXUIElementRef> {
-        let Some(val) = self.raw(idx) else {
+    pub(super) fn children(&self, attr: Attr) -> Vec<AXUIElementRef> {
+        let Some(val) = self.raw(attr) else {
             return Vec::new();
         };
         #[expect(
@@ -500,15 +500,15 @@ impl BatchAttrs {
     }
 
     /// Extract a single `AXUIElement` ref (e.g. for `AXTitleUIElement`).
-    fn element(&self, idx: usize) -> Option<AXUIElementRef> {
-        let val = self.raw(idx)?;
+    fn element(&self, attr: Attr) -> Option<AXUIElementRef> {
+        let val = self.raw(attr)?;
         // SAFETY: AXUIElementRef::from_raw wraps the raw pointer.
         unsafe { Some(AXUIElementRef::from_raw(val.cast::<std::ffi::c_void>())) }
     }
 
     /// Extract a `CFArray` of `CFStrings` (e.g. for `AXDOMClassList`).
-    fn string_array(&self, idx: usize) -> Option<Vec<String>> {
-        let val = self.raw(idx)?;
+    fn string_array(&self, attr: Attr) -> Option<Vec<String>> {
+        let val = self.raw(attr)?;
         #[expect(
             clippy::multiple_unsafe_ops_per_block,
             reason = "CFArray iteration + type dispatch"
@@ -587,7 +587,7 @@ fn build_tree(
     };
 
     let role_str = attrs
-        .string(ATTR_ROLE)
+        .string(Attr::Role)
         .unwrap_or_else(|| "AXUnknown".to_owned());
     let role = ax_role_to_role(&role_str);
 
@@ -596,7 +596,7 @@ fn build_tree(
     let native_role = Some(role_str);
     let identifier =
         attrs
-            .string(ATTR_IDENTIFIER)
+            .string(Attr::Identifier)
             .and_then(|id| if id.is_empty() { None } else { Some(id) });
 
     // Skip menu bar subtree if requested.
@@ -604,16 +604,10 @@ fn build_tree(
         return ElementNode::new(ElementData::new(role));
     }
 
-    let value = attrs.value_string(ATTR_VALUE);
-    let bounds = attrs.bounds(ATTR_POSITION, ATTR_SIZE);
+    let value = attrs.value_string(Attr::Value);
+    let bounds = attrs.bounds(Attr::Position, Attr::Size);
 
-    // Collect subrole attribute.
-    let mut attributes: Vec<(String, String)> = Vec::new();
-    if let Some(subrole) = attrs.string(ATTR_SUBROLE) {
-        if !subrole.is_empty() && subrole != "AXNone" {
-            attributes.push(("subrole".to_owned(), subrole));
-        }
-    }
+    let attributes = collect_extra_attributes(&attrs);
 
     // Check pruning conditions (zero-size and offscreen).
     if let Some(pruned) = check_pruned(
@@ -631,7 +625,7 @@ fn build_tree(
     // Build children BEFORE computing name. This lets computedName read
     // names/values from already-built child ElementNodes instead of making
     // individual IPC calls.
-    let children_refs = attrs.children(ATTR_CHILDREN);
+    let children_refs = attrs.children(Attr::Children);
     let mut children: Vec<ElementNode> = children_refs
         .iter()
         .map(|child| build_tree(*child, depth + 1, max_depth, pruning))
@@ -664,21 +658,21 @@ fn build_tree(
         }
     }
 
-    let name = non_empty(attrs.string(ATTR_TITLE).as_ref())
-        .or_else(|| non_empty(attrs.string(ATTR_DESCRIPTION).as_ref()))
+    let name = non_empty(attrs.string(Attr::Title).as_ref())
+        .or_else(|| non_empty(attrs.string(Attr::Description).as_ref()))
         .or_else(|| computed_name(&attrs, &children, element));
 
-    let enabled = attrs.bool_val(ATTR_ENABLED);
+    let enabled = attrs.bool_val(Attr::Enabled);
     // Note: AXFocused conflates focusable and focused on macOS (W3C Core-AAM).
     // The actual focused element is AXFocusedUIElement on the app (separate IPC).
-    let focused = attrs.bool_val(ATTR_FOCUSED);
-    let selected = attrs.bool_val(ATTR_SELECTED);
+    let focused = attrs.bool_val(Attr::Focused);
+    let selected = attrs.bool_val(Attr::Selected);
 
     // Description: use AXDescription if it wasn't already used as the name.
     // (computed_name already falls back to AXDescription, so only show it
     // if it's different from the title and wasn't consumed by name resolution.)
     let description = attrs
-        .string(ATTR_DESCRIPTION)
+        .string(Attr::Description)
         .and_then(|d| if d.is_empty() { None } else { Some(d) })
         .filter(|d| name.as_ref() != Some(d));
 
@@ -704,6 +698,105 @@ fn build_tree(
     }
 }
 
+/// Collect platform-specific extra attributes from the batch fetch.
+/// These are shown in verbose output or JSON as key-value pairs.
+fn collect_extra_attributes(attrs: &BatchAttrs) -> Vec<(String, String)> {
+    let mut attributes = Vec::new();
+
+    if let Some(subrole) = attrs.string(Attr::Subrole) {
+        if !subrole.is_empty() && subrole != "AXNone" {
+            attributes.push(("subrole".to_owned(), subrole));
+        }
+    }
+
+    // Orientation (horizontal/vertical). Unknown is omitted.
+    if let Some(orientation) = attrs.string(Attr::Orientation) {
+        if orientation == "AXHorizontalOrientation" {
+            attributes.push(("orientation".to_owned(), "horizontal".to_owned()));
+        } else if orientation == "AXVerticalOrientation" {
+            attributes.push(("orientation".to_owned(), "vertical".to_owned()));
+        }
+    }
+
+    // Expanded state (disclosure triangles, combo boxes, pop-up buttons).
+    if let Some(expanded) = attrs.bool_val(Attr::Expanded) {
+        attributes.push(("expanded".to_owned(), expanded.to_string()));
+    }
+
+    // Min/max value and increment (sliders, scroll bars, steppers).
+    if let Some(min_val) = attrs.value_string(Attr::MinValue) {
+        if !min_val.is_empty() {
+            attributes.push(("min_value".to_owned(), min_val));
+        }
+    }
+    if let Some(max_val) = attrs.value_string(Attr::MaxValue) {
+        if !max_val.is_empty() {
+            attributes.push(("max_value".to_owned(), max_val));
+        }
+    }
+    if let Some(increment) = attrs.value_string(Attr::ValueIncrement) {
+        if !increment.is_empty() {
+            attributes.push(("value_increment".to_owned(), increment));
+        }
+    }
+
+    // URL (links, web areas).
+    if let Some(url) = attrs.string(Attr::Url) {
+        if !url.is_empty() && url != "about:blank" {
+            attributes.push(("url".to_owned(), url));
+        }
+    }
+
+    // Sort direction (column headers).
+    if let Some(dir) = attrs.string(Attr::SortDirection) {
+        match dir.as_str() {
+            "AXAscendingSortDirection" => {
+                attributes.push(("sort_direction".to_owned(), "ascending".to_owned()));
+            }
+            "AXDescendingSortDirection" => {
+                attributes.push(("sort_direction".to_owned(), "descending".to_owned()));
+            }
+            _ => {}
+        }
+    }
+
+    // Index (tab/row/column position).
+    if let Some(idx) = attrs.value_string(Attr::Index) {
+        attributes.push(("index".to_owned(), idx));
+    }
+
+    // Required (form fields).
+    if let Some(req) = attrs.bool_val(Attr::Required) {
+        attributes.push(("required".to_owned(), req.to_string()));
+    }
+
+    // Element busy (async loading).
+    if let Some(busy) = attrs.bool_val(Attr::ElementBusy) {
+        attributes.push(("element_busy".to_owned(), busy.to_string()));
+    }
+
+    // Disclosure level (outline/tree indentation).
+    if let Some(level) = attrs.value_string(Attr::DisclosureLevel) {
+        attributes.push(("disclosure_level".to_owned(), level));
+    }
+
+    // Access key (web keyboard shortcut).
+    if let Some(key) = attrs.string(Attr::AccessKey) {
+        if !key.is_empty() {
+            attributes.push(("access_key".to_owned(), key));
+        }
+    }
+
+    // Filename (file dialogs, Finder).
+    if let Some(name) = attrs.string(Attr::Filename) {
+        if !name.is_empty() {
+            attributes.push(("filename".to_owned(), name));
+        }
+    }
+
+    attributes
+}
+
 /// Check if this element should be pruned (zero-size or offscreen).
 /// Returns `Some(pruned_node)` if the element should be skipped.
 fn check_pruned(
@@ -719,8 +812,8 @@ fn check_pruned(
     if pruning.options.skip_zero_size {
         if let Some(b) = bounds {
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
-                let name = non_empty(attrs.string(ATTR_TITLE).as_ref())
-                    .or_else(|| non_empty(attrs.string(ATTR_DESCRIPTION).as_ref()))
+                let name = non_empty(attrs.string(Attr::Title).as_ref())
+                    .or_else(|| non_empty(attrs.string(Attr::Description).as_ref()))
                     .or_else(|| computed_name(attrs, &[], element));
                 let mut data = ElementData::new(role).with_name_opt(name).with_bounds(*b);
                 if let Some(v) = value {
@@ -737,7 +830,7 @@ fn check_pruned(
             let no_horizontal = b.x + b.width <= wb.x || b.x >= wb.x + wb.width;
             let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
             if no_horizontal || no_vertical {
-                let name = non_empty(attrs.string(ATTR_TITLE).as_ref());
+                let name = non_empty(attrs.string(Attr::Title).as_ref());
                 return Some(ElementNode::new(
                     ElementData::new(role).with_name_opt(name).with_bounds(*b),
                 ));
@@ -767,7 +860,7 @@ fn computed_name(
     _element: AXUIElementRef,
 ) -> Option<String> {
     // 1. AXTitleUIElement (index 8) -> read its value or title.
-    if let Some(title_element) = attrs.element(ATTR_TITLE_UI_ELEMENT) {
+    if let Some(title_element) = attrs.element(Attr::TitleUIElement) {
         if let Some(val) = get_ax_string_attr(title_element, "AXValue") {
             if !val.is_empty() {
                 return Some(val);
@@ -799,21 +892,21 @@ fn computed_name(
     }
 
     // 3. AXHelp (index 9)
-    if let Some(help) = attrs.string(ATTR_HELP) {
+    if let Some(help) = attrs.string(Attr::Help) {
         if !help.is_empty() {
             return Some(help);
         }
     }
 
     // 4. AXPlaceholderValue (index 10)
-    if let Some(placeholder) = attrs.string(ATTR_PLACEHOLDER_VALUE) {
+    if let Some(placeholder) = attrs.string(Attr::PlaceholderValue) {
         if !placeholder.is_empty() {
             return Some(placeholder);
         }
     }
 
     // 5. AXDOMClassList (index 11) -> icon class parsing
-    if let Some(class_list) = attrs.string_array(ATTR_DOM_CLASS_LIST) {
+    if let Some(class_list) = attrs.string_array(Attr::DOMClassList) {
         let class_refs: Vec<&str> = class_list.iter().map(String::as_str).collect();
         if let Some(icon_name) = IconClassParser::new().parse(&class_refs) {
             return Some(icon_name);
@@ -821,7 +914,7 @@ fn computed_name(
     }
 
     // 6. AXRoleDescription (index 12)
-    if let Some(role_desc) = attrs.string(ATTR_ROLE_DESCRIPTION) {
+    if let Some(role_desc) = attrs.string(Attr::RoleDescription) {
         if !role_desc.is_empty() && !GENERIC_ROLE_DESCRIPTIONS.contains(&role_desc.as_str()) {
             return Some(role_desc);
         }
@@ -1031,89 +1124,6 @@ pub fn get_element_size(element: AXUIElementRef) -> Option<(f64, f64)> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// CFType conversion helpers
-// ---------------------------------------------------------------------------
-
-/// Convert a `CFStringRef` to a Rust String. Handles both ASCII (fast path)
-/// and non-ASCII (buffer copy) strings.
-pub(super) fn cf_string_to_rust(cf_str: CFStringRef) -> Option<String> {
-    #[expect(
-        clippy::multiple_unsafe_ops_per_block,
-        reason = "CFString fast ptr + slow buffer"
-    )]
-    // SAFETY: CFString conversion on valid CFStringRef.
-    unsafe {
-        // Fast path: ASCII/null-fast strings
-        let ptr = CFStringGetCStringPtr(cf_str, K_CF_STRING_ENCODING_UTF8);
-        if !ptr.is_null() {
-            return std::ffi::CStr::from_ptr(ptr)
-                .to_str()
-                .ok()
-                .map(String::from);
-        }
-        // Slow path: non-ASCII strings need a buffer copy
-        let len = CFStringGetLength(cf_str);
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "CFString length fits in usize"
-        )]
-        #[expect(clippy::cast_sign_loss, reason = "CFString length is non-negative")]
-        let len_usize = len as usize;
-        let mut buf = vec![0_u8; (len_usize + 1) * 4]; // worst case: 4 bytes per char
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "buffer length fits in CFIndex (i64)"
-        )]
-        let buf_len = buf.len() as CFIndex;
-        if CFStringGetCString(
-            cf_str,
-            buf.as_mut_ptr().cast::<std::ffi::c_char>(),
-            buf_len,
-            K_CF_STRING_ENCODING_UTF8,
-        ) {
-            let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-            buf.get(..end)
-                .and_then(|slice| std::str::from_utf8(slice).ok())
-                .map(String::from)
-        } else {
-            None
-        }
-    }
-}
-
-/// Convert a `CFNumber` to a Rust String. Tries integer first, then float.
-fn number_to_rust_string(number: CFNumberRef) -> Option<String> {
-    #[expect(
-        clippy::multiple_unsafe_ops_per_block,
-        reason = "CFNumber type dispatch"
-    )]
-    // SAFETY: CFNumberGetValue reads from valid CFNumber.
-    unsafe {
-        // Try as i64 first (most AX values are integers)
-        let mut val: i64 = 0;
-        // K_CF_NUMBER_SINT64_TYPE = 4 (not in our FFI, use raw value)
-        if CFNumberGetValue(number, 4, (&raw mut val).cast::<std::ffi::c_void>()) != 0 {
-            return Some(val.to_string());
-        }
-        // Fallback: f64
-        let mut fval: f64 = 0.0;
-        if CFNumberGetValue(
-            number,
-            K_CF_NUMBER_DOUBLE_TYPE,
-            (&raw mut fval).cast::<std::ffi::c_void>(),
-        ) != 0
-        {
-            return Some(if (fval - fval.floor()).abs() < f64::EPSILON {
-                format!("{fval:.0}")
-            } else {
-                format!("{fval}")
-            });
-        }
-        None
-    }
-}
-
 /// Return None for empty strings -- AX APIs often return "" rather than nil.
 pub(super) fn non_empty(s: Option<&String>) -> Option<String> {
     s.and_then(|v| if v.is_empty() { None } else { Some(v.clone()) })
@@ -1230,37 +1240,6 @@ mod tests {
         let no_horizontal = partial.x + partial.width <= wb.x || partial.x >= wb.x + wb.width;
         let no_vertical = partial.y + partial.height <= wb.y || partial.y >= wb.y + wb.height;
         assert!(!no_horizontal && !no_vertical);
-    }
-
-    // --- Batch attribute constants ---
-
-    #[test]
-    fn batch_attr_names_match_indices() {
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_ROLE], "AXRole");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_TITLE], "AXTitle");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_DESCRIPTION], "AXDescription");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_VALUE], "AXValue");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_POSITION], "AXPosition");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_SIZE], "AXSize");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_CHILDREN], "AXChildren");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_SUBROLE], "AXSubrole");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_TITLE_UI_ELEMENT], "AXTitleUIElement");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_HELP], "AXHelp");
-        assert_eq!(
-            BATCH_ATTR_NAMES[ATTR_PLACEHOLDER_VALUE],
-            "AXPlaceholderValue"
-        );
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_DOM_CLASS_LIST], "AXDOMClassList");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_ROLE_DESCRIPTION], "AXRoleDescription");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_ENABLED], "AXEnabled");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_FOCUSED], "AXFocused");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_SELECTED], "AXSelected");
-        assert_eq!(BATCH_ATTR_NAMES[ATTR_IDENTIFIER], "AXIdentifier");
-    }
-
-    #[test]
-    fn batch_attr_count_matches_names() {
-        assert_eq!(BATCH_ATTR_NAMES.len(), ATTR_COUNT);
     }
 
     // --- Snapshot options defaults ---
