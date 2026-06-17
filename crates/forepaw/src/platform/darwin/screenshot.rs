@@ -407,7 +407,9 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
         max_depth: SnapshotOptions::DEFAULT_DEPTH,
         ..Default::default()
     };
-    let tree = snapshot::snapshot(app, params.window, &snapshot_opts)?;
+    // The ref→handle cache from this snapshot isn't needed for annotation;
+    // dropping it releases the retained handles.
+    let (tree, _handles) = snapshot::snapshot(app, params.window, &snapshot_opts)?;
 
     // Determine window bounds for coordinate conversion
     let window_bounds = if let Some(resolved) = resolved_window.as_ref() {

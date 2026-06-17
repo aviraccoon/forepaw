@@ -27,18 +27,46 @@ pub mod screenshot;
 pub mod snapshot;
 pub mod text_attrs;
 
+use std::sync::Mutex;
+
 use crate::core::errors::ForepawError;
 use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
 
 /// macOS implementation of `DesktopProvider`.
 #[derive(Debug)]
-pub struct DarwinProvider;
+pub struct DarwinProvider {
+    /// Ref→`AXUIElement` cache from the most recent `snapshot`, used to resolve
+    /// refs in O(1) without re-walking the AX tree. Replaced wholesale on each
+    /// `snapshot`; handles are retained on insertion and released on eviction.
+    /// Bounded by the interactive-node count of the single latest snapshot —
+    /// repeated snapshots replace (don't accumulate), so there is no unbounded
+    /// growth, only retain/release churn proportional to snapshot size.
+    /// Darwin-internal — never exposed across the public API.
+    ref_handles: Mutex<snapshot::RefHandleMap>,
+}
 
 impl DarwinProvider {
     /// Create a new Darwin platform provider.
     #[must_use]
     pub fn new() -> Self {
-        Self
+        Self {
+            ref_handles: Mutex::new(snapshot::RefHandleMap::empty()),
+        }
+    }
+
+    /// Look up a retained handle for `ref_id` from the last snapshot's cache.
+    ///
+    /// Returns `None` if not cached. The returned handle carries a +1 retain so
+    /// it stays valid after the lock is released; callers use it without
+    /// releasing (matching the historical resolve contract).
+    fn cached_handle(&self, ref_id: i32) -> Option<ffi::AXUIElementRef> {
+        let cache = self.ref_handles.lock().expect("ref_handles mutex poisoned");
+        cache.get(ref_id).map(|handle| {
+            // SAFETY: CFRetain under the lock so the handle outlives the scope.
+            // Balanced by the cache's own retain (released on snapshot replace).
+            unsafe { ffi::CFRetain(handle.0 as ffi::CFTypeRef) };
+            *handle
+        })
     }
 }
 
@@ -66,7 +94,11 @@ impl DesktopProvider for DarwinProvider {
         window: Option<&WindowTarget>,
         options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
-        snapshot::snapshot(app, window, options)
+        let (tree, handles) = snapshot::snapshot(app, window, options)?;
+        // Replace the ref→handle cache. The old map drops and releases its
+        // handles; the new one is retained from this snapshot's walk.
+        *self.ref_handles.lock().expect("ref_handles mutex poisoned") = handles;
+        Ok(tree)
     }
 
     fn screenshot(
@@ -92,7 +124,8 @@ impl DesktopProvider for DarwinProvider {
         app: &AppTarget,
         options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        input::click_ref(reference, app, options)
+        let cached = self.cached_handle(reference.id);
+        input::click_ref(reference, app, options, cached)
     }
 
     fn click_at_point(
@@ -119,7 +152,8 @@ impl DesktopProvider for DarwinProvider {
         reference: crate::core::element_tree::ElementRef,
         app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        input::hover_ref(reference, app)
+        let cached = self.cached_handle(reference.id);
+        input::hover_ref(reference, app, cached)
     }
 
     fn hover_at_point(
@@ -157,7 +191,8 @@ impl DesktopProvider for DarwinProvider {
         text: &str,
         app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        input::type_ref(reference, text, app)
+        let cached = self.cached_handle(reference.id);
+        input::type_ref(reference, text, app, cached)
     }
 
     fn keyboard_type(
@@ -185,7 +220,8 @@ impl DesktopProvider for DarwinProvider {
         reference: Option<crate::core::element_tree::ElementRef>,
         at: Option<crate::core::types::Point>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        input::scroll(direction, amount, app, window, reference, at)
+        let cached = reference.and_then(|r| self.cached_handle(r.id));
+        input::scroll(direction, amount, app, window, reference, at, cached)
     }
 
     fn drag_path(
@@ -204,7 +240,9 @@ impl DesktopProvider for DarwinProvider {
         app: &AppTarget,
         options: &crate::core::key_combo::DragOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        input::drag_refs(from, to, app, options)
+        let from_cached = self.cached_handle(from.id);
+        let to_cached = self.cached_handle(to.id);
+        input::drag_refs(from, to, app, options, from_cached, to_cached)
     }
 
     fn ocr_click(
@@ -234,7 +272,8 @@ impl DesktopProvider for DarwinProvider {
         reference: crate::core::element_tree::ElementRef,
         app: &AppTarget,
     ) -> Result<crate::core::types::Point, ForepawError> {
-        snapshot::resolve_ref_position(reference.id, app)
+        let cached = self.cached_handle(reference.id);
+        snapshot::resolve_ref_position(reference.id, app, cached)
     }
 
     fn resolve_ref_bounds(
@@ -242,7 +281,8 @@ impl DesktopProvider for DarwinProvider {
         reference: crate::core::element_tree::ElementRef,
         app: &AppTarget,
     ) -> Result<crate::core::types::Rect, ForepawError> {
-        snapshot::resolve_ref_bounds(reference.id, app)
+        let cached = self.cached_handle(reference.id);
+        snapshot::resolve_ref_bounds(reference.id, app, cached)
     }
 
     fn element_at_point(
@@ -373,7 +413,8 @@ impl DesktopProvider for DarwinProvider {
         reference: crate::core::element_tree::ElementRef,
     ) -> Result<Option<crate::core::text_attrs::TextAttrsResult>, ForepawError> {
         // Resolve ref to AX element, then extract text attributes.
-        let element = snapshot::resolve_ref_element(reference.id, app)?;
+        let cached = self.cached_handle(reference.id);
+        let element = snapshot::resolve_ref_element(reference.id, app, cached)?;
         // SAFETY: element is a valid AXUIElementRef from resolve_ref_element.
         let attrs = unsafe { text_attrs::get_text_attributes(element) };
         Ok(attrs)

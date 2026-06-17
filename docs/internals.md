@@ -189,15 +189,13 @@ Refs are assigned by `RefAssigner` (`crates/forepaw/src/core/ref_assigner.rs`), 
 
 The `interactive_only` flag controls whether non-interactive elements get refs. In snapshot mode, only interactive elements get `@eN` labels. The `--interactive` flag includes all elements if needed.
 
-During tree construction on macOS, `AXUIElement` handles are collected alongside ref positions. On Windows and Linux, refs are re-resolved by re-walking the tree on each CLI invocation — no handle caching.
+During tree construction on macOS, `AXUIElement` handles are collected alongside ref positions and cached on the provider (`DarwinProvider`), so ref resolution is an O(1) map lookup instead of a tree re-walk. The cache is replaced wholesale on each `snapshot`; handles are retained on insertion and released on eviction. Windows and Linux keep no such cache (their resolve paths are not yet implemented).
 
 ### Ref resolution across invocations
 
-Each CLI invocation creates a fresh provider instance. Refs from `snapshot` are just positional numbers. When `click @e10 --app Finder` runs, the provider re-walks the tree counting interactive elements until it hits the 10th one.
+Refs are just positional numbers. On macOS, resolving a ref (e.g. `click @e10 --app Finder`) returns the `AXUIElement` handle retained during the most recent `snapshot` on the same provider instance — an O(1) lookup. This is what makes a single in-process pass over N elements cheap: N full tree walks collapse to N lookups. When no handle is cached, it falls back to a full re-walk that mirrors `RefAssigner`'s depth-first counter over interactive elements. That fallback fetches only role + children per node (no batched attribute fetching), so it is slower per node than the snapshot walk — the cost grows with tree size. The CLI builds a fresh provider per invocation, so its one-shot commands always fall back to the re-walk; the cache benefits long-lived in-process consumers.
 
-This works as long as the UI hasn't changed between snapshot and action. If the UI did change (menu opened, dialog appeared), the ref is stale and may point to a different element. The lightweight re-walk only fetches role + children (no batching, no full attributes) — ~200ms for a 15k-node tree.
-
-Ref resolution uses the same depth as snapshot (15 for native, 25 for Electron). Using a non-default `--depth` on snapshot makes refs inconsistent with action commands.
+A ref is only valid against the snapshot that produced it. If the UI changed between snapshot and action (menu opened, dialog appeared), the ref is stale and may point to a different element — "resolve targets the latest snapshot on this provider" is the contract. The fallback re-walk uses the same depth as snapshot (15 for native, 25 for Electron); using a non-default `--depth` on snapshot makes refs inconsistent with action commands that hit the fallback.
 
 ## Action dispatch
 

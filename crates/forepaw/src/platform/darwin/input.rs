@@ -723,9 +723,10 @@ pub fn click_ref(
     reference: crate::core::element_tree::ElementRef,
     app: &AppTarget,
     options: &ClickOptions,
+    cached: Option<ffi::AXUIElementRef>,
 ) -> Result<ActionResult, ForepawError> {
     let (_, pid) = activate_app(app)?;
-    let element = snapshot::resolve_ref_element(reference.id, app)?;
+    let element = snapshot::resolve_ref_element(reference.id, app, cached)?;
     click_element(element, options, Some(pid))
 }
 
@@ -804,9 +805,10 @@ pub fn click_region(
 pub fn hover_ref(
     reference: crate::core::element_tree::ElementRef,
     app: &AppTarget,
+    cached: Option<ffi::AXUIElementRef>,
 ) -> Result<ActionResult, ForepawError> {
     let (_, pid) = activate_app(app)?;
-    let element = snapshot::resolve_ref_element(reference.id, app)?;
+    let element = snapshot::resolve_ref_element(reference.id, app, cached)?;
 
     let pos = snapshot::get_element_position(element).ok_or_else(|| {
         ForepawError::ActionFailed(format!("Cannot determine position of {reference}"))
@@ -897,9 +899,10 @@ pub fn type_ref(
     reference: crate::core::element_tree::ElementRef,
     text: &str,
     app: &AppTarget,
+    cached: Option<ffi::AXUIElementRef>,
 ) -> Result<ActionResult, ForepawError> {
     activate_app(app)?;
-    let element = snapshot::resolve_ref_element(reference.id, app)?;
+    let element = snapshot::resolve_ref_element(reference.id, app, cached)?;
     set_value_on_element(element, text)
 }
 
@@ -944,6 +947,7 @@ pub fn scroll(
     window: Option<&WindowTarget>,
     reference: Option<crate::core::element_tree::ElementRef>,
     at: Option<Point>,
+    cached: Option<ffi::AXUIElementRef>,
 ) -> Result<ActionResult, ForepawError> {
     let (_, pid, resolved) = activate_and_resolve_window(app, window)?;
 
@@ -959,7 +963,7 @@ pub fn scroll(
         }
     } else if let Some(reference) = reference {
         // Scroll at element center
-        let element = snapshot::resolve_ref_element(reference.id, app)?;
+        let element = snapshot::resolve_ref_element(reference.id, app, cached)?;
         let pos = snapshot::get_element_position(element).ok_or_else(|| {
             ForepawError::ActionFailed(format!("Cannot determine position of {reference}"))
         })?;
@@ -1092,11 +1096,13 @@ pub fn drag_refs(
     to_ref: crate::core::element_tree::ElementRef,
     app: &AppTarget,
     options: &DragOptions,
+    from_cached: Option<ffi::AXUIElementRef>,
+    to_cached: Option<ffi::AXUIElementRef>,
 ) -> Result<ActionResult, ForepawError> {
     let (_, pid) = activate_app(app)?;
 
-    let from = snapshot::resolve_ref_position(from_ref.id, app)?;
-    let to = snapshot::resolve_ref_position(to_ref.id, app)?;
+    let from = snapshot::resolve_ref_position(from_ref.id, app, from_cached)?;
+    let to = snapshot::resolve_ref_position(to_ref.id, app, to_cached)?;
 
     let from_screen = app::to_screen_point(&from, pid)?;
     let to_screen = app::to_screen_point(&to, pid)?;

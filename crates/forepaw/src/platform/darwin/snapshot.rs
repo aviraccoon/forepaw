@@ -171,17 +171,18 @@ const GENERIC_ROLE_DESCRIPTIONS: &[&str] = &[
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Walk the AX tree for the given app and return an `ElementTree`.
+/// Walk the AX tree for the given app, returning the `ElementTree` and a
+/// ref→handle cache captured during the walk (used for O(1) ref resolution).
 ///
 /// # Errors
 ///
 /// Returns [`ForepawError::AppNotFound`] if the application is not running,
 /// or [`ForepawError::PermissionDenied`] if accessibility access is not granted.
-pub fn snapshot(
+pub(super) fn snapshot(
     app: &AppTarget,
     window: Option<&WindowTarget>,
     options: &SnapshotOptions,
-) -> Result<ElementTree, ForepawError> {
+) -> Result<(ElementTree, RefHandleMap), ForepawError> {
     let running_app = find_app_by_target(app)?;
 
     // Activate the app so the AX tree matches what action commands will see.
@@ -247,11 +248,16 @@ pub fn snapshot(
     };
 
     let walk_start = std::time::Instant::now();
-    let root = build_tree(app_element, 0, effective_depth, &pruning);
+    let (root, handle_root) = build_tree(app_element, 0, effective_depth, &pruning);
     let walk_ms = walk_start.elapsed().as_secs_f64() * 1000.0;
 
     let assigner = RefAssigner::new();
     let result = assigner.assign(&root, options.interactive_only);
+
+    // Capture ref→handle from the same walk that produced the tree, so resolve
+    // calls are O(1) lookups instead of a full re-walk. Mirrors `RefAssigner`'s
+    // pre-order counter over interactive nodes.
+    let ref_handles = build_ref_handle_map(&handle_root);
 
     let timing = if options.timing {
         let node_count = SnapshotTiming::count_nodes(&result.root);
@@ -264,37 +270,48 @@ pub fn snapshot(
         None
     };
 
-    Ok(ElementTree {
-        app: app.display(),
-        root: result.root,
-        refs: result.refs,
-        window_bounds,
-        timing,
-    })
+    Ok((
+        ElementTree {
+            app: app.display(),
+            root: result.root,
+            refs: result.refs,
+            window_bounds,
+            timing,
+        },
+        ref_handles,
+    ))
 }
 
-/// Re-walk the tree to resolve a ref's center position (for coordinate-based actions).
+/// Resolve a ref to its center position, using a retained handle when available.
 ///
 /// # Errors
 ///
 /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
 /// or [`ForepawError::ActionFailed`] if the element has no position or size.
-pub fn resolve_ref_position(ref_id: i32, app: &AppTarget) -> Result<Point, ForepawError> {
-    let bounds = resolve_ref_bounds(ref_id, app)?;
+pub fn resolve_ref_position(
+    ref_id: i32,
+    app: &AppTarget,
+    cached: Option<AXUIElementRef>,
+) -> Result<Point, ForepawError> {
+    let bounds = resolve_ref_bounds(ref_id, app, cached)?;
     Ok(Point::new(
         bounds.x + bounds.width / 2.0,
         bounds.y + bounds.height / 2.0,
     ))
 }
 
-/// Re-walk the tree to resolve a ref's bounding rect.
+/// Resolve a ref to its bounding rect, using a retained handle when available.
 ///
 /// # Errors
 ///
 /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree,
 /// or [`ForepawError::ActionFailed`] if the element has no position or size.
-pub fn resolve_ref_bounds(ref_id: i32, app: &AppTarget) -> Result<Rect, ForepawError> {
-    let element = resolve_ref_element(ref_id, app)?;
+pub fn resolve_ref_bounds(
+    ref_id: i32,
+    app: &AppTarget,
+    cached: Option<AXUIElementRef>,
+) -> Result<Rect, ForepawError> {
+    let element = resolve_ref_element(ref_id, app, cached)?;
     let pos = get_element_position(element)
         .ok_or_else(|| ForepawError::ActionFailed("element has no position".into()))?;
     let (w, h) = get_element_size(element)
@@ -569,6 +586,79 @@ pub(super) fn fetch_batch_attributes(element: AXUIElementRef) -> Option<BatchAtt
 }
 
 // ---------------------------------------------------------------------------
+// Ref→handle cache (darwin-internal)
+// ---------------------------------------------------------------------------
+
+/// Darwin-internal mirror of the element tree that retains the `AXUIElement`
+/// handle for each node. Built in lockstep with `ElementNode` (same recursion,
+/// same stale-children retry) so its shape is identical. A node carries a
+/// handle iff it is interactive (i.e. would receive a ref from `RefAssigner`);
+/// flattening in pre-order then reproduces `RefAssigner`'s ref numbering
+/// without a second AX walk.
+#[derive(Debug, Default)]
+struct HandleNode {
+    /// Retained `AXUIElement` handle. `Some` exactly for interactive nodes.
+    handle: Option<AXUIElementRef>,
+    children: Vec<Self>,
+}
+
+/// Map from ref id to the retained `AXUIElement` handle, captured during the
+/// snapshot walk. Stored on `DarwinProvider` so per-element resolve calls are
+/// O(1) lookups instead of full tree re-walks. Replaced wholesale on each
+/// snapshot. Handles are retained on insertion and released on drop.
+#[derive(Debug)]
+pub(super) struct RefHandleMap(HashMap<i32, AXUIElementRef>);
+
+impl RefHandleMap {
+    /// Create an empty map.
+    pub(super) fn empty() -> Self {
+        Self(HashMap::new())
+    }
+
+    /// Look up the retained handle for a ref.
+    pub(super) fn get(&self, ref_id: i32) -> Option<&AXUIElementRef> {
+        self.0.get(&ref_id)
+    }
+}
+
+impl Drop for RefHandleMap {
+    fn drop(&mut self) {
+        for handle in self.0.values() {
+            // SAFETY: each handle was +1 retained on insertion via `retain_handle`.
+            // CFRelease balances it on eviction/drop.
+            unsafe { CFRelease(handle.0 as CFTypeRef) };
+        }
+    }
+}
+
+/// Retain an `AXUIElement` handle, returning a copy safe to store in the cache.
+/// Balanced by `RefHandleMap`'s `Drop`.
+fn retain_handle(element: AXUIElementRef) -> AXUIElementRef {
+    // SAFETY: CFRetain bumps the refcount of a valid AXUIElementRef.
+    unsafe { CFRetain(element.0 as CFTypeRef) };
+    element
+}
+
+/// Flatten the handle tree into a ref→handle map, mirroring `RefAssigner`'s
+/// pre-order counter over interactive nodes.
+fn build_ref_handle_map(root: &HandleNode) -> RefHandleMap {
+    let mut map = HashMap::new();
+    let mut counter: i32 = 1;
+    flatten_handles(root, &mut counter, &mut map);
+    RefHandleMap(map)
+}
+
+fn flatten_handles(node: &HandleNode, counter: &mut i32, map: &mut HashMap<i32, AXUIElementRef>) {
+    if let Some(handle) = node.handle {
+        map.insert(*counter, handle);
+        *counter += 1;
+    }
+    for child in &node.children {
+        flatten_handles(child, counter, map);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tree walk
 // ---------------------------------------------------------------------------
 
@@ -577,13 +667,19 @@ fn build_tree(
     depth: usize,
     max_depth: usize,
     pruning: &TreePruning,
-) -> ElementNode {
+) -> (ElementNode, HandleNode) {
     if depth >= max_depth {
-        return ElementNode::new(ElementData::new(Role::Group));
+        return (
+            ElementNode::new(ElementData::new(Role::Group)),
+            HandleNode::default(),
+        );
     }
 
     let Some(attrs) = fetch_batch_attributes(element) else {
-        return ElementNode::new(ElementData::new(Role::Unknown));
+        return (
+            ElementNode::new(ElementData::new(Role::Unknown)),
+            HandleNode::default(),
+        );
     };
 
     let role_str = attrs
@@ -599,9 +695,25 @@ fn build_tree(
             .string(Attr::Identifier)
             .and_then(|id| if id.is_empty() { None } else { Some(id) });
 
+    // Retain the AX handle for interactive nodes so later resolve calls can
+    // look it up in O(1) from the snapshot cache instead of re-walking the
+    // tree. Computed once; reused for both the pruned-leaf and normal paths.
+    // Non-interactive nodes never receive a ref, so they carry no handle.
+    let handle_opt = if role.is_interactive() {
+        Some(retain_handle(element))
+    } else {
+        None
+    };
+
     // Skip menu bar subtree if requested.
     if pruning.options.exclude_menu_bar && role == Role::MenuBar {
-        return ElementNode::new(ElementData::new(role));
+        return (
+            ElementNode::new(ElementData::new(role)),
+            HandleNode {
+                handle: handle_opt,
+                children: Vec::new(),
+            },
+        );
     }
 
     let value = attrs.value_string(Attr::Value);
@@ -619,44 +731,23 @@ fn build_tree(
         pruning,
         element,
     ) {
-        return pruned;
+        // Pruned interactive nodes still receive a ref (they remain in the
+        // tree as leaves), so carry their handle into the cache.
+        return (
+            pruned,
+            HandleNode {
+                handle: handle_opt,
+                children: Vec::new(),
+            },
+        );
     }
 
     // Build children BEFORE computing name. This lets computedName read
     // names/values from already-built child ElementNodes instead of making
     // individual IPC calls.
     let children_refs = attrs.children(Attr::Children);
-    let mut children: Vec<ElementNode> = children_refs
-        .iter()
-        .map(|child| build_tree(*child, depth + 1, max_depth, pruning))
-        .collect();
-
-    // Retry children that came back as stale AX references.
-    // Some frameworks (notably Slint) lazily initialize their accessibility tree.
-    // The first AXChildren read may contain invalid references that return
-    // AXError::InvalidUIElement for all attribute queries. Re-reading AXChildren
-    // from the parent element yields fresh, valid references.
-    let stale_indices: Vec<usize> = children
-        .iter()
-        .enumerate()
-        .filter(|(_, node)| {
-            node.data.role == Role::Unknown
-                && node.data.name.is_none()
-                && node.data.value.is_none()
-                && node.data.bounds.is_none()
-        })
-        .map(|(i, _)| i)
-        .collect();
-    if !stale_indices.is_empty() {
-        let fresh_refs = get_ax_element_children(element);
-        for idx in stale_indices {
-            if let Some(fresh_child) = fresh_refs.get(idx) {
-                if let Some(slot) = children.get_mut(idx) {
-                    *slot = build_tree(*fresh_child, depth + 1, max_depth, pruning);
-                }
-            }
-        }
-    }
+    let (children, child_handles) =
+        build_children(element, &children_refs, depth, max_depth, pruning);
 
     let name = non_empty(attrs.string(Attr::Title).as_ref())
         .or_else(|| non_empty(attrs.string(Attr::Description).as_ref()))
@@ -676,7 +767,7 @@ fn build_tree(
         .and_then(|d| if d.is_empty() { None } else { Some(d) })
         .filter(|d| name.as_ref() != Some(d));
 
-    ElementNode {
+    let node = ElementNode {
         data: ElementData {
             role,
             name,
@@ -695,7 +786,66 @@ fn build_tree(
             attributes,
         },
         children,
+    };
+    (
+        node,
+        HandleNode {
+            handle: handle_opt,
+            children: child_handles,
+        },
+    )
+}
+
+/// Recursively build child `ElementNode`s and their parallel `HandleNode`s.
+///
+/// Includes the stale-children retry: some frameworks (notably Slint) lazily
+/// initialize their accessibility tree, so the first `AXChildren` read may
+/// contain invalid references that return `AXError::InvalidUIElement` for all
+/// attribute queries. Re-reading `AXChildren` from the parent yields fresh,
+/// valid references.
+fn build_children(
+    element: AXUIElementRef,
+    children_refs: &[AXUIElementRef],
+    depth: usize,
+    max_depth: usize,
+    pruning: &TreePruning,
+) -> (Vec<ElementNode>, Vec<HandleNode>) {
+    let mut children: Vec<ElementNode> = Vec::with_capacity(children_refs.len());
+    let mut child_handles: Vec<HandleNode> = Vec::with_capacity(children_refs.len());
+    for child in children_refs {
+        let (node, handles) = build_tree(*child, depth + 1, max_depth, pruning);
+        children.push(node);
+        child_handles.push(handles);
     }
+
+    // Retry children that came back as stale AX references.
+    let stale_indices: Vec<usize> = children
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| {
+            node.data.role == Role::Unknown
+                && node.data.name.is_none()
+                && node.data.value.is_none()
+                && node.data.bounds.is_none()
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if !stale_indices.is_empty() {
+        let fresh_refs = get_ax_element_children(element);
+        for idx in stale_indices {
+            if let Some(fresh_child) = fresh_refs.get(idx) {
+                let (node, handles) = build_tree(*fresh_child, depth + 1, max_depth, pruning);
+                if let Some(slot) = children.get_mut(idx) {
+                    *slot = node;
+                }
+                if let Some(hslot) = child_handles.get_mut(idx) {
+                    *hslot = handles;
+                }
+            }
+        }
+    }
+
+    (children, child_handles)
 }
 
 /// Collect platform-specific extra attributes from the batch fetch.
@@ -927,12 +1077,33 @@ fn computed_name(
 // Ref resolution (for action dispatch)
 // ---------------------------------------------------------------------------
 
-/// Re-walk the AX tree to find the `AXUIElement` at the given ref position.
+/// Resolve a ref to its `AXUIElement`, using a retained handle from the last
+/// snapshot when available (O(1), the normal path), falling back to a full
+/// tree re-walk.
 ///
 /// # Errors
 ///
 /// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree.
-pub fn resolve_ref_element(ref_id: i32, app: &AppTarget) -> Result<AXUIElementRef, ForepawError> {
+pub fn resolve_ref_element(
+    ref_id: i32,
+    app: &AppTarget,
+    cached: Option<AXUIElementRef>,
+) -> Result<AXUIElementRef, ForepawError> {
+    if let Some(handle) = cached {
+        debug!("resolve_ref_element: using retained handle for ref {ref_id}");
+        return Ok(handle);
+    }
+    debug!("resolve_ref_element: no retained handle for ref {ref_id}, re-walking tree");
+    resolve_ref_element_rewalk(ref_id, app)
+}
+
+/// Fallback re-walk used when no retained handle is cached (e.g. resolve called
+/// before any snapshot on this provider). The snapshot-time handle cache is the
+/// normal fast path; this preserves the prior behavior for that edge case.
+fn resolve_ref_element_rewalk(
+    ref_id: i32,
+    app: &AppTarget,
+) -> Result<AXUIElementRef, ForepawError> {
     let running_app = find_app_by_target(app)?;
     let is_electron = is_electron_app(&running_app);
     if is_electron {
@@ -1248,5 +1419,186 @@ mod tests {
     fn default_depths() {
         assert_eq!(DEFAULT_DEPTH, 15);
         assert_eq!(ELECTRON_DEPTH, 25);
+    }
+
+    // --- Ref→handle cache ordering (pure logic; no live AX needed) ---
+
+    #[test]
+    fn flatten_handles_mirrors_ref_assigner_order() {
+        // Interactive nodes carry Some(handle); non-interactive carry None.
+        // Refs are assigned in pre-order to interactive nodes only, matching
+        // `RefAssigner`. The pointers are never dereferenced (no CFRetain/
+        // CFRelease), so bogus addresses are safe here.
+        use std::ffi::c_void;
+        let h = |n: usize| AXUIElementRef(n as *const c_void);
+        // Tree: App(None) -> [ Group(None) -> [Btn(h1), Btn(h2)], TextField(h3) ]
+        let tree = HandleNode {
+            handle: None,
+            children: vec![
+                HandleNode {
+                    handle: None,
+                    children: vec![
+                        HandleNode {
+                            handle: Some(h(1)),
+                            children: vec![],
+                        },
+                        HandleNode {
+                            handle: Some(h(2)),
+                            children: vec![],
+                        },
+                    ],
+                },
+                HandleNode {
+                    handle: Some(h(3)),
+                    children: vec![],
+                },
+            ],
+        };
+        let mut map = HashMap::new();
+        let mut counter = 1;
+        flatten_handles(&tree, &mut counter, &mut map);
+        assert_eq!(map.len(), 3);
+        assert_eq!(map.get(&1).expect("ref 1").0, h(1).0);
+        assert_eq!(map.get(&2).expect("ref 2").0, h(2).0);
+        assert_eq!(map.get(&3).expect("ref 3").0, h(3).0);
+        assert_eq!(counter, 4);
+    }
+
+    #[test]
+    fn flatten_handles_assigns_ref_to_pruned_interactive_leaf() {
+        // A pruned interactive leaf still gets a ref (it remains in the tree);
+        // a non-interactive parent does not. This mirrors how pruning in
+        // `build_tree` keeps the node but drops its subtree.
+        use std::ffi::c_void;
+        let h = |n: usize| AXUIElementRef(n as *const c_void);
+        let tree = HandleNode {
+            handle: None, // window, non-interactive
+            children: vec![HandleNode {
+                handle: Some(h(10)), // interactive leaf (e.g. offscreen button)
+                children: vec![],
+            }],
+        };
+        let mut map = HashMap::new();
+        let mut counter = 1;
+        flatten_handles(&tree, &mut counter, &mut map);
+        assert_eq!(map.len(), 1);
+        assert_eq!(map.get(&1).expect("ref 1").0, h(10).0);
+    }
+
+    // --- Lockstep invariant: flatten_handles numbering == RefAssigner numbering ---
+
+    /// Generate a random `ElementNode` tree and the parallel `HandleNode` tree
+    /// built by the same rule `build_tree` uses (`handle = Some` iff the role is
+    /// interactive). Each node carries a unique sentinel pointer (never
+    /// dereferenced) so ordering can be checked. Deterministic LCG — no
+    /// `proptest` dependency.
+    fn gen_tree(seed: u32) -> (ElementNode, HandleNode) {
+        use crate::core::element_tree::ElementData;
+        use crate::core::role::Role;
+        use std::ffi::c_void;
+
+        fn gen(
+            depth: usize,
+            next: &mut impl FnMut() -> u32,
+            node_id: &mut usize,
+        ) -> (ElementNode, HandleNode) {
+            // ~half interactive, half structural.
+            let role = if next().is_multiple_of(2) {
+                match next() % 3 {
+                    0 => Role::Button,
+                    1 => Role::TextField,
+                    _ => Role::CheckBox,
+                }
+            } else {
+                match next() % 3 {
+                    0 => Role::Window,
+                    1 => Role::Group,
+                    _ => Role::StaticText,
+                }
+            };
+            *node_id += 1;
+            let sentinel = *node_id;
+            let handle = if role.is_interactive() {
+                Some(AXUIElementRef(sentinel as *const c_void))
+            } else {
+                None
+            };
+
+            let child_count = if depth < 4 { (next() % 4) as usize } else { 0 };
+            let mut children = Vec::with_capacity(child_count);
+            let mut child_handles = Vec::with_capacity(child_count);
+            for _ in 0..child_count {
+                let (c, h) = gen(depth + 1, next, node_id);
+                children.push(c);
+                child_handles.push(h);
+            }
+            (
+                ElementNode::new(ElementData::new(role)).with_children(children),
+                HandleNode {
+                    handle,
+                    children: child_handles,
+                },
+            )
+        }
+
+        let mut state = seed;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state
+        };
+        gen(0, &mut next, &mut 0)
+    }
+
+    /// Walk `RefAssigner`'s annotated tree in lockstep with the `HandleNode`
+    /// tree (identical structure under `interactive_only = false`) and pair each
+    /// ref it assigned with the corresponding node's sentinel handle.
+    fn assigned_sentinels(
+        assigned_root: &ElementNode,
+        handles: &HandleNode,
+    ) -> HashMap<i32, usize> {
+        fn walk(node: &ElementNode, h: &HandleNode, map: &mut HashMap<i32, usize>) {
+            if let Some(r) = node.data.reference {
+                let sentinel = h.handle.expect("interactive node has a handle").0 as usize;
+                map.insert(r.id, sentinel);
+            }
+            for (c, ch) in node.children.iter().zip(&h.children) {
+                walk(c, ch, map);
+            }
+        }
+        let mut map = HashMap::new();
+        walk(assigned_root, handles, &mut map);
+        map
+    }
+
+    #[test]
+    fn flatten_handles_numbering_matches_ref_assigner_across_shapes() {
+        // The whole snapshot handle cache rests on this: `flatten_handles` must
+        // number interactive nodes in exactly the same pre-order as
+        // `RefAssigner`, across arbitrary tree shapes. `build_tree`'s rule
+        // (handle = Some iff interactive) needs a live AX app, so `gen_tree`
+        // applies it itself; this test then pins the *numbering* agreement
+        // between the two independently-implemented walks. Uses `flatten_handles`
+        // directly into a plain map (not `build_ref_handle_map`, whose `Drop`
+        // would `CFRelease` the bogus sentinel pointers).
+        use crate::core::ref_assigner::RefAssigner;
+        for seed in 1..=50u32 {
+            let (tree, handles) = gen_tree(seed);
+            let assigned = RefAssigner::new().assign(&tree, false);
+            let expected = assigned_sentinels(&assigned.root, &handles);
+
+            let mut actual: HashMap<i32, AXUIElementRef> = HashMap::new();
+            let mut counter: i32 = 1;
+            flatten_handles(&handles, &mut counter, &mut actual);
+            assert_eq!(actual.len(), expected.len(), "seed {seed}: map size");
+            for (id, sentinel) in &expected {
+                let handle = actual
+                    .get(id)
+                    .unwrap_or_else(|| panic!("seed {seed}: ref {id} missing"));
+                assert_eq!(
+                    handle.0 as usize, *sentinel,
+                    "seed {seed}: ref {id} points at the wrong node"
+                );
+            }
+        }
     }
 }
