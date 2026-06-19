@@ -95,17 +95,23 @@ impl TreeRenderer {
             parts.push(state_parts.join(" "));
         }
 
-        // Bounds (window-relative when window bounds are available)
-        if let Some(b) = &node.data.bounds {
-            let (display_x, display_y) = if let Some(w) = window_origin {
-                ((b.x - w.x).round(), (b.y - w.y).round())
-            } else {
-                (b.x.round(), b.y.round())
-            };
+        // Bounds: prefer the precomputed window-relative rect (`bounds_window`,
+        // set by `ElementTree::enrich`); fall back to screen `bounds` translated
+        // by the window origin for trees that weren't enriched.
+        if let Some(b) = node.data.bounds {
+            let display = node
+                .data
+                .bounds_window
+                .unwrap_or_else(|| match window_origin {
+                    Some(w) => b.translate(*w),
+                    None => b,
+                });
             parts.push(format!(
-                "({display_x:.0},{display_y:.0} {:.0}x{:.0})",
-                b.width.round(),
-                b.height.round()
+                "({x:.0},{y:.0} {w:.0}x{h:.0})",
+                x = display.x.round(),
+                y = display.y.round(),
+                w = display.width.round(),
+                h = display.height.round()
             ));
         }
 
@@ -468,5 +474,34 @@ mod tests {
         let renderer = TreeRenderer::new(true);
         let output = renderer.render(&tree);
         assert!(output.contains("sig=0xdeadbeefcafebabe"));
+    }
+
+    #[test]
+    fn prefers_precomputed_window_bounds() {
+        // bounds_window is set (window-relative); even though screen bounds and
+        // a window origin are present, the renderer should print the stored
+        // window-relative rect without re-subtracting.
+        let mut data = ElementData::new(Role::Button)
+            .with_name("OK")
+            .with_bounds(Rect::new(532.0, 342.0, 80.0, 30.0));
+        data.bounds_window = Some(Rect::new(12.0, 98.0, 80.0, 30.0));
+        let tree = ElementTree::new(
+            "App",
+            ElementNode::new(
+                ElementData::new(Role::Window)
+                    .with_name("Main")
+                    .with_bounds(Rect::new(520.0, 244.0, 760.0, 720.0)),
+            )
+            .with_children(vec![ElementNode::new(data)]),
+        )
+        .with_window_bounds(Rect::new(520.0, 244.0, 760.0, 720.0));
+
+        let renderer = TreeRenderer::new(false);
+        let output = renderer.render(&tree);
+        let lines: Vec<&str> = output.lines().collect();
+        // Window itself has no bounds_window -> falls back to origin subtraction (0,0).
+        assert_eq!(lines[1], "window \"Main\" (0,0 760x720)");
+        // Child uses stored bounds_window (12,98), not screen (532,342).
+        assert_eq!(lines[2], "  button \"OK\" (12,98 80x30)");
     }
 }

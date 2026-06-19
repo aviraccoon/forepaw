@@ -270,16 +270,15 @@ pub(super) fn snapshot(
         None
     };
 
-    Ok((
-        ElementTree {
-            app: app.display(),
-            root: result.root,
-            refs: result.refs,
-            window_bounds,
-            timing,
-        },
-        ref_handles,
-    ))
+    let mut tree = ElementTree {
+        app: app.display(),
+        root: result.root,
+        refs: result.refs,
+        window_bounds,
+        timing,
+    };
+    tree.enrich();
+    Ok((tree, ref_handles))
 }
 
 /// Resolve a ref to its center position, using a retained handle when available.
@@ -774,6 +773,7 @@ fn build_tree(
             value,
             reference: None,
             bounds,
+            bounds_window: None,
             enabled,
             focused,
             selected,

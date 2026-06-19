@@ -27,6 +27,11 @@ pub struct ElementData {
     /// Element bounds in screen coordinates.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Rect>,
+    /// Element bounds in window-relative coordinates (`bounds` minus the
+    /// window origin). `None` when the node has no `bounds` or the snapshot
+    /// has no `window_bounds`. Populated by [`ElementTree::enrich`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bounds_window: Option<Rect>,
     /// Whether the element is enabled (interactive). `None` if the platform
     /// doesn't report this state (e.g. structural containers).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -92,6 +97,7 @@ impl ElementData {
             value: None,
             reference: None,
             bounds: None,
+            bounds_window: None,
             enabled: None,
             focused: None,
             selected: None,
@@ -279,6 +285,32 @@ impl ElementTree {
     pub fn with_timing(mut self, timing: SnapshotTiming) -> Self {
         self.timing = Some(timing);
         self
+    }
+
+    /// Populate post-build derived fields across the tree.
+    ///
+    /// Currently computes each node's [`ElementData::bounds_window`] from its
+    /// screen `bounds` minus [`Self::window_bounds`]. No-op when the tree has
+    /// no `window_bounds`; nodes without `bounds` are skipped. Idempotent.
+    ///
+    /// Centralizes the screen→window coordinate shift so all consumers read a
+    /// consistent window-relative value rather than each re-deriving the
+    /// subtraction (a recurring source of off-by-origin bugs). Platforms call
+    /// this once after assembling the tree; [`filter_tree`] re-runs it because
+    /// pruning rebuilds nodes.
+    pub fn enrich(&mut self) {
+        fn walk(node: &mut ElementNode, window: Rect) {
+            if let Some(b) = node.data.bounds {
+                node.data.bounds_window = Some(b.translate(window));
+            }
+            for child in &mut node.children {
+                walk(child, window);
+            }
+        }
+        let Some(window) = self.window_bounds else {
+            return;
+        };
+        walk(&mut self.root, window);
     }
 }
 
@@ -477,13 +509,17 @@ pub fn filter_tree(
     };
     let root = prune_node(&tree.root, vp.as_ref(), 0, &pruning)
         .unwrap_or_else(|| ElementNode::new(ElementData::new(Role::Application)));
-    ElementTree {
+    let mut filtered = ElementTree {
         app: tree.app.clone(),
         root,
         refs: tree.refs.clone(),
         window_bounds: tree.window_bounds,
         timing: tree.timing.clone(),
-    }
+    };
+    // Pruning rebuilds nodes via `ElementData::new`, dropping `bounds_window`,
+    // so recompute it for the filtered tree.
+    filtered.enrich();
+    filtered
 }
 
 #[cfg(test)]
@@ -522,5 +558,112 @@ mod tests {
         assert_eq!(ElementRef::parse("@"), None);
         assert_eq!(ElementRef::parse(""), None);
         assert_eq!(ElementRef::parse("@eabc"), None);
+    }
+
+    #[test]
+    fn enrich_populates_window_relative_bounds() {
+        // Window at (520, 244); child at screen (532, 342) -> (12, 98) relative.
+        let mut tree = ElementTree::new(
+            "App",
+            ElementNode::new(
+                ElementData::new(Role::Window).with_bounds(Rect::new(520.0, 244.0, 760.0, 720.0)),
+            )
+            .with_children(vec![ElementNode::new(
+                ElementData::new(Role::Button).with_bounds(Rect::new(532.0, 342.0, 736.0, 33.0)),
+            )]),
+        )
+        .with_window_bounds(Rect::new(520.0, 244.0, 760.0, 720.0));
+
+        tree.enrich();
+
+        let child = &tree.root.children[0].data;
+        let rel = child.bounds_window.expect("child bounds_window set");
+        assert!((rel.x - 12.0).abs() < 1e-9);
+        assert!((rel.y - 98.0).abs() < 1e-9);
+        assert!((rel.width - 736.0).abs() < 1e-9);
+        assert!((rel.height - 33.0).abs() < 1e-9);
+        // Screen-absolute bounds are untouched.
+        assert_eq!(child.bounds, Some(Rect::new(532.0, 342.0, 736.0, 33.0)));
+    }
+
+    #[test]
+    fn enrich_is_noop_without_window_bounds() {
+        let mut tree = ElementTree::new(
+            "App",
+            ElementNode::new(
+                ElementData::new(Role::Button).with_bounds(Rect::new(10.0, 20.0, 5.0, 5.0)),
+            ),
+        );
+        tree.enrich();
+        assert!(tree.root.data.bounds_window.is_none());
+    }
+
+    #[test]
+    fn enrich_skips_nodes_without_bounds() {
+        let mut tree = ElementTree::new(
+            "App",
+            ElementNode::new(ElementData::new(Role::Group)) // no bounds
+                .with_children(vec![ElementNode::new(
+                    ElementData::new(Role::Button).with_bounds(Rect::new(532.0, 342.0, 10.0, 10.0)),
+                )]),
+        )
+        .with_window_bounds(Rect::new(520.0, 244.0, 760.0, 720.0));
+
+        tree.enrich();
+
+        // Structural node without bounds stays None.
+        assert!(tree.root.data.bounds_window.is_none());
+        // Child with bounds is populated.
+        assert!(tree.root.children[0].data.bounds_window.is_some());
+    }
+
+    #[test]
+    fn enrich_is_idempotent() {
+        let mk = || {
+            ElementTree::new(
+                "App",
+                ElementNode::new(
+                    ElementData::new(Role::Button).with_bounds(Rect::new(532.0, 342.0, 10.0, 10.0)),
+                ),
+            )
+            .with_window_bounds(Rect::new(520.0, 244.0, 760.0, 720.0))
+        };
+        let mut once = mk();
+        let mut twice = mk();
+        once.enrich();
+        twice.enrich();
+        twice.enrich();
+        assert_eq!(once.root.data.bounds_window, twice.root.data.bounds_window);
+    }
+
+    #[test]
+    fn filter_tree_re_enriches_window_bounds() {
+        // Parent with bounds; child has bounds and would survive a no-op filter.
+        // After filter_tree, the rebuilt nodes must still carry bounds_window.
+        let mut tree = ElementTree::new(
+            "App",
+            ElementNode::new(
+                ElementData::new(Role::Window).with_bounds(Rect::new(520.0, 244.0, 760.0, 720.0)),
+            )
+            .with_children(vec![ElementNode::new(
+                ElementData::new(Role::Button).with_bounds(Rect::new(532.0, 342.0, 10.0, 10.0)),
+            )]),
+        )
+        .with_window_bounds(Rect::new(520.0, 244.0, 760.0, 720.0));
+        tree.enrich();
+
+        let filtered = filter_tree(
+            &tree,
+            None,
+            &FilterOptions {
+                exclude_menu_bar: false,
+                exclude_offscreen: false,
+            },
+        );
+
+        let child = &filtered.root.children[0].data;
+        let rel = child.bounds_window.expect("filtered child bounds_window");
+        assert!((rel.x - 12.0).abs() < 1e-9);
+        assert!((rel.y - 98.0).abs() < 1e-9);
     }
 }

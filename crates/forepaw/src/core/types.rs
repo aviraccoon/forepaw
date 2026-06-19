@@ -45,6 +45,20 @@ impl Rect {
             height,
         }
     }
+
+    /// Translate this rect so its origin is relative to `origin`'s top-left:
+    /// `screen_bounds.translate(window_origin)` yields bounds where `(0, 0)`
+    /// is the window's top-left corner. Size is unchanged. Converts
+    /// screen-absolute coordinates to window-relative.
+    #[must_use]
+    pub fn translate(self, origin: Self) -> Self {
+        Self {
+            x: self.x - origin.x,
+            y: self.y - origin.y,
+            width: self.width,
+            height: self.height,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -63,5 +77,26 @@ mod tests {
         let r = Rect::new(10.0, 20.0, 800.0, 600.0);
         assert!((r.x - 10.0).abs() < f64::EPSILON);
         assert!((r.width - 800.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn rect_translate_subtracts_origin() {
+        // Element at screen (532, 342), window at (520, 244) -> (12, 98) relative.
+        let screen = Rect::new(532.0, 342.0, 736.0, 33.0);
+        let window = Rect::new(520.0, 244.0, 760.0, 720.0);
+        let relative = screen.translate(window);
+        assert!((relative.x - 12.0).abs() < 1e-9);
+        assert!((relative.y - 98.0).abs() < 1e-9);
+        assert!((relative.width - 736.0).abs() < f64::EPSILON);
+        assert!((relative.height - 33.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn rect_translate_origin_to_itself_is_zero() {
+        // A window translated into its own space lands at the origin.
+        let window = Rect::new(520.0, 244.0, 760.0, 720.0);
+        let relative = window.translate(window);
+        assert!((relative.x - 0.0).abs() < f64::EPSILON);
+        assert!((relative.y - 0.0).abs() < f64::EPSILON);
     }
 }

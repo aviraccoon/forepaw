@@ -118,13 +118,15 @@ pub fn snapshot(
         None
     };
 
-    Ok(ElementTree {
+    let mut tree = ElementTree {
         app: app.display(),
         root: result.root,
         refs: result.refs,
         window_bounds,
         timing,
-    })
+    };
+    tree.enrich();
+    Ok(tree)
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +191,7 @@ fn build_tree(
             value: None, // TODO: UIA Value pattern for element values
             reference: None,
             bounds,
+            bounds_window: None,
             // TODO: populate from UIA (IsEnabled, HasKeyboardFocus, IsSelected, HelpText)
             enabled: None,
             focused: None,

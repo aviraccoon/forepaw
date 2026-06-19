@@ -15,8 +15,8 @@ use crate::core::types::Rect;
 use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
 
 use super::app::{
-    connect_atspi_bus, find_app_bus, find_child_window, get_bounds, get_children, get_property,
-    get_role, get_value,
+    connect_atspi_bus, find_app_bus, find_child_window, find_main_window_bounds, get_bounds,
+    get_children, get_property, get_role, get_value,
 };
 use super::role::atspi_role_to_role;
 
@@ -70,9 +70,14 @@ pub fn snapshot(
     let (root_path, window_bounds): (String, Option<Rect>) = if let Some(target) = window {
         find_child_window(&conn, &app_bus, target)?
     } else {
+        // No explicit window target: derive the app's main window origin so
+        // coordinates come out window-relative (matching macOS/Windows).
+        // An explicit `options.window_bounds` override wins if set.
         (
             "/org/a11y/atspi/accessible/root".to_owned(),
-            options.window_bounds,
+            options
+                .window_bounds
+                .or_else(|| find_main_window_bounds(&conn, &app_bus)),
         )
     };
 
@@ -100,13 +105,15 @@ pub fn snapshot(
         None
     };
 
-    Ok(ElementTree {
+    let mut tree = ElementTree {
         app: app.display(),
         root: result.root,
         refs: result.refs,
         window_bounds,
         timing,
-    })
+    };
+    tree.enrich();
+    Ok(tree)
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +196,7 @@ fn build_tree(
             value,
             reference: None,
             bounds,
+            bounds_window: None,
             // TODO: populate from AT-SPI2 StateSet (ENABLED, FOCUSED, SELECTED) and Description
             enabled: None,
             focused: None,

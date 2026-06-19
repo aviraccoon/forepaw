@@ -523,6 +523,64 @@ pub(super) fn find_child_window(
     }
 }
 
+/// Find the app's main window and return its bounds.
+///
+/// Used to derive a window origin for coordinate translation when no explicit
+/// `--window` is given, so Linux snapshots get window-relative bounds like
+/// macOS and Windows do. Selection mirrors macOS: prefer titled windows, then
+/// largest by area (see [`select_main_window_bounds`]).
+///
+/// Best-effort: returns `None` if the AT-SPI2 lookup fails or the app exposes
+/// no frame/window children with bounds. Never fails the snapshot -- a `None`
+/// result just means coordinates stay screen-absolute.
+pub(super) fn find_main_window_bounds(conn: &Connection, bus_name: &str) -> Option<Rect> {
+    let children = get_children(conn, bus_name, "/org/a11y/atspi/accessible/root").ok()?;
+    let mut windows: Vec<(String, Option<Rect>)> = Vec::new();
+    for (_child_bus, child_path) in &children {
+        let proxy = AccessibleProxyBlocking::builder(conn)
+            .destination(bus_name)
+            .ok()?
+            .path(child_path.as_str())
+            .ok()?
+            .build()
+            .ok()?;
+        let role = proxy.get_role().ok()?;
+        if role != ROLE_FRAME && role != ROLE_WINDOW {
+            continue;
+        }
+        let title = get_property(conn, bus_name, child_path.as_str(), "Name").unwrap_or_default();
+        let bounds = window_bounds(conn, bus_name, child_path);
+        windows.push((title, bounds));
+    }
+    select_main_window_bounds(&windows)
+}
+
+/// Pick the best window's bounds from `(title, bounds)` pairs: drop windows
+/// without bounds, prefer titled, then largest by area. Mirrors macOS
+/// `select_best_window`. Pure (no IPC) so the selection logic is unit-tested;
+/// the live AT-SPI2 walk lives in [`find_main_window_bounds`].
+fn select_main_window_bounds(windows: &[(String, Option<Rect>)]) -> Option<Rect> {
+    // Keep only windows with usable bounds.
+    let mut candidates: Vec<(String, Rect)> = windows
+        .iter()
+        .filter_map(|(t, b)| b.map(|rect| (t.clone(), rect)))
+        .collect();
+    if candidates.is_empty() {
+        return None;
+    }
+    // Prefer titled windows: if any have a title, drop the untitled ones.
+    if candidates.iter().any(|(t, _)| !t.is_empty()) {
+        candidates.retain(|(t, _)| !t.is_empty());
+    }
+    candidates.into_iter().map(|(_, r)| r).max_by(|a, b| {
+        let area_a = a.width * a.height;
+        let area_b = b.width * b.height;
+        area_a
+            .partial_cmp(&area_b)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })
+}
+
 /// Get window bounds via the Component interface.
 fn window_bounds(atspi: &Connection, bus_name: &str, path: &ObjectPath<'_>) -> Option<Rect> {
     let proxy = ComponentProxyBlocking::builder(atspi)
@@ -540,4 +598,69 @@ fn window_bounds(atspi: &Connection, bus_name: &str, path: &ObjectPath<'_>) -> O
         f64::from(w),
         f64::from(h),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn select_main_prefers_titled_even_when_smaller() {
+        let ws = vec![
+            (String::new(), Some(Rect::new(0.0, 0.0, 1000.0, 800.0))),
+            ("Main".to_owned(), Some(Rect::new(10.0, 10.0, 500.0, 400.0))),
+        ];
+        assert_eq!(
+            select_main_window_bounds(&ws),
+            Some(Rect::new(10.0, 10.0, 500.0, 400.0))
+        );
+    }
+
+    #[test]
+    fn select_main_largest_area_among_titled() {
+        let ws = vec![
+            ("Small".to_owned(), Some(Rect::new(0.0, 0.0, 100.0, 100.0))),
+            ("Big".to_owned(), Some(Rect::new(0.0, 0.0, 500.0, 400.0))),
+        ];
+        assert_eq!(
+            select_main_window_bounds(&ws),
+            Some(Rect::new(0.0, 0.0, 500.0, 400.0))
+        );
+    }
+
+    #[test]
+    fn select_main_largest_area_when_none_titled() {
+        let ws = vec![
+            (String::new(), Some(Rect::new(0.0, 0.0, 100.0, 100.0))),
+            (String::new(), Some(Rect::new(0.0, 0.0, 500.0, 400.0))),
+        ];
+        assert_eq!(
+            select_main_window_bounds(&ws),
+            Some(Rect::new(0.0, 0.0, 500.0, 400.0))
+        );
+    }
+
+    #[test]
+    fn select_main_drops_windows_without_bounds_before_titled_preference() {
+        // A titled window with no bounds must not block an untitled one that has bounds.
+        let ws = vec![
+            ("Main".to_owned(), None),
+            (String::new(), Some(Rect::new(0.0, 0.0, 200.0, 200.0))),
+        ];
+        assert_eq!(
+            select_main_window_bounds(&ws),
+            Some(Rect::new(0.0, 0.0, 200.0, 200.0))
+        );
+    }
+
+    #[test]
+    fn select_main_returns_none_when_no_usable_bounds() {
+        let ws = vec![("A".to_owned(), None), ("B".to_owned(), None)];
+        assert_eq!(select_main_window_bounds(&ws), None);
+    }
+
+    #[test]
+    fn select_main_returns_none_for_empty_input() {
+        assert_eq!(select_main_window_bounds(&[]), None);
+    }
 }

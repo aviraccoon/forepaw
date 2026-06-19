@@ -239,13 +239,13 @@ Each platform defines its own coordinate space. forepaw normalizes for display a
 
 | Platform | Display coordinates | Action coordinates | Source |
 |----------|-------------------|-------------------|--------|
-| macOS | Window-relative | Screen-absolute | AX returns screen-absolute; TreeRenderer subtracts window origin |
-| Windows | Screen-absolute | Screen-absolute | UIA returns physical pixels; no conversion needed |
-| Linux | Screen-absolute | Screen-absolute | AT-SPI2 returns absolute pixel coordinates |
+| macOS | Window-relative | Screen-absolute | AX returns screen-absolute; `enrich()` derives window-relative |
+| Windows | Window-relative | Screen-absolute | UIA returns physical pixels; `enrich()` derives window-relative |
+| Linux | Window-relative | Screen-absolute | AT-SPI2 returns absolute pixel coordinates; `enrich()` derives window-relative |
+
+All coordinates in snapshot output are window-relative: `(0,0)` is the window's top-left corner. Elements store screen-absolute `bounds` internally (as reported by the platform API); `ElementTree::enrich()` runs once after the tree is built to populate each node's `bounds_window` = `bounds` minus the window origin. The text renderer prints `bounds_window`; JSON emits both `bounds` (screen-absolute) and `bounds_window` (window-relative), so consumers never have to re-derive the subtraction themselves. `filter_tree` re-runs `enrich()` because pruning rebuilds nodes.
 
 ### macOS
-
-All coordinates in snapshot output are window-relative: `(0,0)` is the window's top-left corner. Elements store screen-absolute bounds internally (as reported by AX), but `TreeRenderer` subtracts the window origin for display.
 
 The absolute-to-relative conversion happens at the provider layer. The CLI passes window-relative coordinates through; the provider adds the window origin before CGEvent calls.
 
