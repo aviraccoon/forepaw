@@ -409,7 +409,7 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     };
     // The ref→handle cache from this snapshot isn't needed for annotation;
     // dropping it releases the retained handles.
-    let (tree, _handles) = snapshot::snapshot(app, params.window, &snapshot_opts)?;
+    let (tree, _handles, _uid_handles) = snapshot::snapshot(app, params.window, &snapshot_opts)?;
 
     // Determine window bounds for coordinate conversion
     let window_bounds = if let Some(resolved) = resolved_window.as_ref() {

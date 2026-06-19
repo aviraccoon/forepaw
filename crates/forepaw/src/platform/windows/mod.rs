@@ -318,4 +318,11 @@ impl DesktopProvider for WindowsProvider {
     ) -> Result<Option<crate::core::text_attrs::TextAttrsResult>, ForepawError> {
         Ok(None)
     }
+
+    fn get_text_attributes_by_uid(
+        &self,
+        _uid: u64,
+    ) -> Result<Option<crate::core::text_attrs::TextAttrsResult>, ForepawError> {
+        Ok(None)
+    }
 }

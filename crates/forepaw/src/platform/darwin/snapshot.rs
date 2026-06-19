@@ -182,7 +182,7 @@ pub(super) fn snapshot(
     app: &AppTarget,
     window: Option<&WindowTarget>,
     options: &SnapshotOptions,
-) -> Result<(ElementTree, RefHandleMap), ForepawError> {
+) -> Result<(ElementTree, RefHandleMap, UidHandleMap), ForepawError> {
     let running_app = find_app_by_target(app)?;
 
     // Activate the app so the AX tree matches what action commands will see.
@@ -258,6 +258,7 @@ pub(super) fn snapshot(
     // calls are O(1) lookups instead of a full re-walk. Mirrors `RefAssigner`'s
     // pre-order counter over interactive nodes.
     let ref_handles = build_ref_handle_map(&handle_root);
+    let uid_handles = build_uid_handle_map(&handle_root);
 
     let timing = if options.timing {
         let node_count = SnapshotTiming::count_nodes(&result.root);
@@ -278,7 +279,7 @@ pub(super) fn snapshot(
         timing,
     };
     tree.enrich();
-    Ok((tree, ref_handles))
+    Ok((tree, ref_handles, uid_handles))
 }
 
 /// Resolve a ref to its center position, using a retained handle when available.
@@ -589,14 +590,15 @@ pub(super) fn fetch_batch_attributes(element: AXUIElementRef) -> Option<BatchAtt
 // ---------------------------------------------------------------------------
 
 /// Darwin-internal mirror of the element tree that retains the `AXUIElement`
-/// handle for each node. Built in lockstep with `ElementNode` (same recursion,
-/// same stale-children retry) so its shape is identical. A node carries a
-/// handle iff it is interactive (i.e. would receive a ref from `RefAssigner`);
-/// flattening in pre-order then reproduces `RefAssigner`'s ref numbering
-/// without a second AX walk.
+/// handle for every node. Built in lockstep with `ElementNode` (same recursion,
+/// same stale-children retry) so its shape is identical. Two flattenings derive
+/// from it: `RefHandleMap` (interactive nodes only, mirrors `RefAssigner`'s ref
+/// numbering) and `UidHandleMap` (every node, mirrors `RefAssigner`'s uid
+/// numbering) -- the latter lets uid-keyed text-attr queries reach
+/// StaticText/Heading, which never receive a ref.
 #[derive(Debug, Default)]
 struct HandleNode {
-    /// Retained `AXUIElement` handle. `Some` exactly for interactive nodes.
+    /// Retained `AXUIElement` handle for this node.
     handle: Option<AXUIElementRef>,
     children: Vec<Self>,
 }
@@ -607,6 +609,24 @@ struct HandleNode {
 /// snapshot. Handles are retained on insertion and released on drop.
 #[derive(Debug)]
 pub(super) struct RefHandleMap(HashMap<i32, AXUIElementRef>);
+
+/// Map from uid to the retained `AXUIElement` handle, captured during the
+/// snapshot walk in lockstep with `RefAssigner`'s uid numbering (pre-order,
+/// every node). Used for uid-keyed text-attribute queries.
+#[derive(Debug, Default)]
+pub(super) struct UidHandleMap(HashMap<u64, AXUIElementRef>);
+
+impl UidHandleMap {
+    /// Create an empty map.
+    pub(super) fn empty() -> Self {
+        Self(HashMap::new())
+    }
+
+    /// Look up the retained handle for a uid.
+    pub(super) fn get(&self, uid: u64) -> Option<&AXUIElementRef> {
+        self.0.get(&uid)
+    }
+}
 
 impl RefHandleMap {
     /// Create an empty map.
@@ -647,6 +667,15 @@ fn build_ref_handle_map(root: &HandleNode) -> RefHandleMap {
     RefHandleMap(map)
 }
 
+/// Build a uid→handle map, flattening over EVERY node in pre-order to mirror
+/// `RefAssigner`'s uid numbering (every element, depth-first from 1).
+fn build_uid_handle_map(root: &HandleNode) -> UidHandleMap {
+    let mut map = HashMap::new();
+    let mut counter: u64 = 0;
+    flatten_uid_handles(root, &mut counter, &mut map);
+    UidHandleMap(map)
+}
+
 fn flatten_handles(node: &HandleNode, counter: &mut i32, map: &mut HashMap<i32, AXUIElementRef>) {
     if let Some(handle) = node.handle {
         map.insert(*counter, handle);
@@ -654,6 +683,20 @@ fn flatten_handles(node: &HandleNode, counter: &mut i32, map: &mut HashMap<i32, 
     }
     for child in &node.children {
         flatten_handles(child, counter, map);
+    }
+}
+
+fn flatten_uid_handles(
+    node: &HandleNode,
+    counter: &mut u64,
+    map: &mut HashMap<u64, AXUIElementRef>,
+) {
+    if let Some(handle) = node.handle {
+        *counter += 1;
+        map.insert(*counter, handle);
+    }
+    for child in &node.children {
+        flatten_uid_handles(child, counter, map);
     }
 }
 
@@ -694,15 +737,13 @@ fn build_tree(
             .string(Attr::Identifier)
             .and_then(|id| if id.is_empty() { None } else { Some(id) });
 
-    // Retain the AX handle for interactive nodes so later resolve calls can
-    // look it up in O(1) from the snapshot cache instead of re-walking the
-    // tree. Computed once; reused for both the pruned-leaf and normal paths.
-    // Non-interactive nodes never receive a ref, so they carry no handle.
-    let handle_opt = if role.is_interactive() {
-        Some(retain_handle(element))
-    } else {
-        None
-    };
+    // Retain the AX handle for every node. Two lookups derive from the
+    // resulting tree: ref-keyed resolve (interactive nodes, mirrors
+    // `RefAssigner`'s ref counter) and uid-keyed text-attr queries (every
+    // node, mirrors `RefAssigner`'s uid counter). Retaining all nodes keeps
+    // both O(1); the retained set is bounded by a single snapshot and
+    // replaced wholesale on the next, so there is no unbounded growth.
+    let handle_opt = Some(retain_handle(element));
 
     // Skip menu bar subtree if requested.
     if pruning.options.exclude_menu_bar && role == Role::MenuBar {
@@ -1600,5 +1641,56 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn flatten_uid_handles_numbers_every_node_preorder() {
+        // uid is assigned to EVERY element in pre-order (uid_counter starts at
+        // 0, increments before assignment, so first uid is 1). `flatten_uid_handles`
+        // must reproduce that numbering over all nodes with a handle -- which,
+        // after the all-nodes retention change, is every node.
+        use std::ffi::c_void;
+        let h = |n: usize| AXUIElementRef(n as *const c_void);
+        // Tree: App(h1) -> [ Group(h2) -> [StaticText(h3), Btn(h4)], Heading(h5) ]
+        // Every node has a handle; uid order is 1..=5 in pre-order.
+        let tree = HandleNode {
+            handle: Some(h(1)),
+            children: vec![
+                HandleNode {
+                    handle: Some(h(2)),
+                    children: vec![
+                        HandleNode {
+                            handle: Some(h(3)),
+                            children: vec![],
+                        },
+                        HandleNode {
+                            handle: Some(h(4)),
+                            children: vec![],
+                        },
+                    ],
+                },
+                HandleNode {
+                    handle: Some(h(5)),
+                    children: vec![],
+                },
+            ],
+        };
+        let mut map = HashMap::new();
+        let mut counter = 0;
+        flatten_uid_handles(&tree, &mut counter, &mut map);
+        assert_eq!(map.len(), 5);
+        for uid in 1..=5u64 {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "sentinel fits in usize on any target"
+            )]
+            let sentinel = uid as usize;
+            assert_eq!(
+                map.get(&uid).unwrap_or_else(|| panic!("uid {uid}")).0,
+                h(sentinel).0,
+                "uid {uid} points at the wrong node"
+            );
+        }
+        assert_eq!(counter, 5);
     }
 }

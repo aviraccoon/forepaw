@@ -43,6 +43,9 @@ pub struct DarwinProvider {
     /// growth, only retain/release churn proportional to snapshot size.
     /// Darwin-internal — never exposed across the public API.
     ref_handles: Mutex<snapshot::RefHandleMap>,
+    /// uid→handle cache, parallel to `ref_handles` but covering every node
+    /// (so uid-keyed text-attr queries reach StaticText/Heading).
+    uid_handles: Mutex<snapshot::UidHandleMap>,
 }
 
 impl DarwinProvider {
@@ -51,6 +54,7 @@ impl DarwinProvider {
     pub fn new() -> Self {
         Self {
             ref_handles: Mutex::new(snapshot::RefHandleMap::empty()),
+            uid_handles: Mutex::new(snapshot::UidHandleMap::empty()),
         }
     }
 
@@ -64,6 +68,16 @@ impl DarwinProvider {
         cache.get(ref_id).map(|handle| {
             // SAFETY: CFRetain under the lock so the handle outlives the scope.
             // Balanced by the cache's own retain (released on snapshot replace).
+            unsafe { ffi::CFRetain(handle.0 as ffi::CFTypeRef) };
+            *handle
+        })
+    }
+
+    /// Look up a retained handle for `uid` from the last snapshot's cache.
+    fn cached_uid_handle(&self, uid: u64) -> Option<ffi::AXUIElementRef> {
+        let cache = self.uid_handles.lock().expect("uid_handles mutex poisoned");
+        cache.get(uid).map(|handle| {
+            // SAFETY: CFRetain under the lock so the handle outlives the scope.
             unsafe { ffi::CFRetain(handle.0 as ffi::CFTypeRef) };
             *handle
         })
@@ -94,10 +108,11 @@ impl DesktopProvider for DarwinProvider {
         window: Option<&WindowTarget>,
         options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
-        let (tree, handles) = snapshot::snapshot(app, window, options)?;
+        let (tree, handles, uid_handles) = snapshot::snapshot(app, window, options)?;
         // Replace the ref→handle cache. The old map drops and releases its
         // handles; the new one is retained from this snapshot's walk.
         *self.ref_handles.lock().expect("ref_handles mutex poisoned") = handles;
+        *self.uid_handles.lock().expect("uid_handles mutex poisoned") = uid_handles;
         Ok(tree)
     }
 
@@ -417,6 +432,22 @@ impl DesktopProvider for DarwinProvider {
         let element = snapshot::resolve_ref_element(reference.id, app, cached)?;
         // SAFETY: element is a valid AXUIElementRef from resolve_ref_element.
         let attrs = unsafe { text_attrs::get_text_attributes(element) };
+        Ok(attrs)
+    }
+
+    fn get_text_attributes_by_uid(
+        &self,
+        uid: u64,
+    ) -> Result<Option<crate::core::text_attrs::TextAttrsResult>, ForepawError> {
+        // Resolve uid to a retained AX handle from the last snapshot's cache,
+        // then extract text attributes. Unlike `get_text_attributes`, there is
+        // no re-walk fallback: a uid without a cached handle (e.g. before any
+        // snapshot) returns `Ok(None)`.
+        let Some(handle) = self.cached_uid_handle(uid) else {
+            return Ok(None);
+        };
+        // SAFETY: handle is a valid AXUIElementRef retained from the snapshot.
+        let attrs = unsafe { text_attrs::get_text_attributes(handle) };
         Ok(attrs)
     }
 }

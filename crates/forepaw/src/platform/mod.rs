@@ -726,4 +726,27 @@ pub trait DesktopProvider: Send + Sync {
         app: &AppTarget,
         reference: ElementRef,
     ) -> Result<Option<crate::core::text_attrs::TextAttrsResult>, ForepawError>;
+
+    /// Get text formatting attributes for an element by its `uid`.
+    ///
+    /// Like [`Self::get_text_attributes`] but keyed by
+    /// [`ElementData::uid`](crate::core::element_tree::ElementData::uid),
+    /// which is assigned to every element (interactive or not). This reaches
+    /// text-bearing roles that never receive an [`ElementRef`] -- notably
+    /// `StaticText` and `Heading`, which carry most rendered text.
+    ///
+    /// Requires a prior [`Self::snapshot`] on this provider (the uid→handle
+    /// cache is populated then); returns `Ok(None)` if the uid is not cached,
+    /// e.g. before any snapshot. Color availability is framework-dependent:
+    /// `AppKit` text exposes foreground color and font size via AX; `SwiftUI`
+    /// text typically does not.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::StaleRef`] if the platform cannot resolve the
+    /// uid (kept for symmetry with [`Self::get_text_attributes`]).
+    fn get_text_attributes_by_uid(
+        &self,
+        uid: u64,
+    ) -> Result<Option<crate::core::text_attrs::TextAttrsResult>, ForepawError>;
 }
