@@ -64,6 +64,12 @@ impl DesktopProvider for LinuxProvider {
         app::list_windows(app)
     }
 
+    fn displays(&self) -> Result<Vec<crate::platform::DisplayInfo>, ForepawError> {
+        Err(ForepawError::ActionFailed(
+            "displays not yet implemented on Linux".into(),
+        ))
+    }
+
     fn snapshot(
         &self,
         app: &AppTarget,

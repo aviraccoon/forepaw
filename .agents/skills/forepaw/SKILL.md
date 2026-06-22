@@ -12,6 +12,7 @@ description: Control desktop apps (macOS, Windows, Linux) for the user. Use when
 | Capability | macOS | Windows | Linux |
 |---|---|---|---|
 | List apps/windows | ✅ | ✅ | ✅ |
+| List displays | ✅ | ✅ | ❌ |
 | Snapshot (AX tree) | ✅ | ✅ (UIA) | ✅ (AT-SPI2) |
 | Screenshot | ✅ | ✅ | ❌ |
 | OCR | ✅ (Vision) | ✅ (WinRT) | ❌ |
@@ -416,3 +417,16 @@ w-42  Finder  "Documents"  [312,139 1010x614]
 ```
 
 Use the exact app name from `list-apps` in `--app` flags. Use `list-windows` to find window titles/IDs for `--window`/`--window-id`.
+
+## Discovering displays
+
+```bash
+forepaw list-displays              # monitors: scale, bounds, color space, Hz
+```
+
+```
+1 Built-in Retina Display * (builtin)  [0,0 1800x1169]  2.0x  Color LCD  120 Hz
+4 Sidecar Display (AirPlay)           [1800,420 1295x876]  2.0x  Sidecar Display  60 Hz
+```
+
+`*` marks the primary display, `(builtin)` marks a laptop panel. The `2.0x` is the backing scale factor -- multiply logical sizes by it to get pixel dimensions. Use this when you need to know the actual scale a screenshot was captured at (multi-display setups with different per-monitor scales), or to reason about display layout. macOS and Windows implemented; Linux stubbed.

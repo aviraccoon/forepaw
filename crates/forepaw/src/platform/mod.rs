@@ -192,6 +192,47 @@ pub struct WindowInfo {
     pub state: Option<WindowState>,
 }
 
+/// Info about a physical display / monitor.
+#[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
+pub struct DisplayInfo {
+    /// Platform display identifier (e.g. macOS `CGDirectDisplayID`).
+    pub id: u32,
+    /// Human-readable name ("Color LCD", "DELL U2723QE"). `None` on platforms
+    /// without a cheap name lookup.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Bounds in the global logical/point coordinate space (the same space as
+    /// window and element bounds).
+    pub logical_bounds: Rect,
+    /// Backing scale factor (1.0 or 2.0 on macOS; fractional possible on
+    /// Windows/Linux). Multiply logical sizes by this to get pixel sizes.
+    pub scale_factor: f64,
+    /// Whether this is a primary/main display.
+    pub is_primary: bool,
+    /// Whether this is a built-in display (laptop lid, iPad Sidecar).
+    /// `None` where the platform does not expose built-in detection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_builtin: Option<bool>,
+    /// Color space name ("Display P3", "sRGB"). `None` where the platform has
+    /// no cheap name lookup (Windows exposes only an ICC profile path).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_space: Option<String>,
+    /// Maximum refresh rate in Hz. Integer-rounded on macOS (`NSInteger`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refresh_rate_hz: Option<f64>,
+    /// Whether the display supports HDR / EDR content (extended dynamic range).
+    /// Hardware capability — the panel can reproduce values beyond standard
+    /// sRGB white.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_hdr: Option<bool>,
+    /// Whether HDR / EDR is currently active on the display. Runtime state —
+    /// an HDR-capable panel reports `false` when EDR isn't engaged (the common
+    /// case, since macOS leaves EDR off until an app opts in).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_hdr_active: Option<bool>,
+}
+
 /// Visual state of a window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[non_exhaustive]
@@ -412,6 +453,17 @@ pub trait DesktopProvider: Send + Sync {
     /// Returns [`ForepawError::AppNotFound`] if `app` is provided but no matching
     /// process is found.
     fn list_windows(&self, app: Option<&AppTarget>) -> Result<Vec<WindowInfo>, ForepawError>;
+
+    /// Returns physical displays / monitors and their properties (scale factor,
+    /// bounds, primary/builtin flags). Useful for screenshot scale awareness,
+    /// multi-display coordinate math, and lib consumers that need to map
+    /// logical to pixel coordinates.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] on platforms where display
+    /// enumeration is not yet implemented.
+    fn displays(&self) -> Result<Vec<DisplayInfo>, ForepawError>;
 
     /// Walks the accessibility tree of the given application.
     ///

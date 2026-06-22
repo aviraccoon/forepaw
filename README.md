@@ -69,6 +69,9 @@ That's it. Snapshot gives you refs (`@e1`, `@e2`, ...), you use those refs to ac
 | | `screenshot --app Finder --annotate` | Screenshot with numbered labels on elements |
 | | `ocr --app Discord` | Screenshot + text recognition with coordinates |
 | | `hit-test 500,300` | Find what element is at screen coordinates |
+| | `list-apps` | List running GUI apps |
+| | `list-windows --app Zed` | List an app's windows |
+| | `list-displays` | List monitors, scale factors, color spaces |
 | **Click** | `click @e3 --app Finder` | Click an element (AX action, mouse fallback) |
 | | `click @e3 --app Finder --right` | Right-click (context menu) |
 | | `click 500,300 --app Finder` | Click at window-relative coordinates |

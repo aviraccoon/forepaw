@@ -427,6 +427,81 @@ impl ListWindows {
     }
 }
 
+/// List physical displays / monitors.
+#[derive(clap::Args)]
+#[command(about = "List physical displays / monitors")]
+pub(crate) struct ListDisplays;
+
+impl ListDisplays {
+    /// Lists physical displays and their properties (scale factor, bounds,
+    /// primary/builtin flags).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if display enumeration is not implemented on the
+    /// current platform or the underlying system call fails.
+    #[expect(
+        clippy::unused_self,
+        reason = "clap subcommand dispatch uses instance method"
+    )]
+    pub(crate) fn run(
+        &self,
+        provider: &dyn DesktopProvider,
+        globals: GlobalArgs,
+    ) -> anyhow::Result<()> {
+        let displays = provider.displays()?;
+        if globals.json() {
+            println!(
+                "{}",
+                serde_json::to_string(&displays)
+                    .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+            );
+        } else {
+            for d in displays {
+                let name = d
+                    .name
+                    .as_deref()
+                    .map(|n| format!(" {n}"))
+                    .unwrap_or_default();
+                let primary = if d.is_primary { " *" } else { "" };
+                let builtin = if d.is_builtin.unwrap_or(false) {
+                    " (builtin)"
+                } else {
+                    ""
+                };
+                let extras = match (&d.color_space, d.refresh_rate_hz) {
+                    (Some(cs), Some(hz)) => format!("  {cs}  {hz:.0} Hz"),
+                    (Some(cs), None) => format!("  {cs}"),
+                    (None, Some(hz)) => format!("  {hz:.0} Hz"),
+                    (None, None) => String::new(),
+                };
+                // HDR tag: show capability only when the display is HDR-capable,
+                // with "(active)" when EDR is currently engaged.
+                let hdr = match (d.is_hdr, d.is_hdr_active) {
+                    (Some(true), Some(true)) => "  HDR (active)",
+                    (Some(true), _) => "  HDR",
+                    _ => "",
+                };
+                println!(
+                    "{}{}{}{}  [{:.0},{:.0} {:.0}x{:.0}]  {:.1}x{}{}",
+                    d.id,
+                    name,
+                    primary,
+                    builtin,
+                    d.logical_bounds.x,
+                    d.logical_bounds.y,
+                    d.logical_bounds.width,
+                    d.logical_bounds.height,
+                    d.scale_factor,
+                    extras,
+                    hdr
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Hit-test an accessibility element at screen coordinates.
 #[derive(clap::Args)]
 #[command(about = "Find what element is at screen coordinates")]

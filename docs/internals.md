@@ -267,6 +267,26 @@ On macOS, the window screenshot (`screencapture -l`) has `(0,0)` at the window's
 
 On Windows, the OCR screenshot is a full-screen capture (or window-specific via `PrintWindow`). When using `PrintWindow`, coordinates are window-relative (the image is cropped to the window). When using desktop `BitBlt`, coordinates are screen-absolute.
 
+## Displays
+
+> **The raccoon version:** Before raiding, a raccoon scopes the whole alley — how many dumpsters, how big, which one's under the bright light. `list-displays` does that.
+
+`DesktopProvider::displays()` returns a `DisplayInfo` per physical monitor: logical bounds, backing scale factor, name, color space, refresh rate, and primary/builtin flags. Consumers that map logical coordinates to pixels (screenshot sampling, OCR image-to-logical conversion) read the scale from the specific display a window sits on, not a global assumption.
+
+`logical_bounds` semantic differs by platform, matching the platform's coordinate space above: macOS returns logical points (CGDisplayBounds); Windows returns physical pixels (GetMonitorInfoW under `PER_MONITOR_AWARE_V2`). Windows `logical_bounds` thus don't shrink when the user raises the scale factor — the physical framebuffer size is constant; the scale factor is a separate multiplier. Consumers wanting logical dimensions on Windows divide `logical_bounds` by `scale_factor`.
+
+| Field | macOS | Windows | Linux |
+|-------|-------|---------|-------|
+| `id` | CGDirectDisplayID | HMONITOR (cast) | — (stub) |
+| `name` | NSScreen.localizedName | GDI device name (`\\.\DISPLAY1`) | — |
+| `scale_factor` | CGDisplayMode pixel/logical ratio | GetDpiForMonitor / 96 | — |
+| `color_space` | NSColorSpace.localizedName | ICC profile filename stem (GetICMProfileW) | — |
+| `refresh_rate_hz` | NSScreen.maximumFramesPerSecond | EnumDisplaySettingsW dmDisplayFrequency | — |
+| `is_hdr` | maximumExtendedDynamicRangeColorComponentValue > 1.0 | None (needs QueryDisplayConfig) | — |
+| `is_builtin` | CGDisplayIsBuiltin | None (needs EDID via SetupAPI) | — |
+
+macOS reads id/bounds/scale/primary/builtin from thread-safe CoreGraphics; name/color/refresh/hdr come from `NSScreen`, which is main-thread-only, so those fields are best-effort `None` when called off the main thread.
+
 ## Window resolution
 
 > **The raccoon version:** You're a raccoon looking at three dumpsters behind a restaurant. Which one has the good stuff? forepaw picks the right window — by ID, by title, or just the biggest one in sight.

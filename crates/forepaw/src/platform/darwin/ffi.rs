@@ -254,6 +254,9 @@ extern "C" {
         display_count: *mut u32,
     ) -> i32;
     pub(super) fn CGDisplayBounds(display: u32) -> CGRectFFI;
+
+    /// Whether the display is a built-in display (e.g. `MacBook` lid).
+    pub(super) fn CGDisplayIsBuiltin(display: u32) -> u32;
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +359,28 @@ extern "C" {
         window_id: CGWindowID,
         image_option: CGWindowImageOption,
     ) -> CGImageRef;
+}
+
+// ---------------------------------------------------------------------------
+// CoreGraphics - Display mode (for scale factor)
+// ---------------------------------------------------------------------------
+
+#[repr(C)]
+#[derive(Debug)]
+pub(super) struct CGDisplayMode(c_void);
+
+pub(super) type CGDisplayModeRef = *mut CGDisplayMode;
+
+#[link(name = "ApplicationServices", kind = "framework")]
+extern "C" {
+    /// Current display mode (caller must release via `CGDisplayModeRelease`).
+    pub(super) fn CGDisplayCopyDisplayMode(display: u32) -> CGDisplayModeRef;
+    /// Logical width (points) of a display mode.
+    pub(super) fn CGDisplayModeGetWidth(mode: CGDisplayModeRef) -> usize;
+    /// Physical pixel width of a display mode.
+    pub(super) fn CGDisplayModeGetPixelWidth(mode: CGDisplayModeRef) -> usize;
+    /// Releases a display mode returned by `CGDisplayCopyDisplayMode`.
+    pub(super) fn CGDisplayModeRelease(mode: CGDisplayModeRef);
 }
 
 // ---------------------------------------------------------------------------

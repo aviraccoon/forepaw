@@ -27,7 +27,9 @@ fn reset_sigpipe() {
 use crate::cli::action::{
     Batch, Click, Drag, Hover, KeyboardType, OcrClick, Press, Scroll, Type, Wait,
 };
-use crate::cli::observation::{HitTest, ListApps, ListWindows, Ocr, Screenshot, Snapshot};
+use crate::cli::observation::{
+    HitTest, ListApps, ListDisplays, ListWindows, Ocr, Screenshot, Snapshot,
+};
 use crate::cli::system::Permissions;
 use crate::cli::GlobalArgs;
 use forepaw::core::output_formatter::OutputFormat;
@@ -69,6 +71,8 @@ enum Commands {
     ListApps(ListApps),
     #[command(name = "list-windows")]
     ListWindows(ListWindows),
+    #[command(name = "list-displays")]
+    ListDisplays(ListDisplays),
     #[command(name = "hit-test")]
     HitTest(HitTest),
     #[command(name = "ocr")]
@@ -103,6 +107,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Screenshot(cmd) => cmd.run(&*provider, globals),
         Commands::ListApps(cmd) => cmd.run(&*provider, globals),
         Commands::ListWindows(cmd) => cmd.run(&*provider, globals),
+        Commands::ListDisplays(cmd) => cmd.run(&*provider, globals),
         Commands::Ocr(cmd) => cmd.run(&*provider, globals),
         Commands::HitTest(cmd) => cmd.run(&*provider, globals),
         Commands::Click(cmd) => cmd.run(&*provider, globals),

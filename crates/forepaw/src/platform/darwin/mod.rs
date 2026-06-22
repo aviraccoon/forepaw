@@ -17,6 +17,7 @@ mod ffi;
 pub mod annotation;
 pub mod app;
 pub mod cf_convert;
+pub mod display;
 pub mod hit_test;
 pub mod input;
 pub mod key_code;
@@ -100,6 +101,10 @@ impl DesktopProvider for DarwinProvider {
         app: Option<&AppTarget>,
     ) -> Result<Vec<crate::platform::WindowInfo>, ForepawError> {
         app::list_windows(app)
+    }
+
+    fn displays(&self) -> Result<Vec<crate::platform::DisplayInfo>, ForepawError> {
+        display::displays()
     }
 
     fn snapshot(

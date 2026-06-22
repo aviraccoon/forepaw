@@ -8,6 +8,7 @@
 //! - `SendInput` for keyboard/mouse input (future)
 
 pub mod app;
+pub mod display;
 pub mod hit_test;
 pub mod ocr;
 pub mod role;
@@ -47,6 +48,10 @@ impl DesktopProvider for WindowsProvider {
         app: Option<&AppTarget>,
     ) -> Result<Vec<crate::platform::WindowInfo>, ForepawError> {
         app::list_windows(app)
+    }
+
+    fn displays(&self) -> Result<Vec<crate::platform::DisplayInfo>, ForepawError> {
+        display::displays()
     }
 
     // --- Observation (stubs for now) ---
