@@ -65,6 +65,7 @@ No external task runner required -- Cargo is the build system. Mise tasks wrap C
 
 - Keep `src/core/` free of platform imports. All platform-specific code goes in `src/platform/`.
 - **Every new public API in `src/platform/` must have a corresponding method on the `DesktopProvider` trait.** Use platform-agnostic types (`Point`, `Rect`, not `CGPoint`, `CGRect`) in the trait. Convert to platform types inside the Darwin implementation. The CLI should only depend on trait types.
+- **Probe platform APIs before implementing** cross-platform FFI. A short Swift or PowerShell script that calls the API and prints the result confirms what it actually returns before you write Rust against it — faster than a compile-test cycle, and catches cases where behavior differs from the docs or the API name. Verify, don't assume.
 - **Read skill files completely before using the tool.** The skill description says "read this before running any forepaw command" -- that means the full file, not skimming. Skills contain behavioral rules, gotchas, and patterns that prevent errors. A partial read leads to misused flags, wrong coordinate systems, and broken workflows.
 - Mirror `agent-browser`'s CLI patterns where applicable (same flag names, similar output format, `@e` ref syntax).
 - `--app` activates the target app before mouse/keyboard actions. Make it optional for commands where global input makes sense (e.g. `press` for system hotkeys, `keyboard-type` for typing into current focus).
