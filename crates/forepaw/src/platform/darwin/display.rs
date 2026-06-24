@@ -15,8 +15,8 @@ use std::collections::HashMap;
 use objc2::MainThreadMarker;
 use objc2_app_kit::NSScreen;
 
+use crate::core::display::DisplayInfo;
 use crate::core::types::Rect;
-use crate::platform::DisplayInfo;
 
 /// Enumerate all online displays.
 ///

@@ -103,7 +103,7 @@ impl DesktopProvider for DarwinProvider {
         app::list_windows(app)
     }
 
-    fn displays(&self) -> Result<Vec<crate::platform::DisplayInfo>, ForepawError> {
+    fn displays(&self) -> Result<Vec<crate::core::display::DisplayInfo>, ForepawError> {
         display::displays()
     }
 

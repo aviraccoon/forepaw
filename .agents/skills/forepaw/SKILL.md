@@ -98,7 +98,7 @@ forepaw ocr --app Discord --find "Settings"  # filter for specific text
 forepaw ocr --app Discord --no-screenshot    # text only, no screenshot saved
 ```
 
-Returns a screenshot path (first line) followed by recognized text with click coordinates. The screenshot uses the best available format (WebP preferred, else JPEG) at 1x scale. Use when `snapshot` returns unnamed elements or when you need text that isn't in the AX tree.
+Returns a screenshot path (first line) followed by recognized text with click coordinates. The screenshot uses the best available format (WebP preferred, else JPEG) at native backing resolution. Use when `snapshot` returns unnamed elements or when you need text that isn't in the AX tree.
 
 **OCR replaces separate screenshot + OCR calls.** Since OCR already captures a screenshot internally for text recognition, it saves and returns that screenshot automatically. No need to run `screenshot` + `ocr` separately.
 
@@ -115,7 +115,7 @@ forepaw screenshot --app "App Name" --region 10,50,400,300  # crop to window-rel
 forepaw screenshot --app "App Name" --grid 100     # overlay coordinate grid
 ```
 
-Returns a screenshot path. Use when you need to see what's on screen without OCR text. The image can be read with the `read` tool.
+Returns a screenshot path. Use when you need to see what's on screen without OCR text. The image can be read with the `read` tool. With `-f json`, the output also includes `pixels_per_bound_unit` (pixels per bound-unit of the returned image — multiply element-bound deltas by it to get image pixel coords) and `pixel_dimensions` (actual width/height after resampling) — useful for tooling that samples pixels at native resolution (request `--scale native`).
 
 **Area capture with `--ref` or `--region`:** Crops to the specified area. `--ref @eN` resolves the element's bounds from the AX tree. `--region x,y,w,h` uses window-relative coordinates. Both add 20px padding by default (override with `--padding`). Works with `--annotate` too -- annotations are rendered on the full image first, then cropped. Requires `--app`.
 

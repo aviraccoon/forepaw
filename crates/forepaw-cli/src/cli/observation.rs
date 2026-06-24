@@ -6,7 +6,7 @@ use crate::cli::GlobalArgs;
 use forepaw::core::annotation::AnnotationStyle;
 use forepaw::core::crop_region::CropRegion;
 use forepaw::core::element_tree::ElementRef;
-use forepaw::core::encoder_detection::{ImageFormat, ImageOutput, ScreenshotOptions};
+use forepaw::core::encoder_detection::{CaptureScale, ImageFormat, ImageOutput, ScreenshotOptions};
 use forepaw::core::snapshot_cache::SnapshotCache;
 use forepaw::core::snapshot_diff::SnapshotDiffer;
 use forepaw::core::tree_renderer::TreeRenderer;
@@ -184,8 +184,8 @@ pub(crate) struct Screenshot {
     #[arg(long, help = "JPEG quality 1-100 (default 85)")]
     pub quality: Option<u32>,
 
-    #[arg(long, help = "Output scale: 1 or 2 (default 1)")]
-    pub scale: Option<u32>,
+    #[arg(long, help = "Capture scale: logical or native (default logical)")]
+    pub scale: Option<CaptureScale>,
 
     #[arg(long, help = "Exclude mouse cursor from screenshot")]
     pub no_cursor: bool,
@@ -252,6 +252,8 @@ impl Screenshot {
                 path: String,
                 #[serde(skip_serializing_if = "Option::is_none")]
                 legend: Option<String>,
+                pixels_per_bound_unit: f64,
+                pixel_dimensions: forepaw::core::types::Dimensions,
             }
             let path = match &result.image {
                 forepaw::platform::ScreenshotImage::Path(p) => p.clone(),
@@ -262,6 +264,8 @@ impl Screenshot {
             let output = ScreenshotResult {
                 path,
                 legend: result.legend,
+                pixels_per_bound_unit: result.pixels_per_bound_unit,
+                pixel_dimensions: result.pixel_dimensions,
             };
             println!(
                 "{}",
@@ -303,7 +307,7 @@ impl Screenshot {
         ScreenshotOptions {
             format: fmt,
             quality: self.quality.unwrap_or(85),
-            scale: self.scale.unwrap_or(1),
+            scale: self.scale.unwrap_or(CaptureScale::Logical),
             cursor: !self.no_cursor,
             output: ImageOutput::default(),
         }
@@ -634,8 +638,8 @@ pub(crate) struct Ocr {
     #[arg(long, help = "JPEG quality 1-100 (default 85)")]
     pub quality: Option<u32>,
 
-    #[arg(long, help = "Output scale: 1 or 2 (default 1)")]
-    pub scale: Option<u32>,
+    #[arg(long, help = "Capture scale: logical or native (default logical)")]
+    pub scale: Option<CaptureScale>,
 
     #[arg(long, help = "Exclude mouse cursor from screenshot")]
     pub no_cursor: bool,
@@ -703,7 +707,7 @@ impl Ocr {
         ScreenshotOptions {
             format: fmt,
             quality: self.quality.unwrap_or(85),
-            scale: self.scale.unwrap_or(1),
+            scale: self.scale.unwrap_or(CaptureScale::Logical),
             cursor: !self.no_cursor,
             output: ImageOutput::default(),
         }

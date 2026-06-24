@@ -14,7 +14,7 @@ use windows::Win32::System::WinRT::IMemoryBufferByteAccess;
 use crate::core::encoder_detection::ScreenshotOptions;
 use crate::core::errors::ForepawError;
 use crate::core::ocr_result::{OCROutput, OCRResult};
-use crate::core::types::Rect;
+use crate::core::types::{Dimensions, Rect};
 use crate::platform::{AppTarget, WindowTarget};
 
 /// Run OCR on an app window (or full screen).
@@ -39,10 +39,10 @@ pub fn ocr(
     // Upscale 2x before OCR -- Windows.Media.Ocr struggles with small text.
     // Lanczos3 preserves sharpness better than bilinear for text edges.
     let scale = 3_u32;
-    let (ocr_pixels, ocr_width, ocr_height) = upscale_rgba(&rgba_pixels, width, height, scale);
+    let (ocr_pixels, ocr_dims) = upscale_rgba(&rgba_pixels, width, height, scale);
 
     // Create SoftwareBitmap from the upscaled pixel data
-    let bitmap = create_software_bitmap(&ocr_pixels, ocr_width, ocr_height)?;
+    let bitmap = create_software_bitmap(&ocr_pixels, ocr_dims.width, ocr_dims.height)?;
 
     // Run OCR
     let engine = OcrEngine::TryCreateFromUserProfileLanguages()
@@ -244,13 +244,13 @@ fn block_on_async<T: windows::core::RuntimeType + 'static>(
 /// Upscale RGBA pixels by an integer factor using Lanczos3 resampling.
 ///
 /// Returns (`upscaled_rgba`, `new_width`, `new_height`).
-fn upscale_rgba(rgba: &[u8], width: u32, height: u32, scale: u32) -> (Vec<u8>, u32, u32) {
-    let Some(img) = image::RgbaImage::from_raw(width, height, rgba.to_vec()) else {
-        return (rgba.to_vec(), width, height); // fallback: no upscale
-    };
+fn upscale_rgba(rgba: &[u8], width: u32, height: u32, scale: u32) -> (Vec<u8>, Dimensions) {
     let new_w = width * scale;
     let new_h = height * scale;
-    let upscaled =
-        image::imageops::resize(&img, new_w, new_h, image::imageops::FilterType::Lanczos3);
-    (upscaled.into_raw(), new_w, new_h)
+    crate::platform::windows::image_ops::resize_rgba(
+        rgba,
+        Dimensions::new(width, height),
+        Dimensions::new(new_w, new_h),
+    )
+    .unwrap_or_else(|| (rgba.to_vec(), Dimensions::new(width, height)))
 }

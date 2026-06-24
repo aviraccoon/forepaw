@@ -12,14 +12,16 @@ pub mod windows;
 
 #[cfg(target_os = "linux")]
 pub mod linux;
+
 use crate::core::annotation::{Annotation, AnnotationStyle};
 use crate::core::crop_region::CropRegion;
+use crate::core::display::DisplayInfo;
 use crate::core::element_tree::ElementRef;
 use crate::core::errors::ForepawError;
 use crate::core::key_combo::{ClickOptions, DragOptions, KeyCombo};
 use crate::core::ocr_result::OCROutput;
 use crate::core::role::Role;
-use crate::core::types::{Point, Rect};
+use crate::core::types::{Dimensions, Point, Rect};
 
 /// Create a [`DesktopProvider`] for the current platform.
 ///
@@ -192,47 +194,6 @@ pub struct WindowInfo {
     pub state: Option<WindowState>,
 }
 
-/// Info about a physical display / monitor.
-#[derive(Debug, Clone, serde::Serialize)]
-#[non_exhaustive]
-pub struct DisplayInfo {
-    /// Platform display identifier (e.g. macOS `CGDirectDisplayID`).
-    pub id: u32,
-    /// Human-readable name ("Color LCD", "DELL U2723QE"). `None` on platforms
-    /// without a cheap name lookup.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    /// Bounds in the global logical/point coordinate space (the same space as
-    /// window and element bounds).
-    pub logical_bounds: Rect,
-    /// Backing scale factor (1.0 or 2.0 on macOS; fractional possible on
-    /// Windows/Linux). Multiply logical sizes by this to get pixel sizes.
-    pub scale_factor: f64,
-    /// Whether this is a primary/main display.
-    pub is_primary: bool,
-    /// Whether this is a built-in display (laptop lid, iPad Sidecar).
-    /// `None` where the platform does not expose built-in detection.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_builtin: Option<bool>,
-    /// Color space name ("Display P3", "sRGB"). `None` where the platform has
-    /// no cheap name lookup (Windows exposes only an ICC profile path).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub color_space: Option<String>,
-    /// Maximum refresh rate in Hz. Integer-rounded on macOS (`NSInteger`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub refresh_rate_hz: Option<f64>,
-    /// Whether the display supports HDR / EDR content (extended dynamic range).
-    /// Hardware capability — the panel can reproduce values beyond standard
-    /// sRGB white.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_hdr: Option<bool>,
-    /// Whether HDR / EDR is currently active on the display. Runtime state —
-    /// an HDR-capable panel reports `false` when EDR isn't engaged (the common
-    /// case, since macOS leaves EDR off until an app opts in).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_hdr_active: Option<bool>,
-}
-
 /// Visual state of a window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[non_exhaustive]
@@ -370,6 +331,29 @@ pub struct ScreenshotResult {
     pub annotations: Option<Vec<Annotation>>,
     /// Legend text explaining annotation colors.
     pub legend: Option<String>,
+    /// Pixels per snapshot-bound-unit of the returned image — what the image
+    /// actually is, not what was requested. Multiply bound-unit deltas
+    /// (`element_bounds − window_origin`) by this to get image pixel
+    /// coordinates.
+    ///
+    /// Equals [`DisplayInfo::scale_factor`](crate::core::display::DisplayInfo::scale_factor)
+    /// only where snapshot bounds are logical units: macOS, where bounds are
+    /// points (so this is 2.0 on Retina under [`CaptureScale::Native`], 1.0
+    /// under [`CaptureScale::Logical`]). On Windows, snapshot bounds are
+    /// **physical pixels** (the process runs `PER_MACHINE_AWARE_V2`), so a
+    /// `Native` capture reports 1.0 here — the bounds you received are already
+    /// the image's pixels — while `Logical` reports 1/display-scale. The
+    /// display's DPI ratio always lives on `DisplayInfo`; this field is the
+    /// per-image ratio that makes `(bounds_delta) × this` correct.
+    ///
+    /// Consumers wanting native-resolution sampling should request
+    /// [`CaptureScale::Native`] and read this to confirm what they received.
+    pub pixels_per_bound_unit: f64,
+    /// Actual pixel width/height of the returned image after any resampling.
+    /// Lets consumers validate their scale math without decoding the bytes.
+    /// Exact in the common cases — `sips --resampleWidth` produces the target
+    /// width, and halving backing dimensions introduces no rounding.
+    pub pixel_dimensions: Dimensions,
 }
 
 /// The captured image, either as a file path or in-memory bytes.

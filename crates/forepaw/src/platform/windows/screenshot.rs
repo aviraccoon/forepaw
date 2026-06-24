@@ -20,7 +20,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SM_YVIRTUALSCREEN,
 };
 
+use crate::core::display::display_for_bounds;
+use crate::core::encoder_detection::CaptureScale;
 use crate::core::errors::ForepawError;
+use crate::core::types::Dimensions;
 use crate::platform::windows::app;
 use crate::platform::{AppTarget, WindowTarget};
 
@@ -39,9 +42,28 @@ pub fn init_dpi_awareness() {
 
 /// Generate a unique temp file tag.
 ///
-/// Capture a screenshot of a specific window or the full screen.
+/// Result of a Windows capture: the saved PNG path plus the metadata a
+/// [`ScreenshotResult`](crate::platform::ScreenshotResult) needs to report.
 ///
-/// Returns the path to the saved PNG file.
+/// `pixels_per_bound_unit` is pixels per bound-unit of the saved image (1.0 for Native,
+/// 1/display-scale for Logical); `dimensions` is its actual pixel size.
+#[derive(Debug)]
+pub struct CapturedImage {
+    /// Saved temp PNG path.
+    pub path: String,
+    /// Pixels per bound-unit of the saved image.
+    pub pixels_per_bound_unit: f64,
+    /// Actual pixel width/height of the saved image.
+    pub dimensions: Dimensions,
+}
+
+/// Capture a screenshot of a specific window or the full screen, optionally
+/// downsampled to logical resolution.
+///
+/// `scale` controls the returned image: [`CaptureScale::Native`] returns the
+/// physical capture unchanged; [`CaptureScale::Logical`] downsamples by the
+/// display's scale factor (Windows runs `PER_MACHINE_AWARE_V2`, so window
+/// bounds are physical pixels; logical = physical / display-scale).
 ///
 /// # Errors
 ///
@@ -50,9 +72,99 @@ pub fn init_dpi_awareness() {
 pub fn screenshot(
     app: Option<&AppTarget>,
     window: Option<&WindowTarget>,
-) -> Result<String, ForepawError> {
-    let (rgba_pixels, width, height) = capture_pixels(app, window)?;
-    save_pixels_to_temp(&rgba_pixels, width, height)
+    scale: CaptureScale,
+) -> Result<CapturedImage, ForepawError> {
+    // Physical capture first; Logical downsamples from it below.
+    let (rgba_pixels, phys_w, phys_h) = capture_pixels(app, window)?;
+
+    // Native = 1.0 (image matches physical-pixel bounds). Logical = 1/scale
+    // (image is smaller than the bounds); the consumer's (bounds-origin)*sf
+    // still lands in the downsampled pixel space.
+    let source_scale = window_display_scale(app, window);
+    let scale_factor = match scale {
+        CaptureScale::Native => 1.0,
+        CaptureScale::Logical => 1.0 / source_scale,
+    };
+
+    if scale == CaptureScale::Logical && source_scale > 1.0 {
+        let (path, dims) = downsample(&rgba_pixels, phys_w, phys_h, source_scale)?;
+        Ok(CapturedImage {
+            path,
+            pixels_per_bound_unit: scale_factor,
+            dimensions: dims,
+        })
+    } else {
+        let path = save_pixels_to_temp(&rgba_pixels, phys_w, phys_h)?;
+        Ok(CapturedImage {
+            path,
+            pixels_per_bound_unit: scale_factor,
+            dimensions: Dimensions::new(phys_w, phys_h),
+        })
+    }
+}
+
+/// Backing scale of the display the captured window sits on (1.0 for
+/// full-screen, where the main display's scale is the best single value for a
+/// potentially multi-display composite capture).
+fn window_display_scale(app: Option<&AppTarget>, window: Option<&WindowTarget>) -> f64 {
+    let bounds = match app {
+        Some(a) => match app::find_app_hwnd(a, window) {
+            Ok((_, rect)) => Some(rect),
+            // Capture already succeeded above; if the HWND lookup fails here
+            // (shouldn't), fall back to main scale rather than erroring.
+            Err(_) => None,
+        },
+        None => None,
+    };
+    let Some(bounds) = bounds else {
+        return main_display_scale();
+    };
+    match crate::platform::windows::display::displays() {
+        Ok(ds) => display_for_bounds(&ds, bounds).map_or(main_display_scale(), |d| d.scale_factor),
+        Err(_) => main_display_scale(),
+    }
+}
+
+/// Main display's backing scale, via `displays()` (1.0 if enumeration fails).
+fn main_display_scale() -> f64 {
+    crate::platform::windows::display::displays()
+        .ok()
+        .and_then(|ds| ds.iter().find(|d| d.is_primary).map(|d| d.scale_factor))
+        .unwrap_or(1.0)
+}
+
+/// Downsample RGBA pixels by `factor` (physical → logical) and save as PNG.
+/// Returns the saved path and the logical dimensions.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the resize or PNG save fails.
+fn downsample(
+    rgba: &[u8],
+    phys_w: u32,
+    phys_h: u32,
+    factor: f64,
+) -> Result<(String, Dimensions), ForepawError> {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "dims fit in u32 and are non-negative"
+    )]
+    let new_w = ((f64::from(phys_w) / factor).round() as u32).max(1);
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "dims fit in u32 and are non-negative"
+    )]
+    let new_h = ((f64::from(phys_h) / factor).round() as u32).max(1);
+    let (resized, dims) = super::image_ops::resize_rgba(
+        rgba,
+        Dimensions::new(phys_w, phys_h),
+        Dimensions::new(new_w, new_h),
+    )
+    .ok_or_else(|| ForepawError::ActionFailed("failed to downsample capture".into()))?;
+    let path = save_pixels_to_temp(&resized, dims.width, dims.height)?;
+    Ok((path, dims))
 }
 
 /// Capture screen/window pixels as RGBA.

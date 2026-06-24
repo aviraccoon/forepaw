@@ -64,7 +64,7 @@ impl DesktopProvider for LinuxProvider {
         app::list_windows(app)
     }
 
-    fn displays(&self) -> Result<Vec<crate::platform::DisplayInfo>, ForepawError> {
+    fn displays(&self) -> Result<Vec<crate::core::display::DisplayInfo>, ForepawError> {
         Err(ForepawError::ActionFailed(
             "displays not yet implemented on Linux".into(),
         ))

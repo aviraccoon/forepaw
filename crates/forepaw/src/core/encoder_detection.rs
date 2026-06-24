@@ -110,6 +110,41 @@ pub enum ImageOutput {
     Bytes,
 }
 
+/// Requested capture density for a screenshot.
+///
+/// The consumer requests a density; the platform resolves what "native" means
+/// per display (it has the display's backing scale via
+/// [`DisplayInfo`](crate::core::display::DisplayInfo)). The returned
+/// [`ScreenshotResult`](crate::platform::ScreenshotResult) reports the actual
+/// `scale_factor` so the consumer can confirm what they received before
+/// trusting pixel math — "native" is a per-display property the consumer
+/// can't compute without forepaw.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum CaptureScale {
+    /// Logical / point space. On `HiDPI` displays this is downsampled from the
+    /// backing capture (e.g. macOS `sips --resampleWidth`, Windows resize by
+    /// the display's scale factor).
+    Logical,
+    /// Best available per platform: macOS backing pixels (2× on Retina),
+    /// Windows physical pixels. The reported `scale_factor` tells the consumer
+    /// the actual ratio of returned pixels to snapshot bound-units.
+    Native,
+}
+
+impl std::str::FromStr for CaptureScale {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "logical" | "1" => Ok(Self::Logical),
+            "native" | "2" => Ok(Self::Native),
+            _ => Err(format!(
+                "invalid capture scale '{s}' (expected 'logical' or 'native')"
+            )),
+        }
+    }
+}
+
 /// Screenshot output options.
 #[derive(Debug, Clone)]
 pub struct ScreenshotOptions {
@@ -117,8 +152,9 @@ pub struct ScreenshotOptions {
     pub format: ImageFormat,
     /// JPEG/WebP quality (1-100).
     pub quality: u32,
-    /// Upscale factor.
-    pub scale: u32,
+    /// Requested capture density: [`CaptureScale::Logical`] (downsampled) or
+    /// [`CaptureScale::Native`] (backing/physical).
+    pub scale: CaptureScale,
     /// Whether to include the cursor.
     pub cursor: bool,
     /// Where to deliver the image: file path or in-memory bytes.
@@ -130,7 +166,7 @@ impl Default for ScreenshotOptions {
         Self {
             format: ImageFormat::BestAvailable,
             quality: 85,
-            scale: 1,
+            scale: CaptureScale::Logical,
             cursor: true,
             output: ImageOutput::Path,
         }
@@ -138,13 +174,13 @@ impl Default for ScreenshotOptions {
 }
 
 impl ScreenshotOptions {
-    /// Full quality: PNG, 2x Retina, cursor visible.
+    /// Full quality: PNG, native backing resolution, cursor visible.
     #[must_use]
     pub fn full_quality() -> Self {
         Self {
             format: ImageFormat::Png,
             quality: 85,
-            scale: 2,
+            scale: CaptureScale::Native,
             cursor: true,
             output: ImageOutput::Path,
         }
@@ -217,7 +253,7 @@ mod tests {
     fn default_options() {
         let opts = ScreenshotOptions::default();
         assert_eq!(opts.quality, 85);
-        assert_eq!(opts.scale, 1);
+        assert_eq!(opts.scale, CaptureScale::Logical);
         assert!(opts.cursor);
     }
 
@@ -225,7 +261,17 @@ mod tests {
     fn full_quality() {
         let opts = ScreenshotOptions::full_quality();
         assert_eq!(opts.format, ImageFormat::Png);
-        assert_eq!(opts.scale, 2);
+        assert_eq!(opts.scale, CaptureScale::Native);
+    }
+
+    #[test]
+    fn capture_scale_from_str() {
+        assert_eq!("logical".parse::<CaptureScale>(), Ok(CaptureScale::Logical));
+        assert_eq!("native".parse::<CaptureScale>(), Ok(CaptureScale::Native));
+        // Integer shorthands (back-compat) still parse.
+        assert_eq!("1".parse::<CaptureScale>(), Ok(CaptureScale::Logical));
+        assert_eq!("2".parse::<CaptureScale>(), Ok(CaptureScale::Native));
+        "bogus".parse::<CaptureScale>().unwrap_err();
     }
 
     #[test]

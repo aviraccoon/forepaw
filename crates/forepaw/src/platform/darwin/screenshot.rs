@@ -9,10 +9,11 @@ use std::process::Command;
 
 use crate::core::annotation::{AnnotationCollector, AnnotationLegend};
 use crate::core::crop_region::CropRegion;
+use crate::core::display::display_for_bounds;
 use crate::core::element_tree::ElementRef;
-use crate::core::encoder_detection::{ImageFormat, ImageOutput, ScreenshotOptions};
+use crate::core::encoder_detection::{CaptureScale, ImageFormat, ImageOutput, ScreenshotOptions};
 use crate::core::errors::ForepawError;
-use crate::core::types::{Point, Rect};
+use crate::core::types::{Dimensions, Point, Rect};
 use crate::platform::darwin::annotation;
 use crate::platform::darwin::app;
 use crate::platform::darwin::ffi::{self, CGPointFFI, CGRectFFI, CGSizeFFI};
@@ -155,7 +156,7 @@ pub fn post_process_screenshot(
     suffix: &str,
 ) -> Result<String, ForepawError> {
     let format = options.format.resolve();
-    let needs_scale = options.scale == 1;
+    let needs_scale = options.scale == CaptureScale::Logical;
     let needs_format = format != ImageFormat::Png;
 
     if !needs_scale && !needs_format {
@@ -333,6 +334,86 @@ pub fn backing_scale_factor() -> f64 {
     }
 }
 
+/// Backing scale of the display the captured window sits on.
+///
+/// Looks up the window's display via majority-overlap against `displays()`
+/// rather than assuming the main screen, so a window on a non-primary display
+/// (e.g. a Sidecar iPad at a different scale) reports correctly. Falls back to
+/// [`backing_scale_factor`] (the main screen) when there's no window -- a
+/// full-screen capture *is* the main display -- or when enumeration or the
+/// lookup find nothing.
+fn source_scale_for(resolved_window: Option<&app::ResolvedWindow>) -> f64 {
+    let Some(resolved) = resolved_window else {
+        return backing_scale_factor();
+    };
+    match crate::platform::darwin::display::displays() {
+        Ok(ds) => match display_for_bounds(&ds, resolved.bounds) {
+            Some(d) => d.scale_factor,
+            None => backing_scale_factor(),
+        },
+        Err(_) => backing_scale_factor(),
+    }
+}
+
+/// Scale factor of the returned image -- what the image actually is, not what
+/// was requested. [`CaptureScale::Logical`] downsamples the backing capture to
+/// logical pixels (halving the ratio); [`CaptureScale::Native`] passes the
+/// backing capture through.
+fn output_scale_factor(source_scale: f64, options: &ScreenshotOptions) -> f64 {
+    match options.scale {
+        CaptureScale::Logical => source_scale / 2.0,
+        CaptureScale::Native => source_scale,
+    }
+}
+
+/// Logical extent (width, height) the returned image covers: the window's size
+/// when targeting a window, or the main display size for full-screen captures.
+fn capture_extent(resolved_window: Option<&app::ResolvedWindow>) -> Point {
+    match resolved_window {
+        Some(resolved) => Point::new(resolved.bounds.width, resolved.bounds.height),
+        None => main_display_size(),
+    }
+}
+
+/// Main display frame size in points, via CoreGraphics (thread-safe, always
+/// returns a valid rect for the main display).
+fn main_display_size() -> Point {
+    // SAFETY: CGMainDisplayID + CGDisplayBounds are read-only system calls.
+    let id = unsafe { ffi::CGMainDisplayID() };
+    // SAFETY: valid main display ID from CGMainDisplayID.
+    let bounds = unsafe { ffi::CGDisplayBounds(id) };
+    Point::new(bounds.size.width, bounds.size.height)
+}
+
+/// Pixel dimensions of the returned image.
+///
+/// For a crop, the clamped/padded crop rect evaluated at `output_sf`; otherwise
+/// the full capture extent at that scale. Evaluating the crop rect at
+/// `output_sf` (rather than the source scale) yields the post-resample
+/// dimensions directly, since the resample is a uniform scale on the same
+/// logical extent. Exact in the common cases (`sips --resampleWidth` produces
+/// the target width; halving backing dimensions introduces no rounding).
+fn result_pixel_dimensions(extent: Point, crop: Option<&CropRegion>, output_sf: f64) -> Dimensions {
+    if let Some(crop) = crop {
+        if let Some((_, _, w, h)) = crop.image_crop_rect(&extent, output_sf) {
+            return Dimensions::new(u32::try_from(w).unwrap_or(0), u32::try_from(h).unwrap_or(0));
+        }
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "image dimensions fit in u32 and are non-negative"
+    )]
+    let w = (extent.x * output_sf).round().max(0.0) as u32;
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "image dimensions fit in u32 and are non-negative"
+    )]
+    let h = (extent.y * output_sf).round().max(0.0) as u32;
+    Dimensions::new(w, h)
+}
+
 /// Take a screenshot of an app window (or full screen), with optional annotations.
 ///
 /// This is the main entry point called from the `DesktopProvider` trait impl.
@@ -455,10 +536,15 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     if annotations.is_empty() {
         let current_path =
             apply_crop_if_needed(&raw_path, &tag, params.crop, resolved_window.as_ref())?;
+        let source_scale = source_scale_for(resolved_window.as_ref());
+        let output_sf = output_scale_factor(source_scale, params.options);
+        let extent = capture_extent(resolved_window.as_ref());
         return Ok(ScreenshotResult {
             image: finalize_image(current_path, params.options)?,
             annotations: None,
             legend: Some("No interactive elements found".into()),
+            pixels_per_bound_unit: output_sf,
+            pixel_dimensions: result_pixel_dimensions(extent, params.crop, output_sf),
         });
     }
 
@@ -499,10 +585,15 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
     let final_path =
         post_process_screenshot(&current_annotated, &tag, params.options, "-annotated")?;
 
+    let source_scale = source_scale_for(resolved_window.as_ref());
+    let output_sf = output_scale_factor(source_scale, params.options);
+    let extent = capture_extent(resolved_window.as_ref());
     Ok(ScreenshotResult {
         image: finalize_image(final_path, params.options)?,
         annotations: Some(annotations),
         legend: Some(legend),
+        pixels_per_bound_unit: output_sf,
+        pixel_dimensions: result_pixel_dimensions(extent, params.crop, output_sf),
     })
 }
 
@@ -544,10 +635,15 @@ fn render_plain(
     }
 
     let final_path = post_process_screenshot(&current_path, tag, options, "")?;
+    let source_scale = source_scale_for(resolved_window);
+    let output_sf = output_scale_factor(source_scale, options);
+    let extent = capture_extent(resolved_window);
     Ok(ScreenshotResult {
         image: finalize_image(final_path, options)?,
         annotations: None,
         legend: None,
+        pixels_per_bound_unit: output_sf,
+        pixel_dimensions: result_pixel_dimensions(extent, crop, output_sf),
     })
 }
 

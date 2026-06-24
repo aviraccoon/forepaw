@@ -374,7 +374,7 @@ All screenshots start as full-resolution PNG via `screencapture -l <windowID>`. 
 2. **Format**: WebP via `cwebp` (external binary, must be installed), JPEG via `sips`, or kept as PNG.
 3. **Crop**: `--ref @eN` resolves element bounds, `--region x,y,w,h` uses window-relative coordinates. Both add padding (default 20px). Cropping uses CoreGraphics `CGImage.cropping(to:)`.
 
-Default output: best available format (WebP if `cwebp` installed, else JPEG), 1x scale, cursor visible. Agent-optimized at ~85-150KB per window.
+Default output: best available format (WebP if `cwebp` installed, else JPEG), logical (1x) scale, cursor visible. Agent-optimized at ~85-150KB per window.
 
 ### Windows
 
@@ -388,6 +388,24 @@ The `PW_RENDERFULLCONTENT` flag is undocumented but stable since Windows 8 (same
 ### Linux
 
 Not implemented. Planned: `spectacle` (KDE) or `magick import` (X11) CLI integration.
+
+### Capture density request (`CaptureScale`)
+
+`ScreenshotOptions.scale` is a [`CaptureScale`] enum, not an integer, because the consumer intent ("give me native pixels" / "give me logical pixels") is a closed dichotomy the platform resolves per-display — not an upscale factor. It pairs with the truth-reporting fields below: the consumer requests `Native`, forepaw resolves "native" per-display via `display_for_bounds`, and the consumer confirms the actual ratio via the reported `pixels_per_bound_unit` before trusting pixel math.
+
+- [`CaptureScale::Native`] — best available per platform: macOS backing pixels (2× on Retina), Windows physical pixels. The reported `pixels_per_bound_unit` tells the consumer the actual ratio.
+- [`CaptureScale::Logical`] — point/logical space, downsampled from backing on `HiDPI` displays (macOS `sips --resampleWidth`; Windows in-memory Lanczos3 resize by the display's `scale_factor`).
+
+### Reported scale and dimensions
+
+`ScreenshotResult` carries `pixels_per_bound_unit` and `pixel_dimensions` so consumers know exactly what the returned image is without re-querying the display:
+
+- **`pixels_per_bound_unit`** — pixels per snapshot-bound-unit of the returned image (what it *is*, not what was *requested*). Multiply a bound-unit delta (`element_bounds − window_origin`) by it to get image pixel coordinates. Equals `DisplayInfo.scale_factor` only where snapshot bounds are logical units: macOS, where bounds are points (so this is 2.0 on Retina under `CaptureScale::Native`, 1.0 under `Logical`). On Windows, snapshot bounds are **physical pixels** (the process runs `PER_MACHINE_AWARE_V2`), so a `Native` capture reports 1.0 here — the bounds you received are already the image's pixels — while `Logical` reports 1/display-scale. The display's DPI ratio always lives on `DisplayInfo`; this field is the per-image ratio that makes `(bounds_delta) × this` correct.
+- **`pixel_dimensions`** — actual pixel width/height of the returned image after any resampling, computed from the logical extent (window size, or crop rect for crops) at the reported scale. Lets consumers validate their scale math without decoding the bytes.
+
+The scale is derived from the display the captured window sits on (via majority-overlap lookup against `displays()`), not the main screen — so a window on a non-primary display reports its own scale. The no-`--app` (full-screen) path falls back to the main display's scale: an approximation that is exact on single-display setups but imprecise on multi-display, where a targetless `screencapture` captures the composite virtual desktop spanning displays of potentially different scales (a single `scale_factor` is ill-defined for that composite).
+
+Consumers wanting native-resolution sampling (e.g. contrast sampling at backing resolution rather than a hardcoded 1x) should request `CaptureScale::Native` (CLI `--scale native`) and read `pixels_per_bound_unit` to confirm what they received.
 
 ## Annotated screenshots
 

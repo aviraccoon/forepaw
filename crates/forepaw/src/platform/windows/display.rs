@@ -14,8 +14,8 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::UI::ColorSystem::GetICMProfileW;
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MONITOR_DPI_TYPE};
 
+use crate::core::display::DisplayInfo;
 use crate::core::types::Rect;
-use crate::platform::DisplayInfo;
 
 /// Enumerate all monitors.
 ///

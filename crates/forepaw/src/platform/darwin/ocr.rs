@@ -35,10 +35,10 @@ pub fn ocr(
     find: Option<&str>,
     screenshot_options: Option<&ScreenshotOptions>,
 ) -> Result<OCROutput, ForepawError> {
-    // Capture at 2x for accurate OCR
+    // Capture at native backing resolution for accurate OCR
     let ocr_options = ScreenshotOptions {
         format: crate::core::encoder_detection::ImageFormat::Png,
-        scale: 2,
+        scale: crate::core::encoder_detection::CaptureScale::Native,
         quality: 100,
         cursor: false,
         output: crate::core::encoder_detection::ImageOutput::Path,

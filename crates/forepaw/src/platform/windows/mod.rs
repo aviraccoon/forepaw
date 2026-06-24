@@ -10,6 +10,7 @@
 pub mod app;
 pub mod display;
 pub mod hit_test;
+pub mod image_ops;
 pub mod ocr;
 pub mod role;
 pub mod screenshot;
@@ -50,7 +51,7 @@ impl DesktopProvider for WindowsProvider {
         app::list_windows(app)
     }
 
-    fn displays(&self) -> Result<Vec<crate::platform::DisplayInfo>, ForepawError> {
+    fn displays(&self) -> Result<Vec<crate::core::display::DisplayInfo>, ForepawError> {
         display::displays()
     }
 
@@ -69,11 +70,13 @@ impl DesktopProvider for WindowsProvider {
         &self,
         params: &crate::platform::ScreenshotParams,
     ) -> Result<crate::platform::ScreenshotResult, ForepawError> {
-        let path = screenshot::screenshot(params.app, params.window)?;
+        let captured = screenshot::screenshot(params.app, params.window, params.options.scale)?;
         Ok(crate::platform::ScreenshotResult {
-            image: crate::platform::ScreenshotImage::Path(path),
+            image: crate::platform::ScreenshotImage::Path(captured.path),
             annotations: None,
             legend: None,
+            pixels_per_bound_unit: captured.pixels_per_bound_unit,
+            pixel_dimensions: captured.dimensions,
         })
     }
 
