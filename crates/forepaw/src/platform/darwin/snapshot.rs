@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use crate::core::element_tree::{
-    ElementData, ElementNode, ElementRef, ElementTree, SnapshotTiming,
+    ElementData, ElementNode, ElementRef, ElementTree, NameSource, SnapshotTiming,
 };
 use crate::core::errors::ForepawError;
 use crate::core::icon_class_parser::IconClassParser;
@@ -791,9 +791,10 @@ fn build_tree(
     let (children, child_handles) =
         build_children(element, &children_refs, depth, max_depth, pruning);
 
-    let name = non_empty(attrs.string(Attr::Title).as_ref())
-        .or_else(|| non_empty(attrs.string(Attr::Description).as_ref()))
-        .or_else(|| computed_name(&attrs, &children, element));
+    let (name, name_source) = match resolve_name(&attrs, &children, element) {
+        Some((n, s)) => (Some(n), Some(s)),
+        None => (None, None),
+    };
 
     let enabled = attrs.bool_val(Attr::Enabled);
     // Note: AXFocused conflates focusable and focused on macOS (W3C Core-AAM).
@@ -802,8 +803,8 @@ fn build_tree(
     let selected = attrs.bool_val(Attr::Selected);
 
     // Description: use AXDescription if it wasn't already used as the name.
-    // (computed_name already falls back to AXDescription, so only show it
-    // if it's different from the title and wasn't consumed by name resolution.)
+    // (resolve_name falls back to AXDescription, so only show it if it's
+    // different from the resolved name — i.e. not consumed by name resolution.)
     let description = attrs
         .string(Attr::Description)
         .and_then(|d| if d.is_empty() { None } else { Some(d) })
@@ -813,6 +814,7 @@ fn build_tree(
         data: ElementData {
             role,
             name,
+            name_source,
             value,
             reference: None,
             bounds,
@@ -1005,10 +1007,9 @@ fn check_pruned(
     if pruning.options.skip_zero_size {
         if let Some(b) = bounds {
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
-                let name = non_empty(attrs.string(Attr::Title).as_ref())
-                    .or_else(|| non_empty(attrs.string(Attr::Description).as_ref()))
-                    .or_else(|| computed_name(attrs, &[], element));
-                let mut data = ElementData::new(role).with_name_opt(name).with_bounds(*b);
+                let mut data = ElementData::new(role)
+                    .with_resolved_name(resolve_name(attrs, &[], element))
+                    .with_bounds(*b);
                 if let Some(v) = value {
                     data = data.with_value(v.as_str());
                 }
@@ -1023,9 +1024,12 @@ fn check_pruned(
             let no_horizontal = b.x + b.width <= wb.x || b.x >= wb.x + wb.width;
             let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
             if no_horizontal || no_vertical {
-                let name = non_empty(attrs.string(Attr::Title).as_ref());
+                let name =
+                    non_empty(attrs.string(Attr::Title).as_ref()).map(|n| (n, NameSource::Title));
                 return Some(ElementNode::new(
-                    ElementData::new(role).with_name_opt(name).with_bounds(*b),
+                    ElementData::new(role)
+                        .with_resolved_name(name)
+                        .with_bounds(*b),
                 ));
             }
         }
@@ -1038,78 +1042,92 @@ fn check_pruned(
 // Name computation
 // ---------------------------------------------------------------------------
 
-/// Derive a name from batch attributes and already-built child nodes.
+/// Derive the accessible name from batch attributes and already-built child
+/// nodes, tagging the source.
 ///
-/// The chain (in priority order):
-/// 1. `AXTitleUIElement` -> its value or title
-/// 2. First `AXStaticText` child's value, or `AXImage` child with a name
-/// 3. `AXHelp`
-/// 4. `AXPlaceholderValue`
-/// 5. `AXDOMClassList` -> icon class parsing
-/// 6. `AXRoleDescription` (when not generic)
-fn computed_name(
+/// The fallback chain (in priority order):
+/// 1. `AXTitle` -> [`NameSource::Title`]
+/// 2. `AXDescription` -> [`NameSource::Description`]
+/// 3. `AXTitleUIElement` -> its value or title -> [`NameSource::TitleUiElement`]
+/// 4. First `AXStaticText` child's value, or `AXImage` child with a name ->
+///    [`NameSource::ChildLabel`]
+/// 5. `AXHelp` -> [`NameSource::HelpText`]
+/// 6. `AXPlaceholderValue` -> [`NameSource::Placeholder`]
+/// 7. `AXDOMClassList` -> icon class parsing -> [`NameSource::IconClass`]
+/// 8. `AXRoleDescription` (when not generic) -> [`NameSource::RoleDescription`]
+fn resolve_name(
     attrs: &BatchAttrs,
     children: &[ElementNode],
     _element: AXUIElementRef,
-) -> Option<String> {
-    // 1. AXTitleUIElement (index 8) -> read its value or title.
+) -> Option<(String, NameSource)> {
+    // 1. AXTitle
+    if let Some(title) = non_empty(attrs.string(Attr::Title).as_ref()) {
+        return Some((title, NameSource::Title));
+    }
+
+    // 2. AXDescription
+    if let Some(desc) = non_empty(attrs.string(Attr::Description).as_ref()) {
+        return Some((desc, NameSource::Description));
+    }
+
+    // 3. AXTitleUIElement (index 8) -> read its value or title.
     if let Some(title_element) = attrs.element(Attr::TitleUIElement) {
         if let Some(val) = get_ax_string_attr(title_element, "AXValue") {
             if !val.is_empty() {
-                return Some(val);
+                return Some((val, NameSource::TitleUiElement));
             }
         }
         if let Some(title) = get_ax_string_attr(title_element, "AXTitle") {
             if !title.is_empty() {
-                return Some(title);
+                return Some((title, NameSource::TitleUiElement));
             }
         }
     }
 
-    // 2. First AXStaticText child's value, or AXImage child with a name.
+    // 4. First AXStaticText child's value, or AXImage child with a name.
     for child in children {
         if child.data.role == Role::StaticText {
             if let Some(ref val) = child.data.value {
                 if !val.is_empty() {
-                    return Some(val.clone());
+                    return Some((val.clone(), NameSource::ChildLabel));
                 }
             }
         }
         if child.data.role == Role::Image {
             if let Some(ref name) = child.data.name {
                 if !name.is_empty() {
-                    return Some(name.clone());
+                    return Some((name.clone(), NameSource::ChildLabel));
                 }
             }
         }
     }
 
-    // 3. AXHelp (index 9)
+    // 5. AXHelp (index 9)
     if let Some(help) = attrs.string(Attr::Help) {
         if !help.is_empty() {
-            return Some(help);
+            return Some((help, NameSource::HelpText));
         }
     }
 
-    // 4. AXPlaceholderValue (index 10)
+    // 6. AXPlaceholderValue (index 10)
     if let Some(placeholder) = attrs.string(Attr::PlaceholderValue) {
         if !placeholder.is_empty() {
-            return Some(placeholder);
+            return Some((placeholder, NameSource::Placeholder));
         }
     }
 
-    // 5. AXDOMClassList (index 11) -> icon class parsing
+    // 7. AXDOMClassList (index 11) -> icon class parsing
     if let Some(class_list) = attrs.string_array(Attr::DOMClassList) {
         let class_refs: Vec<&str> = class_list.iter().map(String::as_str).collect();
         if let Some(icon_name) = IconClassParser::new().parse(&class_refs) {
-            return Some(icon_name);
+            return Some((icon_name, NameSource::IconClass));
         }
     }
 
-    // 6. AXRoleDescription (index 12)
+    // 8. AXRoleDescription (index 12)
     if let Some(role_desc) = attrs.string(Attr::RoleDescription) {
         if !role_desc.is_empty() && !GENERIC_ROLE_DESCRIPTIONS.contains(&role_desc.as_str()) {
-            return Some(role_desc);
+            return Some((role_desc, NameSource::RoleDescription));
         }
     }
 

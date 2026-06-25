@@ -27,7 +27,7 @@ Observation works on all three platforms. Actions are macOS-only with stubs on W
 Every command supports these:
 
 - `-f json` / `--format json` — structured JSON output
-- `-v` / `--verbose` — show native role, identifier, uid, signature in output
+- `-v` / `--verbose` — show native role, identifier, uid, signature, and name source in output
 - `--version` — binary shows git SHA: `forepaw 0.4.0 (abc1234)`
 
 Debug logging: `FOREPAW_LOG=debug` or per-module like `FOREPAW_LOG=snapshot=debug,app=info`. Falls back to `RUST_LOG`. Defaults to `warn`.
@@ -61,7 +61,7 @@ app: Finder  window: [312,139 1010x614]
     cell @e5 "src" (10,69 1180x25)
 ```
 
-The header line shows app name and window bounds (screen coordinates). Element state is shown inline: `disabled`, `focused`, `selected`. Enabled elements don't show anything (too noisy). Use `-v` (verbose) to see element descriptions, native roles (`AXButton`, `UIA 50000`), identifiers (`AutomationId`), uid, and signature.
+The header line shows app name and window bounds (screen coordinates). Element state is shown inline: `disabled`, `focused`, `selected`. Enabled elements don't show anything (too noisy). Use `-v` (verbose) to see element descriptions, native roles (`AXButton`, `UIA 50000`), identifiers (`AutomationId`), uid, signature, and `name_source` (where the name came from: `title`, `description`, `icon_class` heuristic, `role_description`, etc.). In JSON, `name_source` is always present when `name` is.
 
 All coordinates are **window-relative**: `(0,0)` is the window's top-left corner. These match what action commands expect. Coordinates are portable across window positions.
 

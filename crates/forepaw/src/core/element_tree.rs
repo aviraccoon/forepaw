@@ -5,6 +5,64 @@ use crate::core::role::Role;
 use crate::core::tree_pruning::{prune_node, PruningOptions};
 use crate::core::types::Rect;
 
+/// Where an element's accessible name was derived from.
+///
+/// Each platform backend resolves names through a fallback chain whose
+/// priority order mirrors the W3C accessible name computation, and tags the
+/// result with the *origin*. Consumers can distinguish author-provided names
+/// from heuristically-derived ones — e.g. an accessibility audit can flag an
+/// icon button whose name was inferred from a CSS icon-font class rather than
+/// declared by the author.
+///
+/// For web content the browser has already run the W3C computation and placed
+/// the result in the platform's title attribute, so this chain mostly fires
+/// for native apps and sparse/incomplete trees where the title is absent.
+///
+/// The variants are normalized across platforms: `AXTitle` (macOS), UIA
+/// `CurrentName` (Windows), and atspi `Name` (Linux) all map to [`Self::Title`].
+/// `Some(source)` holds iff [`ElementData::name`] is `Some`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum NameSource {
+    /// Direct title/name attribute (`AXTitle` / UIA `CurrentName` / atspi `Name`).
+    Title,
+    /// A description attribute used as the name (`AXDescription` / atspi
+    /// `Description`) when no title was present.
+    Description,
+    /// A referenced title element's value or title (`AXTitleUIElement`).
+    TitleUiElement,
+    /// Label text from a child element (`AXStaticText` value / `AXImage` name /
+    /// UIA/atspi first text child).
+    ChildLabel,
+    /// Help/tooltip text (`AXHelp` / UIA `CurrentHelpText` / atspi `HelpText`).
+    HelpText,
+    /// Placeholder value (`AXPlaceholderValue`).
+    Placeholder,
+    /// Heuristic name parsed from a DOM class-list icon font (`AXDOMClassList`,
+    /// Electron icon buttons).
+    IconClass,
+    /// Role description used as a fallback name (`AXRoleDescription`).
+    RoleDescription,
+}
+
+impl NameSource {
+    /// Stable identifier matching the serialized (JSON) variant name.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Title => "title",
+            Self::Description => "description",
+            Self::TitleUiElement => "title_ui_element",
+            Self::ChildLabel => "child_label",
+            Self::HelpText => "help_text",
+            Self::Placeholder => "placeholder",
+            Self::IconClass => "icon_class",
+            Self::RoleDescription => "role_description",
+        }
+    }
+}
+
 /// Per-element data, independent of tree structure.
 ///
 /// Most consumers only need this -- children are expensive to walk and
@@ -18,6 +76,12 @@ pub struct ElementData {
     /// The element's accessible name, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Where [`name`](Self::name) was derived from. `Some` iff `name` is
+    /// `Some`. Distinguishes author-provided names from heuristic fallbacks
+    /// (icon-class parsing, role description). Shown only in verbose text output;
+    /// always present in JSON when `name` is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_source: Option<NameSource>,
     /// The element's current value, if any (e.g. text field contents).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
@@ -94,6 +158,7 @@ impl ElementData {
         Self {
             role,
             name: None,
+            name_source: None,
             value: None,
             reference: None,
             bounds: None,
@@ -111,15 +176,23 @@ impl ElementData {
         }
     }
 
-    /// Set the accessible name (consumes `self`, builder pattern).
-    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+    /// Set the accessible name and its derivation source (consumes `self`,
+    /// builder pattern). Use [`with_resolved_name`](Self::with_resolved_name) for
+    /// the conditional (`Option`) case.
+    pub fn with_name(mut self, name: impl Into<String>, source: NameSource) -> Self {
         self.name = Some(name.into());
+        self.name_source = Some(source);
         self
     }
 
-    /// Set the accessible name from an `Option` (consumes `self`, builder pattern).
-    pub fn with_name_opt(mut self, name: Option<String>) -> Self {
-        self.name = name;
+    /// Set the name and its source from a resolved `(name, source)` pair
+    /// (consumes `self`, builder pattern). `None` leaves both unset. Preserves
+    /// the invariant that `name_source` is `Some` iff `name` is `Some`.
+    pub fn with_resolved_name(mut self, resolved: Option<(String, NameSource)>) -> Self {
+        if let Some((name, source)) = resolved {
+            self.name = Some(name);
+            self.name_source = Some(source);
+        }
         self
     }
 
@@ -528,7 +601,8 @@ mod tests {
 
     #[test]
     fn node_is_interactive() {
-        let button = ElementNode::new(ElementData::new(Role::Button).with_name("OK"));
+        let button =
+            ElementNode::new(ElementData::new(Role::Button).with_name("OK", NameSource::Title));
         let group = ElementNode::new(ElementData::new(Role::Group));
         assert!(button.is_interactive());
         assert!(!group.is_interactive());

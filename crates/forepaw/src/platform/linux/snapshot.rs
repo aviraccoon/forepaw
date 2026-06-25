@@ -7,7 +7,9 @@
 
 use zbus::blocking::Connection;
 
-use crate::core::element_tree::{ElementData, ElementNode, ElementTree, SnapshotTiming};
+use crate::core::element_tree::{
+    ElementData, ElementNode, ElementTree, NameSource, SnapshotTiming,
+};
 use crate::core::errors::ForepawError;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::role::Role;
@@ -168,19 +170,11 @@ fn build_tree(
         .collect();
 
     // Name resolution: Name → Description → HelpText → first text child
-    let final_name = if let Some(ref n) = name {
-        if n.is_empty() {
-            get_property(conn, app_bus, path, "Description")
-                .or_else(|| get_help_text(conn, app_bus, path))
-                .or_else(|| first_text_child_name(&children))
-        } else {
-            Some(n.clone())
-        }
-    } else {
-        get_property(conn, app_bus, path, "Description")
-            .or_else(|| get_help_text(conn, app_bus, path))
-            .or_else(|| first_text_child_name(&children))
-    };
+    let (final_name, name_source) =
+        match resolve_name(conn, app_bus, path, name.as_ref(), &children) {
+            Some((n, s)) => (Some(n), Some(s)),
+            None => (None, None),
+        };
 
     // Collect attributes (state, interfaces, etc.)
     let mut attributes: Vec<(String, String)> = Vec::new();
@@ -193,6 +187,7 @@ fn build_tree(
         data: ElementData {
             role,
             name: final_name,
+            name_source,
             value,
             reference: None,
             bounds,
@@ -228,7 +223,11 @@ fn check_pruned(
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
                 return Some(ElementNode::new(
                     ElementData::new(role)
-                        .with_name_opt(name.cloned())
+                        .with_resolved_name(
+                            name.cloned()
+                                .filter(|s| !s.is_empty())
+                                .map(|n| (n, NameSource::Title)),
+                        )
                         .with_bounds(*b),
                 ));
             }
@@ -243,11 +242,50 @@ fn check_pruned(
             if no_horizontal || no_vertical {
                 return Some(ElementNode::new(
                     ElementData::new(role)
-                        .with_name_opt(name.cloned())
+                        .with_resolved_name(
+                            name.cloned()
+                                .filter(|s| !s.is_empty())
+                                .map(|n| (n, NameSource::Title)),
+                        )
                         .with_bounds(*b),
                 ));
             }
         }
+    }
+
+    None
+}
+
+/// Resolve the accessible name, tagging the source.
+///
+/// Chain: atspi `Name` -> [`NameSource::Title`], `Description` ->
+/// [`NameSource::Description`], `HelpText` -> [`NameSource::HelpText`],
+/// first `StaticText` child's name -> [`NameSource::ChildLabel`].
+fn resolve_name(
+    conn: &Connection,
+    app_bus: &str,
+    path: &str,
+    name: Option<&String>,
+    children: &[ElementNode],
+) -> Option<(String, NameSource)> {
+    // 1. Name
+    if let Some(n) = name.filter(|s| !s.is_empty()) {
+        return Some((n.clone(), NameSource::Title));
+    }
+
+    // 2. Description
+    if let Some(desc) = get_property(conn, app_bus, path, "Description").filter(|s| !s.is_empty()) {
+        return Some((desc, NameSource::Description));
+    }
+
+    // 3. HelpText
+    if let Some(help) = get_help_text(conn, app_bus, path).filter(|s| !s.is_empty()) {
+        return Some((help, NameSource::HelpText));
+    }
+
+    // 4. First text child that looks like a label.
+    if let Some(child_name) = first_text_child_name(children) {
+        return Some((child_name, NameSource::ChildLabel));
     }
 
     None

@@ -117,6 +117,9 @@ impl TreeRenderer {
 
         // Verbose: extra detail not shown by default
         if verbose {
+            if let Some(source) = node.data.name_source {
+                parts.push(format!("name_source={}", source.as_str()));
+            }
             if let Some(desc) = &node.data.description {
                 if !desc.is_empty() {
                     parts.push(format!("desc=\"{desc}\""));
@@ -163,7 +166,9 @@ impl Default for TreeRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::element_tree::{ElementData, ElementNode, ElementRef, ElementTree};
+    use crate::core::element_tree::{
+        ElementData, ElementNode, ElementRef, ElementTree, NameSource,
+    };
     use crate::core::types::Rect;
 
     use crate::core::role::Role;
@@ -172,20 +177,22 @@ mod tests {
     fn simple_tree() {
         let tree = ElementTree::new(
             "TestApp",
-            ElementNode::new(ElementData::new(Role::Window).with_name("Main Window"))
-                .with_children(vec![
-                    ElementNode::new(
-                        ElementData::new(Role::Button)
-                            .with_name("OK")
-                            .with_reference(ElementRef::new(1)),
-                    ),
-                    ElementNode::new(
-                        ElementData::new(Role::TextField)
-                            .with_name("Name")
-                            .with_value("hello")
-                            .with_reference(ElementRef::new(2)),
-                    ),
-                ]),
+            ElementNode::new(
+                ElementData::new(Role::Window).with_name("Main Window", NameSource::Title),
+            )
+            .with_children(vec![
+                ElementNode::new(
+                    ElementData::new(Role::Button)
+                        .with_name("OK", NameSource::Title)
+                        .with_reference(ElementRef::new(1)),
+                ),
+                ElementNode::new(
+                    ElementData::new(Role::TextField)
+                        .with_name("Name", NameSource::Title)
+                        .with_value("hello")
+                        .with_reference(ElementRef::new(2)),
+                ),
+            ]),
         );
 
         let renderer = TreeRenderer::new(false);
@@ -232,7 +239,7 @@ mod tests {
                 ElementData::new(Role::Group),
             )
             .with_children(vec![ElementNode::new(
-                ElementData::new(Role::Button).with_name("Deep"),
+                ElementData::new(Role::Button).with_name("Deep", NameSource::Title),
             )])]),
         );
 
@@ -261,12 +268,12 @@ mod tests {
             "App",
             ElementNode::new(
                 ElementData::new(Role::Window)
-                    .with_name("Main")
+                    .with_name("Main", NameSource::Title)
                     .with_bounds(Rect::new(100.0, 200.0, 800.0, 600.0)),
             )
             .with_children(vec![ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("OK")
+                    .with_name("OK", NameSource::Title)
                     .with_reference(ElementRef::new(1))
                     .with_bounds(Rect::new(150.0, 250.0, 80.0, 30.0)),
             )]),
@@ -291,12 +298,12 @@ mod tests {
             "App",
             ElementNode::new(
                 ElementData::new(Role::Window)
-                    .with_name("Main")
+                    .with_name("Main", NameSource::Title)
                     .with_bounds(Rect::new(100.0, 200.0, 800.0, 600.0)),
             )
             .with_children(vec![ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("OK")
+                    .with_name("OK", NameSource::Title)
                     .with_reference(ElementRef::new(1))
                     .with_bounds(Rect::new(150.0, 250.0, 80.0, 30.0)),
             )]),
@@ -317,7 +324,7 @@ mod tests {
             "App",
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("OK")
+                    .with_name("OK", NameSource::Title)
                     .with_reference(ElementRef::new(1)),
             ),
         );
@@ -335,7 +342,7 @@ mod tests {
             "App",
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("OK")
+                    .with_name("OK", NameSource::Title)
                     .with_reference(ElementRef::new(1))
                     .with_enabled(false),
             ),
@@ -354,7 +361,7 @@ mod tests {
             "App",
             ElementNode::new(
                 ElementData::new(Role::TextField)
-                    .with_name("Name")
+                    .with_name("Name", NameSource::Title)
                     .with_reference(ElementRef::new(1))
                     .with_focused(true)
                     .with_selected(true),
@@ -373,7 +380,7 @@ mod tests {
             "App",
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("OK")
+                    .with_name("OK", NameSource::Title)
                     .with_reference(ElementRef::new(1))
                     .with_enabled(true),
             ),
@@ -387,12 +394,29 @@ mod tests {
     }
 
     #[test]
+    fn verbose_shows_name_source() {
+        let mut data = ElementData::new(Role::Button).with_name("OK", NameSource::Title);
+        data.name_source = Some(NameSource::IconClass);
+        let tree = ElementTree::new(
+            "App",
+            ElementNode::new(data.with_reference(ElementRef::new(1))),
+        );
+
+        let renderer = TreeRenderer::new(false);
+        assert!(!renderer.render(&tree).contains("name_source="));
+
+        let renderer = TreeRenderer::new(true);
+        let output = renderer.render(&tree);
+        assert!(output.contains("name_source=icon_class"));
+    }
+
+    #[test]
     fn verbose_shows_description() {
         let tree = ElementTree::new(
             "App",
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("OK")
+                    .with_name("OK", NameSource::Title)
                     .with_reference(ElementRef::new(1))
                     .with_description("Confirms the action"),
             ),
@@ -413,7 +437,7 @@ mod tests {
             "App",
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("OK")
+                    .with_name("OK", NameSource::Title)
                     .with_reference(ElementRef::new(1))
                     .with_native_role("AXButton")
                     .with_identifier("submit-btn"),
@@ -437,7 +461,7 @@ mod tests {
             "App",
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("OK")
+                    .with_name("OK", NameSource::Title)
                     .with_reference(ElementRef::new(1)),
             ),
         );
@@ -450,7 +474,7 @@ mod tests {
 
     #[test]
     fn verbose_shows_uid() {
-        let mut data = ElementData::new(Role::Button).with_name("OK");
+        let mut data = ElementData::new(Role::Button).with_name("OK", NameSource::Title);
         data.uid = Some(7);
         let tree = ElementTree::new(
             "App",
@@ -464,7 +488,7 @@ mod tests {
 
     #[test]
     fn verbose_shows_signature() {
-        let mut data = ElementData::new(Role::Button).with_name("OK");
+        let mut data = ElementData::new(Role::Button).with_name("OK", NameSource::Title);
         data.signature = Some(0xdead_beef_cafe_babe);
         let tree = ElementTree::new(
             "App",
@@ -482,14 +506,14 @@ mod tests {
         // a window origin are present, the renderer should print the stored
         // window-relative rect without re-subtracting.
         let mut data = ElementData::new(Role::Button)
-            .with_name("OK")
+            .with_name("OK", NameSource::Title)
             .with_bounds(Rect::new(532.0, 342.0, 80.0, 30.0));
         data.bounds_window = Some(Rect::new(12.0, 98.0, 80.0, 30.0));
         let tree = ElementTree::new(
             "App",
             ElementNode::new(
                 ElementData::new(Role::Window)
-                    .with_name("Main")
+                    .with_name("Main", NameSource::Title)
                     .with_bounds(Rect::new(520.0, 244.0, 760.0, 720.0)),
             )
             .with_children(vec![ElementNode::new(data)]),

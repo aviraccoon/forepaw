@@ -13,7 +13,9 @@ use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationTreeWalker,
 };
 
-use crate::core::element_tree::{ElementData, ElementNode, ElementTree, SnapshotTiming};
+use crate::core::element_tree::{
+    ElementData, ElementNode, ElementTree, NameSource, SnapshotTiming,
+};
 use crate::core::errors::ForepawError;
 use crate::core::ref_assigner::RefAssigner;
 use crate::core::role::Role;
@@ -156,7 +158,9 @@ fn build_tree(
             if b.width == 0.0 && b.height == 0.0 && depth > 1 {
                 return ElementNode::new(
                     ElementData::new(role)
-                        .with_name_opt(non_empty(name.as_ref()))
+                        .with_resolved_name(
+                            non_empty(name.as_ref()).map(|n| (n, NameSource::Title)),
+                        )
                         .with_bounds(*b),
                 );
             }
@@ -167,7 +171,7 @@ fn build_tree(
     if pruning.skip_offscreen && depth > 1 && is_offscreen(element) {
         return ElementNode::new(
             ElementData::new(role)
-                .with_name_opt(non_empty(name.as_ref()))
+                .with_resolved_name(non_empty(name.as_ref()).map(|n| (n, NameSource::Title)))
                 .with_bounds_opt(bounds),
         );
     }
@@ -176,18 +180,16 @@ fn build_tree(
     let children = walk_children(walker, element, depth, max_depth, pruning);
 
     // Name resolution: CurrentName → CurrentHelpText → first text child
-    let computed_name = if name.as_ref().is_none_or(String::is_empty) {
-        resolve_name(element, &children)
-    } else {
-        None
+    let (final_name, name_source) = match resolve_name(element, &children, name.as_ref()) {
+        Some((n, s)) => (Some(n), Some(s)),
+        None => (None, None),
     };
-
-    let final_name = non_empty(name.as_ref()).or(computed_name);
 
     ElementNode {
         data: ElementData {
             role,
             name: final_name,
+            name_source,
             value: None, // TODO: UIA Value pattern for element values
             reference: None,
             bounds,
@@ -254,22 +256,34 @@ fn walk_children(
 // Name resolution
 // ---------------------------------------------------------------------------
 
-/// Resolve element name when `CurrentName` is empty.
-/// Chain: `HelpText` → first child with text content.
-fn resolve_name(element: &IUIAutomationElement, children: &[ElementNode]) -> Option<String> {
-    // 1. HelpText
+/// Resolve the accessible name, tagging the source.
+///
+/// Chain: `CurrentName` -> [`NameSource::Title`], `CurrentHelpText` ->
+/// [`NameSource::HelpText`], first `StaticText` child's name ->
+/// [`NameSource::ChildLabel`].
+fn resolve_name(
+    element: &IUIAutomationElement,
+    children: &[ElementNode],
+    current_name: Option<&String>,
+) -> Option<(String, NameSource)> {
+    // 1. CurrentName
+    if let Some(n) = non_empty(current_name) {
+        return Some((n, NameSource::Title));
+    }
+
+    // 2. CurrentHelpText
     // SAFETY: Win32/WinRT FFI call with valid arguments.
     let help = get_bstr_property(element, |e| unsafe { e.CurrentHelpText() });
     if let Some(h) = non_empty(help.as_ref()) {
-        return Some(h);
+        return Some((h, NameSource::HelpText));
     }
 
-    // 2. First child that looks like a text label (`StaticText` with a name)
+    // 3. First child that looks like a text label (`StaticText` with a name)
     for child in children {
         if child.data.role == Role::StaticText {
             if let Some(ref name) = child.data.name {
                 if !name.is_empty() {
-                    return Some(name.clone());
+                    return Some((name.clone(), NameSource::ChildLabel));
                 }
             }
         }

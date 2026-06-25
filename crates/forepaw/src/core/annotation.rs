@@ -195,8 +195,8 @@ impl Default for AnnotationLegend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::element_tree::ElementData;
     use crate::core::element_tree::ElementRef;
+    use crate::core::element_tree::{ElementData, NameSource};
     use crate::core::role::AnnotationCategory;
 
     #[test]
@@ -319,13 +319,13 @@ mod tests {
         let root = ElementNode::new(ElementData::new(Role::Window)).with_children(vec![
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("Save")
+                    .with_name("Save", NameSource::Title)
                     .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
                     .with_reference(ElementRef::new(1)),
             ),
             ElementNode::new(
                 ElementData::new(Role::TextField)
-                    .with_name("Search")
+                    .with_name("Search", NameSource::Title)
                     .with_bounds(Rect::new(300.0, 100.0, 200.0, 25.0))
                     .with_reference(ElementRef::new(2)),
             ),
@@ -348,7 +348,7 @@ mod tests {
         let root =
             ElementNode::new(ElementData::new(Role::Window)).with_children(vec![ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("OK")
+                    .with_name("OK", NameSource::Title)
                     .with_bounds(Rect::new(250.0, 150.0, 60.0, 30.0))
                     .with_reference(ElementRef::new(1)),
             )]);
@@ -368,7 +368,7 @@ mod tests {
         let root =
             ElementNode::new(ElementData::new(Role::Window)).with_children(vec![ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("Ghost")
+                    .with_name("Ghost", NameSource::Title)
                     .with_reference(ElementRef::new(1)),
             )]);
 
@@ -383,7 +383,7 @@ mod tests {
         let root =
             ElementNode::new(ElementData::new(Role::Window)).with_children(vec![ElementNode::new(
                 ElementData::new(Role::StaticText)
-                    .with_name("Label")
+                    .with_name("Label", NameSource::Title)
                     .with_bounds(Rect::new(200.0, 100.0, 80.0, 20.0)),
             )]);
 
@@ -399,21 +399,21 @@ mod tests {
             // Entirely to the left
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("Hidden")
+                    .with_name("Hidden", NameSource::Title)
                     .with_bounds(Rect::new(0.0, 100.0, 50.0, 30.0))
                     .with_reference(ElementRef::new(1)),
             ),
             // Entirely below
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("Below")
+                    .with_name("Below", NameSource::Title)
                     .with_bounds(Rect::new(200.0, 700.0, 80.0, 30.0))
                     .with_reference(ElementRef::new(2)),
             ),
             // Visible
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("Visible")
+                    .with_name("Visible", NameSource::Title)
                     .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
                     .with_reference(ElementRef::new(3)),
             ),
@@ -432,13 +432,13 @@ mod tests {
         let root = ElementNode::new(ElementData::new(Role::Window)).with_children(vec![
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("A")
+                    .with_name("A", NameSource::Title)
                     .with_bounds(Rect::new(200.0, 100.0, 80.0, 30.0))
                     .with_reference(ElementRef::new(5)),
             ),
             ElementNode::new(
                 ElementData::new(Role::Button)
-                    .with_name("B")
+                    .with_name("B", NameSource::Title)
                     .with_bounds(Rect::new(300.0, 100.0, 80.0, 30.0))
                     .with_reference(ElementRef::new(10)),
             ),

@@ -53,28 +53,45 @@ On Windows, each property is an individual COM call. A `CacheRequest` could batc
 
 ### Element name resolution
 
-> **The raccoon version:** Not everything in the dumpster is labeled. Sometimes there's a tag on the container, sometimes you have to open it and sniff the contents, sometimes you recognize the shape. forepaw tries different ways to figure out what an element is called, from most to least reliable.
+> **The raccoon version:** Not everything in the dumpster is labeled. Sometimes there's a tag on the container, sometimes you have to open it and sniff the contents, sometimes you recognize the shape. forepaw tries different ways to figure out what an element is called, from most to least reliable — and remembers which trick worked, so you know whether to trust the label.
+
+Each backend resolves the accessible name through a fallback chain whose priority order mirrors the W3C accessible name computation, and tags the result with a normalized `NameSource` variant: `title`, `description`, `title_ui_element`, `child_label`, `help_text`, `placeholder`, `icon_class`, or `role_description`. The variants are normalized across platforms — `AXTitle` (macOS), UIA `CurrentName` (Windows), and atspi `Name` (Linux) all map to `title`. `name_source` is `Some` iff `name` is `Some`.
+
+For web content the browser has already run the W3C computation and placed the result in the platform's title attribute, so this chain mostly fires for native apps and sparse/incomplete trees. The fallback steps (description, child scan, icon class, role description) are forepaw's own heuristics for the gaps the platform didn't fill.
+
+This separation matters for audits: author-provided names (`title`, `title_ui_element`, `child_label`) are authoritative, while `icon_class` (heuristic), `role_description` (generic fallback), and `placeholder` (not a real label) are low-confidence — the kind of name an accessibility rule should flag.
 
 #### macOS
 
-Applied when both `AXTitle` and `AXDescription` are empty:
+The full chain, in priority order:
 
-1. **AXTitleUIElement** — a reference to a separate label element. Read that element's `AXValue` or `AXTitle`. This is the only step that makes individual IPC calls (2 calls max), because the referenced element's attributes aren't in our batch.
-2. **First child scan** — check pre-built child `ElementNode` objects for the first `AXStaticText` child's value or `AXImage` child's computed name. No IPC needed: children are built before the parent's name is computed.
-3. **AXHelp** — descriptive help text.
-4. **AXPlaceholderValue** — text field placeholder.
-5. **AXDOMClassList** — CSS class list, parsed by `IconClassParser` to extract icon names from Lucide, Tabler, FontAwesome, Material, Heroicons, Phosphor, Bootstrap, Feather, Ionicons, Octicons, Codicons prefixes.
-6. **AXRoleDescription** — only when it's more specific than the generic role description. A set of ~35 generic descriptions is filtered out.
+1. **AXTitle** → `title`.
+2. **AXDescription** → `description`.
+3. **AXTitleUIElement** → `title_ui_element`. A reference to a separate label element. Read that element's `AXValue` or `AXTitle`. This is the only step that makes individual IPC calls (2 calls max), because the referenced element's attributes aren't in our batch.
+4. **First child scan** → `child_label`. Check pre-built child `ElementNode` objects for the first `AXStaticText` child's value or `AXImage` child's computed name. No IPC needed: children are built before the parent's name is computed.
+5. **AXHelp** → `help_text`. Descriptive help text.
+6. **AXPlaceholderValue** → `placeholder`. Text field placeholder.
+7. **AXDOMClassList** → `icon_class`. CSS class list, parsed by `IconClassParser` to extract icon names from Lucide, Tabler, FontAwesome, Material, Heroicons, Phosphor, Bootstrap, Feather, Ionicons, Octicons, Codicons prefixes.
+8. **AXRoleDescription** → `role_description`. Only when it's more specific than the generic role description. A set of ~35 generic descriptions is filtered out.
 
-The children-first build order is critical: the tree builder recurses into children, builds their `ElementNode` objects (triggering their own name resolution), then computes the parent's name using those already-built children. Step 2 reads from in-memory objects instead of making IPC calls per child.
+The children-first build order is critical: the tree builder recurses into children, builds their `ElementNode` objects (triggering their own name resolution), then computes the parent's name using those already-built children. Step 4 reads from in-memory objects instead of making IPC calls per child.
 
 #### Windows
 
-UIA provides `CurrentName()` directly for most elements. When empty, fallback checks `CurrentHelpText()` and `CurrentAutomationId()`. No child-scan equivalent — UIA's tree walk produces flat named elements more reliably than AX.
+1. **CurrentName** → `title`.
+2. **CurrentHelpText** → `help_text`.
+3. **First child scan** → `child_label` — first `StaticText` child with a name.
+
+UIA's tree walk produces flat named elements more reliably than AX, so the chain is shorter.
 
 #### Linux
 
-AT-SPI2 exposes `Name` as a D-Bus property (via `org.freedesktop.DBus.Properties.Get` on `org.a11y.atspi.Accessible`). Fallback chain: `Description` → first child's `Name` (if `Role == STATIC`) → `HelpText`.
+1. **Name** → `title`.
+2. **Description** → `description`.
+3. **HelpText** → `help_text`.
+4. **First child scan** → `child_label` — first `StaticText` child with a name.
+
+AT-SPI2 exposes `Name` as a D-Bus property (via `org.freedesktop.DBus.Properties.Get` on `org.a11y.atspi.Accessible`).
 
 ## Text attributes
 
@@ -110,7 +127,7 @@ The Linux role mapping is generated from the upstream GNOME header (`res/atspi-c
 
 > **The raccoon version:** Like keeping a raccoon's ID card separate from its family tree. The card says "medium-sized, partial left ear, scar on nose." The tree says "Mom, Dad, three siblings, lives behind the Quiznos." Different info, different use cases.
 
-`ElementData` holds flat element properties (role, name, value, bounds, reference, state fields, identifiers, signatures). `ElementNode` wraps it with a `children: Vec<ElementNode>` for tree structure.
+`ElementData` holds flat element properties (role, name, value, bounds, reference, state fields, identifiers, signatures). The `name_source` field records which resolution step produced `name` (see above) — verbose-only in text output, always present in JSON when `name` is. `ElementNode` wraps it with a `children: Vec<ElementNode>` for tree structure.
 
 The split means consumers that don't need tree structure (audit rules, diffing, inspector UIs) can work with `Vec<ElementData>` instead of recursive `ElementNode` traversal. `ElementData` implements `Serialize` directly (no recursion). `ElementNode` serializes with `children` as a recursive serde field.
 

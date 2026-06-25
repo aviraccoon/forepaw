@@ -127,19 +127,24 @@ impl Default for RefAssigner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::element_tree::ElementData;
+    use crate::core::element_tree::{ElementData, NameSource};
     use crate::core::role::Role;
 
     fn make_tree() -> ElementNode {
-        ElementNode::new(ElementData::new(Role::Window).with_name("Test Window")).with_children(
-            vec![
+        ElementNode::new(ElementData::new(Role::Window).with_name("Test Window", NameSource::Title))
+            .with_children(vec![
                 ElementNode::new(ElementData::new(Role::Group)).with_children(vec![
-                    ElementNode::new(ElementData::new(Role::Button).with_name("OK")),
-                    ElementNode::new(ElementData::new(Role::Button).with_name("Cancel")),
+                    ElementNode::new(
+                        ElementData::new(Role::Button).with_name("OK", NameSource::Title),
+                    ),
+                    ElementNode::new(
+                        ElementData::new(Role::Button).with_name("Cancel", NameSource::Title),
+                    ),
                 ]),
-                ElementNode::new(ElementData::new(Role::TextField).with_name("Name")),
-            ],
-        )
+                ElementNode::new(
+                    ElementData::new(Role::TextField).with_name("Name", NameSource::Title),
+                ),
+            ])
     }
 
     #[test]
@@ -167,10 +172,14 @@ mod tests {
     fn interactive_only_prunes() {
         let tree = ElementNode::new(ElementData::new(Role::Window)).with_children(vec![
             ElementNode::new(ElementData::new(Role::Group)).with_children(vec![
-                ElementNode::new(ElementData::new(Role::StaticText).with_name("Label")),
-                ElementNode::new(ElementData::new(Role::Button).with_name("OK")),
+                ElementNode::new(
+                    ElementData::new(Role::StaticText).with_name("Label", NameSource::Title),
+                ),
+                ElementNode::new(ElementData::new(Role::Button).with_name("OK", NameSource::Title)),
             ]),
-            ElementNode::new(ElementData::new(Role::StaticText).with_name("Footer")),
+            ElementNode::new(
+                ElementData::new(Role::StaticText).with_name("Footer", NameSource::Title),
+            ),
         ]);
 
         let assigner = RefAssigner::new();
@@ -213,14 +222,13 @@ mod tests {
     fn uid_is_depth_first() {
         let tree = ElementNode::new(ElementData::new(Role::Window)).with_children(vec![
             ElementNode::new(ElementData::new(Role::Group)).with_children(vec![
-                ElementNode::new(ElementData::new(Role::Button).with_name("A")),
-                ElementNode::new(ElementData::new(Role::Button).with_name("B")),
+                ElementNode::new(ElementData::new(Role::Button).with_name("A", NameSource::Title)),
+                ElementNode::new(ElementData::new(Role::Button).with_name("B", NameSource::Title)),
             ]),
-            ElementNode::new(ElementData::new(Role::Group).with_name("Sidebar")).with_children(
-                vec![ElementNode::new(
-                    ElementData::new(Role::TextField).with_name("Search"),
-                )],
-            ),
+            ElementNode::new(ElementData::new(Role::Group).with_name("Sidebar", NameSource::Title))
+                .with_children(vec![ElementNode::new(
+                    ElementData::new(Role::TextField).with_name("Search", NameSource::Title),
+                )]),
         ]);
 
         let assigner = RefAssigner::new();
@@ -245,10 +253,14 @@ mod tests {
     fn uid_survives_interactive_only_pruning() {
         let tree = ElementNode::new(ElementData::new(Role::Window)).with_children(vec![
             ElementNode::new(ElementData::new(Role::Group)).with_children(vec![
-                ElementNode::new(ElementData::new(Role::Button).with_name("OK")),
-                ElementNode::new(ElementData::new(Role::StaticText).with_name("Label")),
+                ElementNode::new(ElementData::new(Role::Button).with_name("OK", NameSource::Title)),
+                ElementNode::new(
+                    ElementData::new(Role::StaticText).with_name("Label", NameSource::Title),
+                ),
             ]),
-            ElementNode::new(ElementData::new(Role::TextField).with_name("Name")),
+            ElementNode::new(
+                ElementData::new(Role::TextField).with_name("Name", NameSource::Title),
+            ),
         ]);
 
         let assigner = RefAssigner::new();
@@ -296,8 +308,10 @@ mod tests {
 
     #[test]
     fn different_signatures_for_different_content() {
-        let tree_a = ElementNode::new(ElementData::new(Role::Window).with_name("Main"));
-        let tree_b = ElementNode::new(ElementData::new(Role::Window).with_name("Prefs"));
+        let tree_a =
+            ElementNode::new(ElementData::new(Role::Window).with_name("Main", NameSource::Title));
+        let tree_b =
+            ElementNode::new(ElementData::new(Role::Window).with_name("Prefs", NameSource::Title));
 
         let assigner = RefAssigner::new();
         let result_a = assigner.assign(&tree_a, false);
@@ -309,8 +323,10 @@ mod tests {
     #[test]
     fn same_signature_for_undifferentiated_elements() {
         // Two trees with identical content get identical signatures
-        let tree_a = ElementNode::new(ElementData::new(Role::Button).with_name("OK"));
-        let tree_b = ElementNode::new(ElementData::new(Role::Button).with_name("OK"));
+        let tree_a =
+            ElementNode::new(ElementData::new(Role::Button).with_name("OK", NameSource::Title));
+        let tree_b =
+            ElementNode::new(ElementData::new(Role::Button).with_name("OK", NameSource::Title));
 
         let assigner = RefAssigner::new();
         let result_a = assigner.assign(&tree_a, false);
