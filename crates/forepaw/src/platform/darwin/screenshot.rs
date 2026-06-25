@@ -440,14 +440,16 @@ pub fn screenshot(params: &ScreenshotParams) -> Result<ScreenshotResult, Forepaw
         let (_running_app, pid) = {
             let running_app = app::find_app_by_target(app)?;
             let pid = running_app.processIdentifier();
-            #[expect(
-                deprecated,
-                reason = "activateWithOptions deprecated in macOS 14, no replacement for ignoring-other-apps behavior"
-            )]
-            running_app.activateWithOptions(
-                objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
-            );
-            std::thread::sleep(std::time::Duration::from_millis(300));
+            if !params.skip_activation {
+                #[expect(
+                    deprecated,
+                    reason = "activateWithOptions deprecated in macOS 14, no replacement for ignoring-other-apps behavior"
+                )]
+                running_app.activateWithOptions(
+                    objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
+                );
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
             (running_app, pid)
         };
 

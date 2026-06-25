@@ -128,6 +128,19 @@ impl DesktopProvider for DarwinProvider {
         screenshot::screenshot(params)
     }
 
+    fn activate_app(&self, app: &AppTarget) -> Result<(), ForepawError> {
+        let running_app = app::find_app_by_target(app)?;
+        #[expect(
+            deprecated,
+            reason = "activateWithOptions deprecated in macOS 14, no replacement for ignoring-other-apps behavior"
+        )]
+        running_app.activateWithOptions(
+            objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
+        );
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        Ok(())
+    }
+
     fn ocr(
         &self,
         app: Option<&AppTarget>,

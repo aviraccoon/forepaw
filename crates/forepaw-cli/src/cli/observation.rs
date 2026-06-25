@@ -243,6 +243,7 @@ impl Screenshot {
             options: &ss_options,
             crop: crop_region.as_ref(),
             grid_spacing: self.grid,
+            skip_activation: false,
         };
         let result = provider.screenshot(&params)?;
 

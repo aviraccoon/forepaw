@@ -52,6 +52,7 @@ pub fn ocr(
         options: &ocr_options,
         crop: None,
         grid_spacing: None,
+        skip_activation: false,
     };
     let screenshot_result = crate::platform::darwin::screenshot::screenshot(&screenshot_params)?;
 

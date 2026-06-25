@@ -319,6 +319,9 @@ pub struct ScreenshotParams<'a> {
     pub crop: Option<&'a CropRegion>,
     /// Grid overlay spacing for alignment annotations.
     pub grid_spacing: Option<u32>,
+    /// Skip app activation and delay. Use when the caller has already
+    /// activated the app (e.g. in a combined capture).
+    pub skip_activation: bool,
 }
 
 /// Result of a screenshot operation.
@@ -371,6 +374,19 @@ pub enum ScreenshotImage {
     },
 }
 
+/// Result of a combined snapshot + screenshot capture.
+///
+/// Activates the target app once and captures both the accessibility tree
+/// and a screenshot in quick succession, avoiding focus-stealing race
+/// conditions between separate `snapshot` and `screenshot` calls.
+#[derive(Debug)]
+pub struct CaptureResult {
+    /// The accessibility tree.
+    pub tree: crate::core::element_tree::ElementTree,
+    /// The screenshot.
+    pub screenshot: ScreenshotResult,
+}
+
 /// Options for snapshot (accessibility tree walk).
 #[derive(Debug, Clone)]
 #[expect(
@@ -394,6 +410,9 @@ pub struct SnapshotOptions {
     pub window_bounds: Option<Rect>,
     /// Print timing information.
     pub timing: bool,
+    /// Skip app activation and delay. Use when the caller has already
+    /// activated the app (e.g. in a combined capture).
+    pub skip_activation: bool,
 }
 
 impl Default for SnapshotOptions {
@@ -407,6 +426,7 @@ impl Default for SnapshotOptions {
             skip_offscreen: false,
             window_bounds: None,
             timing: false,
+            skip_activation: false,
         }
     }
 }
@@ -470,6 +490,60 @@ pub trait DesktopProvider: Send + Sync {
     /// [`ForepawError::ScreenRecordingDenied`] if screen recording permission is missing,
     /// or [`ForepawError::StaleRef`] if a ref filter targets a non-existent element.
     fn screenshot(&self, params: &ScreenshotParams) -> Result<ScreenshotResult, ForepawError>;
+
+    /// Bring the target app to the foreground so subsequent operations
+    /// see an up-to-date accessibility tree and visible window contents.
+    ///
+    /// Platforms that don't require activation can leave the default no-op.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if the target application is not running.
+    fn activate_app(&self, _app: &AppTarget) -> Result<(), ForepawError> {
+        Ok(())
+    }
+
+    /// Combined snapshot + screenshot capture with a single app activation.
+    ///
+    /// Activates the target app once and captures both the accessibility tree
+    /// and a screenshot in quick succession. This avoids the race condition
+    /// where a separate `snapshot` + `screenshot` sequence lets the terminal
+    /// steal focus between calls, causing the screenshot to capture an
+    /// inactive (grayed-out) window.
+    ///
+    /// The default implementation calls `snapshot` and `screenshot` separately.
+    /// Platform backends should override to share a single activation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::AppNotFound`] if the target application is not running,
+    /// [`ForepawError::PermissionDenied`] if accessibility access is not granted,
+    /// or [`ForepawError::ScreenRecordingDenied`] if screen recording permission is missing.
+    fn capture(
+        &self,
+        app: &AppTarget,
+        window: Option<&WindowTarget>,
+        snapshot_options: &SnapshotOptions,
+        screenshot_options: &ScreenshotOptions,
+    ) -> Result<CaptureResult, ForepawError> {
+        self.activate_app(app)?;
+
+        let mut snap_opts = snapshot_options.clone();
+        snap_opts.skip_activation = true;
+        let tree = self.snapshot(app, window, &snap_opts)?;
+
+        let screenshot = self.screenshot(&ScreenshotParams {
+            app: Some(app),
+            window,
+            style: None,
+            only: None,
+            crop: None,
+            grid_spacing: None,
+            skip_activation: true,
+            options: screenshot_options,
+        })?;
+        Ok(CaptureResult { tree, screenshot })
+    }
 
     /// Runs OCR on a screenshot of the target app/window.
     ///

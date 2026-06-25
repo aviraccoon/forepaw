@@ -187,14 +187,16 @@ pub(super) fn snapshot(
 
     // Activate the app so the AX tree matches what action commands will see.
     // Some apps (browsers) only expose web content when active.
-    #[expect(
-        deprecated,
-        reason = "activateWithOptions deprecated in macOS 14, no replacement for ignoring-other-apps behavior"
-    )]
-    running_app.activateWithOptions(
-        objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
-    );
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    if !options.skip_activation {
+        #[expect(
+            deprecated,
+            reason = "activateWithOptions deprecated in macOS 14, no replacement for ignoring-other-apps behavior"
+        )]
+        running_app.activateWithOptions(
+            objc2_app_kit::NSApplicationActivationOptions::ActivateIgnoringOtherApps,
+        );
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    }
 
     // Electron apps need AXManualAccessibility + polling for tree population.
     let is_electron = is_electron_app(&running_app);
