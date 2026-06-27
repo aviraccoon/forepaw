@@ -46,6 +46,21 @@ pub enum NameSource {
     RoleDescription,
 }
 
+impl fmt::Display for NameSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Title => "title".fmt(f),
+            Self::Description => "description".fmt(f),
+            Self::TitleUiElement => "UI element title".fmt(f),
+            Self::ChildLabel => "child label".fmt(f),
+            Self::HelpText => "help text".fmt(f),
+            Self::Placeholder => "placeholder".fmt(f),
+            Self::IconClass => "icon class".fmt(f),
+            Self::RoleDescription => "role description".fmt(f),
+        }
+    }
+}
+
 impl NameSource {
     /// Stable identifier matching the serialized (JSON) variant name.
     #[must_use]
