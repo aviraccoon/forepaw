@@ -219,39 +219,36 @@ impl DesktopProvider for WindowsProvider {
 
     fn scroll(
         &self,
-        _direction: &str,
-        _amount: u32,
-        _app: &AppTarget,
-        _window: Option<&WindowTarget>,
-        _ref: Option<crate::core::element_tree::ElementRef>,
-        _at: Option<crate::core::types::Point>,
+        direction: &str,
+        amount: u32,
+        app: &AppTarget,
+        window: Option<&WindowTarget>,
+        reference: Option<crate::core::element_tree::ElementRef>,
+        at: Option<crate::core::types::Point>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "scroll not yet implemented on Windows".into(),
-        ))
+        let cached = reference.and_then(|r| self.cached_handle(r.id));
+        input::scroll(direction, amount, app, window, reference, at, cached)
     }
 
     fn drag_path(
         &self,
-        _path: &[crate::core::types::Point],
-        _options: &crate::core::key_combo::DragOptions,
-        _app: Option<&AppTarget>,
+        path: &[crate::core::types::Point],
+        options: &crate::core::key_combo::DragOptions,
+        app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "drag not yet implemented on Windows".into(),
-        ))
+        input::drag_path(path, options, app)
     }
 
     fn drag_refs(
         &self,
-        _from: crate::core::element_tree::ElementRef,
-        _to: crate::core::element_tree::ElementRef,
-        _app: &AppTarget,
-        _options: &crate::core::key_combo::DragOptions,
+        from: crate::core::element_tree::ElementRef,
+        to: crate::core::element_tree::ElementRef,
+        app: &AppTarget,
+        options: &crate::core::key_combo::DragOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "drag not yet implemented on Windows".into(),
-        ))
+        let from_cached = self.cached_handle(from.id);
+        let to_cached = self.cached_handle(to.id);
+        input::drag_refs(from, to, app, options, from_cached, to_cached)
     }
 
     fn ocr_click(

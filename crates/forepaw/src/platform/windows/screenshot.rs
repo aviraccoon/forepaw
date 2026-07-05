@@ -23,7 +23,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::core::display::display_for_bounds;
 use crate::core::encoder_detection::CaptureScale;
 use crate::core::errors::ForepawError;
-use crate::core::types::Dimensions;
+use crate::core::types::{Dimensions, Rect};
 use crate::platform::windows::app;
 use crate::platform::{AppTarget, WindowTarget};
 
@@ -316,6 +316,89 @@ fn capture_print_window(
         }
 
         Ok(pixels)
+    }
+}
+
+/// Capture a pixel fingerprint of a horizontal strip from the vertical center
+/// of `bounds` (screen-absolute physical px), excluding the rightmost 30px to
+/// avoid scrollbar overlays. Used by `scroll` for boundary detection: equal
+/// fingerprints before/after mean the content did not change. Captures from the
+/// screen DC, so the window must be foreground (callers activate first).
+#[must_use]
+pub(super) fn capture_strip_fingerprint(bounds: Rect) -> Option<Vec<u8>> {
+    #[expect(clippy::cast_possible_truncation, reason = "screen coords fit in i32")]
+    let strip_x = bounds.x.round() as i32;
+    #[expect(clippy::cast_possible_truncation, reason = "screen coords fit in i32")]
+    let strip_y = (bounds.y + bounds.height / 2.0 - 10.0).round() as i32;
+    #[expect(clippy::cast_possible_truncation, reason = "screen width fits in i32")]
+    let strip_w = (bounds.width.round() as i32 - 30).max(1);
+    let strip_h = 20_i32;
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "BITMAPINFOHEADER is a fixed Win32 struct (~40 bytes)"
+    )]
+    let bi_size = size_of::<BITMAPINFOHEADER>() as u32;
+
+    #[expect(clippy::multiple_unsafe_ops_per_block, reason = "GDI capture pipeline")]
+    // SAFETY: GDI strip capture from the screen DC; all handles released/deleted.
+    unsafe {
+        let hdc = GetDC(None);
+        let hdc_mem = CreateCompatibleDC(Some(hdc));
+        let h_bitmap = CreateCompatibleBitmap(hdc, strip_w, strip_h);
+        let old_bitmap = SelectObject(hdc_mem, HGDIOBJ::from(h_bitmap));
+
+        let blit_ok = BitBlt(
+            hdc_mem,
+            0,
+            0,
+            strip_w,
+            strip_h,
+            Some(hdc),
+            strip_x,
+            strip_y,
+            SRCCOPY,
+        );
+
+        let w = strip_w.unsigned_abs();
+        let h = strip_h.unsigned_abs();
+        let mut pixels = vec![0_u8; (w as usize) * (h as usize) * 4];
+
+        let mut bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: bi_size,
+                biWidth: strip_w,
+                biHeight: -strip_h, // top-down
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let got = GetDIBits(
+            hdc_mem,
+            h_bitmap,
+            0,
+            h,
+            Some(pixels.as_mut_ptr().cast()),
+            &raw mut bmi,
+            DIB_RGB_COLORS,
+        );
+
+        SelectObject(hdc_mem, old_bitmap);
+        DeleteObject(HGDIOBJ::from(h_bitmap))
+            .ok()
+            .unwrap_or_default();
+        DeleteDC(hdc_mem).ok().unwrap_or_default();
+        ReleaseDC(None, hdc);
+
+        if blit_ok.is_err() || got == 0 {
+            None
+        } else {
+            Some(pixels)
+        }
     }
 }
 

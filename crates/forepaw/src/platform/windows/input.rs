@@ -17,19 +17,21 @@ use windows::Win32::UI::Accessibility::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-    KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
-    MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEINPUT, MOUSE_EVENT_FLAGS, VIRTUAL_KEY,
+    KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN,
+    MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
+    MOUSEEVENTF_WHEEL, MOUSEINPUT, MOUSE_EVENT_FLAGS, VIRTUAL_KEY,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
+use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos, WHEEL_DELTA};
 
 use crate::core::element_tree::ElementRef;
 use crate::core::errors::ForepawError;
-use crate::core::key_combo::{ClickOptions, KeyCombo, MouseButton};
+use crate::core::key_combo::{ClickOptions, DragOptions, KeyCombo, Modifier, MouseButton};
 use crate::core::types::{Point, Rect};
 use crate::platform::{ActionResult, AppTarget};
 
 use super::app;
 use super::key_code::{modifier_vk, virtual_key_code};
+use super::screenshot;
 use super::snapshot;
 
 // ---------------------------------------------------------------------------
@@ -123,19 +125,26 @@ pub fn press_key(keys: &KeyCombo, app: Option<&AppTarget>) -> Result<ActionResul
 // Mouse
 // ---------------------------------------------------------------------------
 
-/// Move the cursor to a screen-absolute point (physical pixels) via
-/// `SetCursorPos`. Physical pixels go in directly -- no 0..65535
-/// normalization -- so this is correct at any DPI and on multi-monitor setups.
-/// A 50ms settle mirrors the macOS backend.
+/// Move the cursor to a screen-absolute point (physical px) via `SetCursorPos`,
+/// no settle. Used for high-frequency moves (drag interpolation) where the
+/// caller controls timing. Physical px go in directly (no 0..65535
+/// normalization), so this is correct at any DPI and on multi-monitor setups.
 ///
 /// # Errors
 ///
 /// Returns [`ForepawError::ActionFailed`] if `SetCursorPos` rejects the call.
-fn move_mouse_to(point: Point) -> Result<(), ForepawError> {
+fn set_cursor_pos(point: Point) -> Result<(), ForepawError> {
     let (x, y) = to_pixels(&point);
     // SAFETY: SetCursorPos takes physical pixel coords; any in-range values are safe.
     unsafe { SetCursorPos(x, y) }
         .map_err(|e| ForepawError::ActionFailed(format!("SetCursorPos failed: {e}")))?;
+    Ok(())
+}
+
+/// Move the cursor and let it settle (50ms). For one-shot positioning
+/// (click/hover/scroll target) where hover/enter handlers need time to fire.
+fn move_mouse_to(point: Point) -> Result<(), ForepawError> {
+    set_cursor_pos(point)?;
     thread::sleep(Duration::from_millis(50));
     Ok(())
 }
@@ -464,6 +473,253 @@ fn window_relative(point: Point, app: &AppTarget) -> Point {
 }
 
 // ---------------------------------------------------------------------------
+// Scroll and drag
+// ---------------------------------------------------------------------------
+
+/// Scroll within the app's window. Moves the cursor to the target first (the
+/// wheel event goes to the window under the cursor), then posts a
+/// `MOUSEEVENTF_WHEEL`/`MOUSEEVENTF_HWHEEL` event. Boundary detection via a
+/// screen-strip pixel fingerprint (BitBlt, mirrors macOS's CoreGraphics approach).
+///
+/// Target resolution, in priority order: `at` (window-relative, validated),
+/// `reference` (element center via the cache or re-walk), else the window
+/// center.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// [`ForepawError::StaleRef`] if a ref is given but no longer exists,
+/// [`ForepawError::ActionFailed`] for an unknown direction or input failure.
+pub fn scroll(
+    direction: &str,
+    amount: u32,
+    app: &AppTarget,
+    window: Option<&crate::platform::WindowTarget>,
+    reference: Option<ElementRef>,
+    at: Option<Point>,
+    cached: Option<IUIAutomationElement>,
+) -> Result<ActionResult, ForepawError> {
+    app::activate_app(app)?;
+    let (_, bounds) = app::find_app_hwnd(app, window)?;
+
+    let target = if let Some(point) = at {
+        app::validate_point_in_window(&point, app)?;
+        app::to_screen_point(&point, app)?
+    } else if let Some(reference) = reference {
+        snapshot::resolve_ref_position(reference.id, app, cached)?
+    } else {
+        // Default: center of the app's best-matching window.
+        bounds.center()
+    };
+
+    // `mouseData` holds the wheel delta in WHEEL_DELTA units, packed into the
+    // DWORD field as two's complement for negative deltas (Win32 reads it back
+    // signed). All u32 arithmetic -- no signed casts.
+    let magnitude = amount.saturating_mul(WHEEL_DELTA);
+    let (flag, mouse_data) = match direction {
+        "up" => (MOUSEEVENTF_WHEEL, magnitude),
+        "down" => (MOUSEEVENTF_WHEEL, magnitude.wrapping_neg()),
+        "left" => (MOUSEEVENTF_HWHEEL, magnitude.wrapping_neg()),
+        "right" => (MOUSEEVENTF_HWHEEL, magnitude),
+        _ => {
+            return Err(ForepawError::ActionFailed(format!(
+                "Unknown direction '{direction}'. Use up, down, left, or right."
+            )))
+        }
+    };
+
+    move_mouse_to(target)?;
+    // Fingerprint the content before/after to detect the scroll boundary.
+    let before = screenshot::capture_strip_fingerprint(bounds);
+    send_inputs(&[mouse_wheel_input(flag, mouse_data)])?;
+    thread::sleep(Duration::from_millis(150));
+    let at_boundary = matches!((before, screenshot::capture_strip_fingerprint(bounds)), (Some(b), Some(a)) if a == b);
+
+    let rel = window_relative(target, app);
+    let note = if at_boundary {
+        " (at boundary -- content did not change)"
+    } else {
+        ""
+    };
+    Ok(ActionResult::ok_msg(format!(
+        "scrolled {direction} {amount} ticks at {:.0},{:.0}{note}",
+        rel.x, rel.y
+    )))
+}
+
+/// Drag along a path of points. Coordinates are window-relative when `app` is
+/// given, else screen-absolute.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the path has fewer than 2 points
+/// or the platform input API rejects an event.
+pub fn drag_path(
+    path: &[Point],
+    options: &DragOptions,
+    app: Option<&AppTarget>,
+) -> Result<ActionResult, ForepawError> {
+    if path.len() < 2 {
+        return Err(ForepawError::ActionFailed(
+            "Drag path requires at least 2 points".into(),
+        ));
+    }
+
+    let screen_path: Vec<Point> = if let Some(app) = app {
+        app::activate_app(app)?;
+        path.iter()
+            .map(|p| app::to_screen_point(p, app))
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        path.to_vec()
+    };
+    let mut screen_path = screen_path;
+    if options.close_path && screen_path.len() >= 3 {
+        if let Some(first) = screen_path.first().copied() {
+            screen_path.push(first);
+        }
+    }
+
+    perform_mouse_drag(&screen_path, options)?;
+
+    // Report the original (input) coordinates the caller passed.
+    let msg = if let [from, to] = path {
+        format!(
+            "dragged from {:.0},{:.0} to {:.0},{:.0} ({} steps, {:.1}s)",
+            from.x, from.y, to.x, to.y, options.steps, options.duration,
+        )
+    } else {
+        format!(
+            "dragged through {} points ({} steps/segment, {:.1}s)",
+            path.len(),
+            options.steps,
+            options.duration,
+        )
+    };
+    Ok(ActionResult::ok_msg(msg))
+}
+
+/// Drag from one element to another, identified by refs.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// [`ForepawError::StaleRef`] if either ref no longer exists, or
+/// [`ForepawError::ActionFailed`] if the drag fails.
+pub fn drag_refs(
+    from_ref: ElementRef,
+    to_ref: ElementRef,
+    app: &AppTarget,
+    options: &DragOptions,
+    from_cached: Option<IUIAutomationElement>,
+    to_cached: Option<IUIAutomationElement>,
+) -> Result<ActionResult, ForepawError> {
+    app::activate_app(app)?;
+    let from = snapshot::resolve_ref_position(from_ref.id, app, from_cached)?;
+    let to = snapshot::resolve_ref_position(to_ref.id, app, to_cached)?;
+    perform_mouse_drag(&[from, to], options)?;
+
+    let start = window_relative(from, app);
+    let end = window_relative(to, app);
+    Ok(ActionResult::ok_msg(format!(
+        "dragged from {:.0},{:.0} to {:.0},{:.0} ({} steps, {:.1}s)",
+        start.x, start.y, end.x, end.y, options.steps, options.duration,
+    )))
+}
+
+/// Interpolated mouse drag along `path` (screen-absolute, physical px). Holds
+/// the button down between the first and last point, posting intermediate
+/// `SetCursorPos` moves per step (Windows tracks the move as a drag while the
+/// button is held). Modifiers are held for the whole drag.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "path indexing after len >= 2 check"
+)]
+fn perform_mouse_drag(path: &[Point], options: &DragOptions) -> Result<(), ForepawError> {
+    if path.len() < 2 {
+        return Ok(());
+    }
+    let first = path[0];
+    let last = *path.last().expect("path has >= 2 elements (checked above)");
+    let (down, up) = if options.right_button {
+        (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP)
+    } else {
+        (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP)
+    };
+
+    // Hold modifiers for the entire drag.
+    let mod_downs = modifier_inputs(&options.modifiers, false);
+    let mod_ups = modifier_inputs(&options.modifiers, true);
+    if !mod_downs.is_empty() {
+        send_inputs(&mod_downs)?;
+    }
+
+    set_cursor_pos(first)?;
+    send_inputs(&[mouse_input(down)])?;
+    thread::sleep(Duration::from_millis(20));
+
+    let segments = path.len() - 1;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "segment count to f64 for delay math"
+    )]
+    let step_delay = options.duration / (segments as f64) / f64::from(options.steps);
+    // Move via relative SendInput events (injected input) rather than SetCursorPos
+    // (which only synthesizes WM_MOUSEMOVE) so apps that only process real input
+    // register the drag. Endpoints still use SetCursorPos for exact positioning.
+    let mut prev = first;
+    for seg_idx in 0..segments {
+        let (seg_from, seg_to) = (path[seg_idx], path[seg_idx + 1]);
+        for i in 1..=options.steps {
+            let t = f64::from(i) / f64::from(options.steps);
+            let point = Point::new(
+                seg_from.x + (seg_to.x - seg_from.x) * t,
+                seg_from.y + (seg_to.y - seg_from.y) * t,
+            );
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "sub-pixel delta fits in i32"
+            )]
+            let dx = (point.x - prev.x).round() as i32;
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "sub-pixel delta fits in i32"
+            )]
+            let dy = (point.y - prev.y).round() as i32;
+            if dx != 0 || dy != 0 {
+                send_inputs(&[mouse_move_input(dx, dy)])?;
+            }
+            prev = point;
+            thread::sleep(Duration::from_secs_f64(step_delay));
+        }
+    }
+
+    // Snap to the exact endpoint before release (relative-move rounding).
+    set_cursor_pos(last)?;
+    send_inputs(&[mouse_input(up)])?;
+    if !mod_ups.is_empty() {
+        send_inputs(&mod_ups)?;
+    }
+    Ok(())
+}
+
+/// Build key-down or key-up `INPUT`s for a set of modifiers. Key-ups are in
+/// reverse order so nested chords release naturally.
+fn modifier_inputs(modifiers: &[Modifier], up: bool) -> Vec<INPUT> {
+    let flag = if up {
+        KEYEVENTF_KEYUP
+    } else {
+        KEYBD_EVENT_FLAGS(0)
+    };
+    let mapped = modifiers.iter().filter_map(modifier_vk);
+    if up {
+        mapped.rev().map(|vk| keyboard_input(vk, 0, flag)).collect()
+    } else {
+        mapped.map(|vk| keyboard_input(vk, 0, flag)).collect()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // SendInput plumbing
 // ---------------------------------------------------------------------------
 
@@ -494,6 +750,43 @@ fn mouse_input(flags: MOUSE_EVENT_FLAGS) -> INPUT {
                 dy: 0,
                 mouseData: 0,
                 dwFlags: flags,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    }
+}
+
+/// Build a mouse-wheel `INPUT` (no movement; pair with `move_mouse_to`).
+/// `mouse_data` is the signed wheel delta packed into the DWORD field.
+fn mouse_wheel_input(flags: MOUSE_EVENT_FLAGS, mouse_data: u32) -> INPUT {
+    INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dx: 0,
+                dy: 0,
+                mouseData: mouse_data,
+                dwFlags: flags,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    }
+}
+
+/// Build a relative mouse-move `INPUT` (no ABSOLUTE -- delta in pixels at
+/// default mouse speed). Used for drag interpolation so the motion is injected
+/// as real input, not a synthesized position.
+fn mouse_move_input(dx: i32, dy: i32) -> INPUT {
+    INPUT {
+        r#type: INPUT_MOUSE,
+        Anonymous: INPUT_0 {
+            mi: MOUSEINPUT {
+                dx,
+                dy,
+                mouseData: 0,
+                dwFlags: MOUSEEVENTF_MOVE,
                 time: 0,
                 dwExtraInfo: 0,
             },

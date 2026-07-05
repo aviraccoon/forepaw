@@ -218,7 +218,7 @@ A ref is only valid against the snapshot that produced it. If the UI changed bet
 
 > **The raccoon version:** Raccoons don't just observe — they manipulate. Twist lids, pull latches, press buttons. forepaw simulates keyboard and mouse input through macOS's CGEvent system, which is like having invisible raccoon paws that the OS can't distinguish from real human input.
 
-Action commands are fully implemented on macOS. On Windows, click/type/hover (by ref and by coordinates), `press`, `keyboard-type`, and app activation are implemented; scroll and drag remain stubbed. Linux stubs all action methods. Each stub returns a clear `ActionFailed` error rather than crashing.
+Action commands are fully implemented on macOS. On Windows, click/type/hover (by ref and by coordinates), `press`, `keyboard-type`, scroll, drag, and app activation are all implemented. Linux stubs all action methods. Each stub returns a clear `ActionFailed` error rather than crashing.
 
 ### Click
 
@@ -248,7 +248,7 @@ On Windows, `type @ref` tries `ValuePattern.SetValue()` first, then falls back t
 
 ### Mouse input (Windows)
 
-Coordinate-based click and hover position the cursor with `SetCursorPos` (physical pixels, multi-monitor-correct, no 0..65535 normalization) and post button down/up events with `SendInput`. Multi-click relies on the OS's down/up-timing detection (`MOUSEINPUT` has no click-count field). Ref-based click/hover and region clicks are not yet implemented.
+Coordinate-based click and hover position the cursor with `SetCursorPos` (physical pixels, multi-monitor-correct, no 0..65535 normalization) and post button down/up events with `SendInput`. Multi-click relies on the OS's down/up-timing detection (`MOUSEINPUT` has no click-count field). Ref-based click/hover tries the UIA pattern first (`InvokePattern.Invoke` for click, `ValuePattern.SetValue` for type), then falls back to the mouse/keyboard path. Region clicks use geometric center (saliency not yet wired).
 
 ### Hover
 
@@ -260,9 +260,15 @@ Scroll events use `CGEvent(scrollWheelEvent2Source:...)` with line units. The mo
 
 **Boundary detection**: After scrolling, forepaw captures a pixel fingerprint of the window — a 20px horizontal strip from the vertical center, excluding the rightmost 30px to avoid transient scrollbar overlays — using `CGWindowListCreateImage`. If the fingerprint matches the pre-scroll capture, the scroll hit a boundary and the message says so.
 
+**Boundary detection on Windows**: Same fingerprint approach as macOS, using GDI instead of CoreGraphics. `BitBlt` captures a 20px horizontal strip from the window's vertical center (screen DC, excluding rightmost 30px for scrollbars) into a pixel buffer. Compare before/after the wheel event; equal means at boundary. Implemented in `capture_strip_fingerprint` (`windows/screenshot.rs`).
+
+**Scroll on Windows**: `SendInput` `MOUSEEVENTF_WHEEL`/`HWHEEL`. Direction maps to sign — the delta is `amount * WHEEL_DELTA` as two's-complement in the `u32 mouseData` field. Target resolution: `--at` (validated, window-relative) → `--ref` (resolve center via cache or rewalk) → default window center. Cursor moves to the target first (wheel goes to the window under the cursor).
+
 ### Drag
 
 Move to start, post `mouseDown`, interpolate through path segments with `mouseDragged` events, then post `mouseUp`. Steps per segment (default 30) and total duration (default 0.3s) control smoothness. Modifier keys and pressure are applied to every event in the drag.
+
+**Drag on Windows**: Same two-tier approach as macOS. `SetCursorPos` for the exact start point, then relative `SendInput` `MOUSEEVENTF_MOVE` deltas for the interpolated body (real injected input, not synthesized `WM_MOUSEMOVE`), then `SetCursorPos` to snap to the exact endpoint before button-up. The relative-move form matters: an earlier `SetCursorPos`-only version moved the cursor but didn't draw in Paint — modern apps ignore synthesized moves for drag operations. Modifiers held for the entire drag.
 
 ## Coordinates
 
@@ -576,7 +582,7 @@ crates/forepaw-cli/src/
 - **Element state**: `enabled`, `focused`, `selected`, `description`, `identifier`, `native_role` are all `None`. UIA provides all of these — they need wiring into the tree walk.
 - **Window state**: `WindowInfo.state` is always `None`. Needs `IsIconic()` (minimized), `IsZoomed()` (maximized), bounds comparison (fullscreen).
 - **`is_active`**: Always `false` on `list-apps`/`list-windows`. Needs `GetForegroundWindow()` + `GetWindowThreadProcessId()`.
-- **Action commands**: All stubbed. No click, type, press, scroll, or drag.
+- **Action commands**: click, type, hover (by ref and coordinates), press, keyboard-type, scroll, drag all implemented. Remaining stubs: `ocr_click`, `ocr_hover`, `wait` (compose OCR + click/hover primitives).
 - **OCR latency**: ~600ms at 3× upscale. The 1/l character confusion persists at all scales.
 - **`PW_RENDERFULLCONTENT` is undocumented**: If Microsoft changes or removes this flag, per-window capture needs a fallback.
 - **No `CacheRequest`**: Each UIA property is an individual COM call. Large trees are slower than macOS's batch approach.

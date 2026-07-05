@@ -17,7 +17,7 @@ description: Control desktop apps (macOS, Windows, Linux) for the user. Use when
 | Screenshot | ✅ | ✅ | ❌ |
 | OCR | ✅ (Vision) | ✅ (WinRT) | ❌ |
 | Hit test | ✅ | ✅ | ✅ |
-| Click, type, press, scroll, drag, hover | ✅ | 🟡 scroll, drag pending | ❌ |
+| Click, type, press, scroll, drag, hover | ✅ | ✅ | ❌ |
 | Permissions check | ✅ | ✅ (always yes) | ✅ (always yes) |
 
 Observation works on all three platforms. Actions are fully implemented on macOS; Windows/Linux have partial or stubbed actions (clear error messages, not crashes). Cross-platform actions are in progress.
