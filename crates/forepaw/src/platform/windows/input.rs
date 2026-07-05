@@ -479,7 +479,7 @@ fn window_relative(point: Point, app: &AppTarget) -> Point {
 /// Scroll within the app's window. Moves the cursor to the target first (the
 /// wheel event goes to the window under the cursor), then posts a
 /// `MOUSEEVENTF_WHEEL`/`MOUSEEVENTF_HWHEEL` event. Boundary detection via a
-/// screen-strip pixel fingerprint (BitBlt, mirrors macOS's CoreGraphics approach).
+/// screen-strip pixel fingerprint (`BitBlt`).
 ///
 /// Target resolution, in priority order: `at` (window-relative, validated),
 /// `reference` (element center via the cache or re-walk), else the window
