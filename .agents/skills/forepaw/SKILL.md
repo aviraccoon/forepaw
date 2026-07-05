@@ -17,10 +17,10 @@ description: Control desktop apps (macOS, Windows, Linux) for the user. Use when
 | Screenshot | ✅ | ✅ | ❌ |
 | OCR | ✅ (Vision) | ✅ (WinRT) | ❌ |
 | Hit test | ✅ | ✅ | ✅ |
-| Click, type, press, scroll, drag, hover | ✅ | ❌ | ❌ |
+| Click, type, press, scroll, drag, hover | ✅ | 🟡 type, press | ❌ |
 | Permissions check | ✅ | ✅ (always yes) | ✅ (always yes) |
 
-Observation works on all three platforms. Actions are macOS-only with stubs on Windows/Linux (clear error messages, not crashes). Cross-platform actions are coming.
+Observation works on all three platforms. Actions are fully implemented on macOS; Windows/Linux have partial or stubbed actions (clear error messages, not crashes). Cross-platform actions are in progress.
 
 ## Global flags
 
@@ -161,7 +161,7 @@ Ref shifts are handled automatically -- if a new element appears early in the tr
 
 Use `--context N` to show N unchanged lines around each change. The previous snapshot is cached per app in a temp file. No manual baseline management needed.
 
-## Actions (macOS only)
+## Actions
 
 ### Click by ref (from snapshot)
 

@@ -320,13 +320,26 @@ pub fn find_app_hwnd(
     Ok((HWND(best.hwnd as *mut std::ffi::c_void), bounds))
 }
 
-/// Bring a window to the foreground.
-pub fn activate_app(hwnd: HWND) {
+/// Bring a specific window to the foreground (low-level hwnd operation).
+pub fn activate_window(hwnd: HWND) {
     // SAFETY: Win32/WinRT FFI call with valid arguments.
     unsafe {
         SetForegroundWindow(hwnd).ok().unwrap_or_default();
     }
     std::thread::sleep(std::time::Duration::from_millis(300));
+}
+
+/// Bring the target app's best-matching window to the foreground.
+///
+/// Resolves `app` to a window handle via [`find_app_hwnd`] and activates it.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application has no window.
+pub fn activate_app(app: &AppTarget) -> Result<(), ForepawError> {
+    let (hwnd, _) = find_app_hwnd(app, None)?;
+    activate_window(hwnd);
+    Ok(())
 }
 
 /// Find a window within an app's windows by ID (exact HWND match).

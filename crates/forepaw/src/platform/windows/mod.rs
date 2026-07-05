@@ -11,6 +11,8 @@ pub mod app;
 pub mod display;
 pub mod hit_test;
 pub mod image_ops;
+pub mod input;
+pub mod key_code;
 pub mod ocr;
 pub mod role;
 pub mod screenshot;
@@ -88,6 +90,10 @@ impl DesktopProvider for WindowsProvider {
         screenshot_options: Option<&crate::core::encoder_detection::ScreenshotOptions>,
     ) -> Result<crate::core::ocr_result::OCROutput, ForepawError> {
         ocr::ocr(app, window, find, screenshot_options)
+    }
+
+    fn activate_app(&self, app: &AppTarget) -> Result<(), ForepawError> {
+        app::activate_app(app)
     }
 
     // --- Actions (stubs) ---
@@ -184,22 +190,18 @@ impl DesktopProvider for WindowsProvider {
 
     fn keyboard_type(
         &self,
-        _text: &str,
-        _app: Option<&AppTarget>,
+        text: &str,
+        app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "keyboard_type not yet implemented on Windows".into(),
-        ))
+        input::keyboard_type(text, app)
     }
 
     fn press(
         &self,
-        _keys: &crate::core::key_combo::KeyCombo,
-        _app: Option<&AppTarget>,
+        keys: &crate::core::key_combo::KeyCombo,
+        app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "press not yet implemented on Windows".into(),
-        ))
+        input::press_key(keys, app)
     }
 
     fn scroll(

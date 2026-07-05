@@ -63,7 +63,7 @@ pub fn snapshot(
     let (hwnd, _) = app::find_app_hwnd(app, window)?;
 
     // Bring to foreground (may be needed for accurate tree content)
-    app::activate_app(hwnd);
+    app::activate_window(hwnd);
 
     // Create UIA instance
     // SAFETY: UIA tree traversal on valid element.
