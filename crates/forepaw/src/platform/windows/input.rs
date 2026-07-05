@@ -19,7 +19,7 @@ use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
 
 use crate::core::errors::ForepawError;
 use crate::core::key_combo::{ClickOptions, KeyCombo, MouseButton};
-use crate::core::types::Point;
+use crate::core::types::{Point, Rect};
 use crate::platform::{ActionResult, AppTarget};
 
 use super::app;
@@ -251,6 +251,52 @@ pub fn hover_at_point(
     Ok(ActionResult::ok_msg(format!(
         "hovered at {:.0},{:.0}",
         point.x, point.y
+    )))
+}
+
+/// Click the center of a region.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// or [`ForepawError::ActionFailed`] if the region center falls outside the window.
+pub fn click_region(
+    region: Rect,
+    app: &AppTarget,
+    _window: Option<&crate::platform::WindowTarget>,
+    options: &ClickOptions,
+) -> Result<ActionResult, ForepawError> {
+    let center = Point::new(
+        region.x + region.width / 2.0,
+        region.y + region.height / 2.0,
+    );
+    click_at_point(center, app, options)?;
+    Ok(ActionResult::ok_msg(format!(
+        "clicked region at {:.0},{:.0}",
+        center.x, center.y
+    )))
+}
+
+/// Hover the center of a region.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// or [`ForepawError::ActionFailed`] if the region center falls outside the window.
+pub fn hover_region(
+    region: Rect,
+    app: &AppTarget,
+    _window: Option<&crate::platform::WindowTarget>,
+    smooth: bool,
+) -> Result<ActionResult, ForepawError> {
+    let center = Point::new(
+        region.x + region.width / 2.0,
+        region.y + region.height / 2.0,
+    );
+    hover_at_point(center, Some(app), smooth)?;
+    Ok(ActionResult::ok_msg(format!(
+        "hovered region at {:.0},{:.0}",
+        center.x, center.y
     )))
 }
 

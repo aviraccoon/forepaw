@@ -120,14 +120,12 @@ impl DesktopProvider for WindowsProvider {
 
     fn click_region(
         &self,
-        _region: crate::core::types::Rect,
-        _app: &AppTarget,
-        _window: Option<&WindowTarget>,
-        _options: &crate::core::key_combo::ClickOptions,
+        region: crate::core::types::Rect,
+        app: &AppTarget,
+        window: Option<&WindowTarget>,
+        options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "click_region not yet implemented on Windows".into(),
-        ))
+        input::click_region(region, app, window, options)
     }
 
     fn hover_ref(
@@ -151,14 +149,12 @@ impl DesktopProvider for WindowsProvider {
 
     fn hover_region(
         &self,
-        _region: crate::core::types::Rect,
-        _app: &AppTarget,
-        _window: Option<&WindowTarget>,
-        _smooth: bool,
+        region: crate::core::types::Rect,
+        app: &AppTarget,
+        window: Option<&WindowTarget>,
+        smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "hover_region not yet implemented on Windows".into(),
-        ))
+        input::hover_region(region, app, window, smooth)
     }
 
     fn ocr_hover(
