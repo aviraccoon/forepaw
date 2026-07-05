@@ -12,6 +12,7 @@ use crate::core::element_tree::{
 use crate::core::errors::ForepawError;
 use crate::core::icon_class_parser::IconClassParser;
 use crate::core::ref_assigner::RefAssigner;
+use crate::core::ref_cache::build_ref_handle_map;
 use crate::core::role::Role;
 use crate::core::tree_pruning::PruningOptions;
 use crate::core::types::{Point, Rect};
@@ -259,7 +260,7 @@ pub(super) fn snapshot(
     // Capture ref→handle from the same walk that produced the tree, so resolve
     // calls are O(1) lookups instead of a full re-walk. Mirrors `RefAssigner`'s
     // pre-order counter over interactive nodes.
-    let ref_handles = build_ref_handle_map(&root, &handle_root);
+    let ref_handles = RefHandleMap(build_ref_handle_map(&root, &handle_root));
     let uid_handles = build_uid_handle_map(&handle_root);
 
     let timing = if options.timing {
@@ -591,19 +592,14 @@ pub(super) fn fetch_batch_attributes(element: AXUIElementRef) -> Option<BatchAtt
 // Ref→handle cache (darwin-internal)
 // ---------------------------------------------------------------------------
 
-/// Darwin-internal mirror of the element tree that retains the `AXUIElement`
-/// handle for every node. Built in lockstep with `ElementNode` (same recursion,
-/// same stale-children retry) so its shape is identical. Two flattenings derive
-/// from it: `RefHandleMap` (interactive nodes only, mirrors `RefAssigner`'s ref
-/// numbering) and `UidHandleMap` (every node, mirrors `RefAssigner`'s uid
-/// numbering) -- the latter lets uid-keyed text-attr queries reach
-/// StaticText/Heading, which never receive a ref.
-#[derive(Debug, Default)]
-struct HandleNode {
-    /// Retained `AXUIElement` handle for this node.
-    handle: Option<AXUIElementRef>,
-    children: Vec<Self>,
-}
+/// Darwin's parallel handle tree: the generic [`core::ref_cache::HandleNode`]
+/// carrying a retained `AXUIElementRef` per node. Built in lockstep with
+/// `ElementNode` (same recursion, same pruning early-returns, same
+/// stale-children retry) so its shape is identical. Two flattenings derive
+/// from it: `RefHandleMap` (interactive nodes only) and `UidHandleMap`
+/// (every node, for uid-keyed text-attr queries reaching StaticText/Heading,
+/// which never receive a ref).
+type HandleNode = crate::core::ref_cache::HandleNode<AXUIElementRef>;
 
 /// Map from ref id to the retained `AXUIElement` handle, captured during the
 /// snapshot walk. Stored on `DarwinProvider` so per-element resolve calls are
@@ -660,15 +656,6 @@ fn retain_handle(element: AXUIElementRef) -> AXUIElementRef {
     element
 }
 
-/// Flatten the handle tree into a ref→handle map, mirroring `RefAssigner`'s
-/// pre-order counter over interactive nodes.
-fn build_ref_handle_map(element_root: &ElementNode, handle_root: &HandleNode) -> RefHandleMap {
-    let mut map = HashMap::new();
-    let mut counter: i32 = 1;
-    flatten_handles(element_root, handle_root, &mut counter, &mut map);
-    RefHandleMap(map)
-}
-
 /// Build a uid→handle map, flattening over EVERY node in pre-order to mirror
 /// `RefAssigner`'s uid numbering (every element, depth-first from 1).
 fn build_uid_handle_map(root: &HandleNode) -> UidHandleMap {
@@ -676,28 +663,6 @@ fn build_uid_handle_map(root: &HandleNode) -> UidHandleMap {
     let mut counter: u64 = 0;
     flatten_uid_handles(root, &mut counter, &mut map);
     UidHandleMap(map)
-}
-
-fn flatten_handles(
-    element: &ElementNode,
-    handle: &HandleNode,
-    counter: &mut i32,
-    map: &mut HashMap<i32, AXUIElementRef>,
-) {
-    // Number only interactive nodes, mirroring `RefAssigner` exactly: assign at
-    // the current counter, then increment. The ElementNode is the single source
-    // of interactivity (its role); the HandleNode just carries the retained
-    // handle. `handle` is Some for every real node, so an interactive node always
-    // has one -- the `if let Some` only guards against a structural mismatch.
-    if element.is_interactive() {
-        if let Some(h) = handle.handle {
-            map.insert(*counter, h);
-        }
-        *counter += 1;
-    }
-    for (child_elem, child_handle) in element.children.iter().zip(&handle.children) {
-        flatten_handles(child_elem, child_handle, counter, map);
-    }
 }
 
 fn flatten_uid_handles(
@@ -1492,197 +1457,6 @@ mod tests {
     fn default_depths() {
         assert_eq!(DEFAULT_DEPTH, 15);
         assert_eq!(ELECTRON_DEPTH, 25);
-    }
-
-    // --- Ref→handle cache ordering (pure logic; no live AX needed) ---
-
-    #[test]
-    fn flatten_handles_mirrors_ref_assigner_order() {
-        // Tree: Window -> [ Group -> [Btn(h1), Btn(h2)], TextField(h3) ].
-        // Handles are retained for every node (as `build_tree` does); only the
-        // interactive Button/TextField nodes consume ref numbers, matching
-        // `RefAssigner`. Pointers are never dereferenced (no CFRetain/CFRelease),
-        // so bogus addresses are safe here.
-        use crate::core::element_tree::ElementData;
-        use crate::core::role::Role;
-        use std::ffi::c_void;
-        let h = |n: usize| AXUIElementRef(n as *const c_void);
-        let element_tree = ElementNode::new(ElementData::new(Role::Window)).with_children(vec![
-            ElementNode::new(ElementData::new(Role::Group)).with_children(vec![
-                ElementNode::new(ElementData::new(Role::Button)),
-                ElementNode::new(ElementData::new(Role::Button)),
-            ]),
-            ElementNode::new(ElementData::new(Role::TextField)),
-        ]);
-        let handle_tree = HandleNode {
-            handle: Some(h(0)),
-            children: vec![
-                HandleNode {
-                    handle: Some(h(0)),
-                    children: vec![
-                        HandleNode {
-                            handle: Some(h(1)),
-                            children: vec![],
-                        },
-                        HandleNode {
-                            handle: Some(h(2)),
-                            children: vec![],
-                        },
-                    ],
-                },
-                HandleNode {
-                    handle: Some(h(3)),
-                    children: vec![],
-                },
-            ],
-        };
-        let mut map = HashMap::new();
-        let mut counter = 1;
-        flatten_handles(&element_tree, &handle_tree, &mut counter, &mut map);
-        assert_eq!(map.len(), 3);
-        assert_eq!(map.get(&1).expect("ref 1").0, h(1).0);
-        assert_eq!(map.get(&2).expect("ref 2").0, h(2).0);
-        assert_eq!(map.get(&3).expect("ref 3").0, h(3).0);
-        assert_eq!(counter, 4);
-    }
-
-    #[test]
-    fn flatten_handles_assigns_ref_to_pruned_interactive_leaf() {
-        // A pruned interactive leaf still gets a ref (it remains in the tree);
-        // a non-interactive parent does not. Handles are retained for every
-        // node; the Window parent's handle is ignored because Window isn't
-        // interactive.
-        use crate::core::element_tree::ElementData;
-        use crate::core::role::Role;
-        use std::ffi::c_void;
-        let h = |n: usize| AXUIElementRef(n as *const c_void);
-        let element_tree = ElementNode::new(ElementData::new(Role::Window))
-            .with_children(vec![ElementNode::new(ElementData::new(Role::Button))]);
-        let tree = HandleNode {
-            handle: Some(h(0)), // window, non-interactive
-            children: vec![HandleNode {
-                handle: Some(h(10)), // interactive leaf (e.g. offscreen button)
-                children: vec![],
-            }],
-        };
-        let mut map = HashMap::new();
-        let mut counter = 1;
-        flatten_handles(&element_tree, &tree, &mut counter, &mut map);
-        assert_eq!(map.len(), 1);
-        assert_eq!(map.get(&1).expect("ref 1").0, h(10).0);
-    }
-
-    // --- Lockstep invariant: flatten_handles numbering == RefAssigner numbering ---
-
-    /// Generate a random `ElementNode` tree and the parallel `HandleNode` tree
-    /// built by the same rule `build_tree` uses (`handle = Some` for every node;
-    /// interactivity lives on the `ElementNode`). Each node carries a unique sentinel pointer (never
-    /// dereferenced) so ordering can be checked. Deterministic LCG — no
-    /// `proptest` dependency.
-    fn gen_tree(seed: u32) -> (ElementNode, HandleNode) {
-        use crate::core::element_tree::ElementData;
-        use crate::core::role::Role;
-        use std::ffi::c_void;
-
-        fn gen(
-            depth: usize,
-            next: &mut impl FnMut() -> u32,
-            node_id: &mut usize,
-        ) -> (ElementNode, HandleNode) {
-            // ~half interactive, half structural.
-            let role = if next().is_multiple_of(2) {
-                match next() % 3 {
-                    0 => Role::Button,
-                    1 => Role::TextField,
-                    _ => Role::CheckBox,
-                }
-            } else {
-                match next() % 3 {
-                    0 => Role::Window,
-                    1 => Role::Group,
-                    _ => Role::StaticText,
-                }
-            };
-            *node_id += 1;
-            let sentinel = *node_id;
-            let handle = Some(AXUIElementRef(sentinel as *const c_void));
-
-            let child_count = if depth < 4 { (next() % 4) as usize } else { 0 };
-            let mut children = Vec::with_capacity(child_count);
-            let mut child_handles = Vec::with_capacity(child_count);
-            for _ in 0..child_count {
-                let (c, h) = gen(depth + 1, next, node_id);
-                children.push(c);
-                child_handles.push(h);
-            }
-            (
-                ElementNode::new(ElementData::new(role)).with_children(children),
-                HandleNode {
-                    handle,
-                    children: child_handles,
-                },
-            )
-        }
-
-        let mut state = seed;
-        let mut next = || {
-            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-            state
-        };
-        gen(0, &mut next, &mut 0)
-    }
-
-    /// Walk `RefAssigner`'s annotated tree in lockstep with the `HandleNode`
-    /// tree (identical structure under `interactive_only = false`) and pair each
-    /// ref it assigned with the corresponding node's sentinel handle.
-    fn assigned_sentinels(
-        assigned_root: &ElementNode,
-        handles: &HandleNode,
-    ) -> HashMap<i32, usize> {
-        fn walk(node: &ElementNode, h: &HandleNode, map: &mut HashMap<i32, usize>) {
-            if let Some(r) = node.data.reference {
-                let sentinel = h.handle.expect("interactive node has a handle").0 as usize;
-                map.insert(r.id, sentinel);
-            }
-            for (c, ch) in node.children.iter().zip(&h.children) {
-                walk(c, ch, map);
-            }
-        }
-        let mut map = HashMap::new();
-        walk(assigned_root, handles, &mut map);
-        map
-    }
-
-    #[test]
-    fn flatten_handles_numbering_matches_ref_assigner_across_shapes() {
-        // The whole snapshot handle cache rests on this: `flatten_handles` must
-        // number interactive nodes in exactly the same pre-order as
-        // `RefAssigner`, across arbitrary tree shapes. `build_tree`'s rule
-        // (handle = Some iff interactive) needs a live AX app, so `gen_tree`
-        // applies it itself; this test then pins the *numbering* agreement
-        // between the two independently-implemented walks. Uses `flatten_handles`
-        // directly into a plain map (not `build_ref_handle_map`, whose `Drop`
-        // would `CFRelease` the bogus sentinel pointers).
-        use crate::core::ref_assigner::RefAssigner;
-        for seed in 1..=50u32 {
-            let (tree, handles) = gen_tree(seed);
-            let assigned = RefAssigner::new().assign(&tree, false);
-            let expected = assigned_sentinels(&assigned.root, &handles);
-
-            let mut actual: HashMap<i32, AXUIElementRef> = HashMap::new();
-            let mut counter: i32 = 1;
-            flatten_handles(&tree, &handles, &mut counter, &mut actual);
-            assert_eq!(actual.len(), expected.len(), "seed {seed}: map size");
-            for (id, sentinel) in &expected {
-                let handle = actual
-                    .get(id)
-                    .unwrap_or_else(|| panic!("seed {seed}: ref {id} missing"));
-                assert_eq!(
-                    handle.0 as usize, *sentinel,
-                    "seed {seed}: ref {id} points at the wrong node"
-                );
-            }
-        }
     }
 
     #[test]
