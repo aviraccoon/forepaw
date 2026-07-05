@@ -9,7 +9,12 @@ use std::mem::size_of;
 use std::thread;
 use std::time::Duration;
 
+use windows::core::BSTR;
 use windows::Win32::Foundation::POINT;
+use windows::Win32::UI::Accessibility::{
+    IUIAutomationElement, IUIAutomationInvokePattern, IUIAutomationValuePattern,
+    UIA_InvokePatternId, UIA_ValuePatternId,
+};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS,
     KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
@@ -17,6 +22,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
 
+use crate::core::element_tree::ElementRef;
 use crate::core::errors::ForepawError;
 use crate::core::key_combo::{ClickOptions, KeyCombo, MouseButton};
 use crate::core::types::{Point, Rect};
@@ -24,6 +30,7 @@ use crate::platform::{ActionResult, AppTarget};
 
 use super::app;
 use super::key_code::{modifier_vk, virtual_key_code};
+use super::snapshot;
 
 // ---------------------------------------------------------------------------
 // Keyboard
@@ -266,10 +273,7 @@ pub fn click_region(
     _window: Option<&crate::platform::WindowTarget>,
     options: &ClickOptions,
 ) -> Result<ActionResult, ForepawError> {
-    let center = Point::new(
-        region.x + region.width / 2.0,
-        region.y + region.height / 2.0,
-    );
+    let center = region.center();
     click_at_point(center, app, options)?;
     Ok(ActionResult::ok_msg(format!(
         "clicked region at {:.0},{:.0}",
@@ -289,15 +293,174 @@ pub fn hover_region(
     _window: Option<&crate::platform::WindowTarget>,
     smooth: bool,
 ) -> Result<ActionResult, ForepawError> {
-    let center = Point::new(
-        region.x + region.width / 2.0,
-        region.y + region.height / 2.0,
-    );
+    let center = region.center();
     hover_at_point(center, Some(app), smooth)?;
     Ok(ActionResult::ok_msg(format!(
         "hovered region at {:.0},{:.0}",
         center.x, center.y
     )))
+}
+
+// ---------------------------------------------------------------------------
+// Ref-based actions (InvokePattern / ValuePattern with coordinate fallback)
+// ---------------------------------------------------------------------------
+
+/// Click a UIA element. Tries `InvokePattern.Invoke()` first, then falls back
+/// to a mouse click at the element's center. Right-click and double-click
+/// always use the mouse: `Invoke` takes no arguments, so it cannot convey
+/// button or click count.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if neither Invoke nor a coordinate
+/// click succeeds.
+pub fn click_element(
+    element: &IUIAutomationElement,
+    options: &ClickOptions,
+    app: &AppTarget,
+) -> Result<ActionResult, ForepawError> {
+    let is_right = options.button == MouseButton::Right;
+    let is_double = options.click_count > 1;
+    let prefer_mouse = is_right || is_double;
+
+    if !prefer_mouse {
+        // SAFETY: GetCurrentPatternAs reads a pattern from a valid element.
+        let invoke = unsafe {
+            element.GetCurrentPatternAs::<IUIAutomationInvokePattern>(UIA_InvokePatternId)
+        };
+        if let Ok(pattern) = invoke {
+            // SAFETY: Invoke on a pattern we just retrieved.
+            if unsafe { pattern.Invoke() }.is_ok() {
+                return Ok(ActionResult::ok_msg("invoked via InvokePattern"));
+            }
+        }
+    }
+
+    // Mouse click at element center.
+    if let Some(bounds) = snapshot::get_element_bounds(element) {
+        let center = bounds.center();
+        perform_mouse_click(center, options.button, options.click_count)?;
+        let rel = window_relative(center, app);
+        let label = if is_right {
+            "right-clicked"
+        } else if is_double {
+            "double-clicked"
+        } else {
+            "clicked"
+        };
+        return Ok(ActionResult::ok_msg(format!(
+            "{label} at {:.0},{:.0}",
+            rel.x, rel.y
+        )));
+    }
+
+    Ok(ActionResult::fail(
+        "click failed: element has no bounds and Invoke unavailable",
+    ))
+}
+
+/// Set text on a UIA element. Tries `ValuePattern.SetValue()` first, then
+/// falls back to `SetFocus()` + simulated typing.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the value cannot be set and the
+/// keyboard fallback also fails.
+pub fn set_value_on_element(
+    element: &IUIAutomationElement,
+    value: &str,
+) -> Result<ActionResult, ForepawError> {
+    // SAFETY: GetCurrentPatternAs reads a pattern from a valid element.
+    let value_pattern =
+        unsafe { element.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) };
+    if let Ok(pattern) = value_pattern {
+        let bstr = BSTR::from_wide(value.encode_utf16().collect::<Vec<u16>>().as_slice());
+        // SAFETY: SetValue on a pattern we just retrieved.
+        if unsafe { pattern.SetValue(&bstr) }.is_ok() {
+            return Ok(ActionResult::ok_msg("set via ValuePattern"));
+        }
+    }
+
+    // Fallback: focus the element (best-effort), then type. Focus failure is
+    // ignored -- if the element can't take focus, `type_via_keyboard` will
+    // surface the downstream miss.
+    // SAFETY: SetFocus on a valid element.
+    let _focus = unsafe { element.SetFocus() };
+    type_via_keyboard(value)?;
+    Ok(ActionResult::ok_msg("typed via keyboard simulation"))
+}
+
+/// Click an element identified by ref. Uses a retained handle from the last
+/// snapshot when available (O(1)), else re-walks the tree.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// or [`ForepawError::StaleRef`] if the ref no longer exists.
+pub fn click_ref(
+    reference: ElementRef,
+    app: &AppTarget,
+    options: &ClickOptions,
+    cached: Option<IUIAutomationElement>,
+) -> Result<ActionResult, ForepawError> {
+    app::activate_app(app)?;
+    let element = snapshot::resolve_ref_element(reference.id, app, cached)?;
+    click_element(&element, options, app)
+}
+
+/// Hover over an element identified by ref.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::StaleRef`] if the ref no longer exists, or
+/// [`ForepawError::ActionFailed`] if the element has no bounds.
+pub fn hover_ref(
+    reference: ElementRef,
+    app: &AppTarget,
+    cached: Option<IUIAutomationElement>,
+) -> Result<ActionResult, ForepawError> {
+    app::activate_app(app)?;
+    let element = snapshot::resolve_ref_element(reference.id, app, cached)?;
+    let center = snapshot::get_element_bounds(&element)
+        .ok_or_else(|| {
+            ForepawError::ActionFailed(format!("Cannot determine bounds of {reference}"))
+        })?
+        .center();
+    move_mouse_to(center)?;
+    let rel = window_relative(center, app);
+    Ok(ActionResult::ok_msg(format!(
+        "hovered at {:.0},{:.0}",
+        rel.x, rel.y
+    )))
+}
+
+/// Type text into an element identified by ref (set value or keyboard fallback).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// [`ForepawError::StaleRef`] if the ref no longer exists, or
+/// [`ForepawError::ActionFailed`] if the value cannot be set.
+pub fn type_ref(
+    reference: ElementRef,
+    text: &str,
+    app: &AppTarget,
+    cached: Option<IUIAutomationElement>,
+) -> Result<ActionResult, ForepawError> {
+    app::activate_app(app)?;
+    let element = snapshot::resolve_ref_element(reference.id, app, cached)?;
+    set_value_on_element(&element, text)
+}
+
+/// Translate a screen-absolute (physical px) point to window-relative coords
+/// for action result reporting, using the app's best window origin. Falls back
+/// to the raw screen point if the window can't be resolved.
+fn window_relative(point: Point, app: &AppTarget) -> Point {
+    app::find_app_hwnd(app, None)
+        .ok()
+        .map_or(point, |(_, bounds)| {
+            Point::new(point.x - bounds.x, point.y - bounds.y)
+        })
 }
 
 // ---------------------------------------------------------------------------

@@ -60,6 +60,12 @@ impl Rect {
         }
     }
 
+    /// Center point of the rect.
+    #[must_use]
+    pub fn center(self) -> Point {
+        Point::new(self.x + self.width / 2.0, self.y + self.height / 2.0)
+    }
+
     /// Intersection of two rects, or `None` if they don't overlap.
     ///
     /// Edge/corner-touching rects (zero-width or zero-height overlap) count

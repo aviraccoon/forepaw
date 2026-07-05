@@ -18,12 +18,20 @@ pub mod role;
 pub mod screenshot;
 pub mod snapshot;
 
+use std::sync::Mutex;
+
+use windows::Win32::UI::Accessibility::IUIAutomationElement;
+
 use crate::core::errors::ForepawError;
 use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
 
 /// Windows implementation of `DesktopProvider`.
 #[derive(Debug)]
-pub struct WindowsProvider;
+pub struct WindowsProvider {
+    /// Ref→handle cache from the last snapshot, for O(1) ref resolution.
+    /// Replaced wholesale on each snapshot.
+    ref_handles: Mutex<snapshot::RefHandleMap>,
+}
 
 impl WindowsProvider {
     /// Create a new Windows platform provider.
@@ -31,7 +39,20 @@ impl WindowsProvider {
     pub fn new() -> Self {
         screenshot::init_dpi_awareness();
         snapshot::init_com();
-        Self
+        Self {
+            ref_handles: Mutex::new(snapshot::RefHandleMap::empty()),
+        }
+    }
+
+    /// Look up a retained handle for `ref_id` from the last snapshot's cache.
+    /// Returns a cloned (`AddRef`'d) handle valid beyond the lock; callers drop
+    /// it (`Release`) when done.
+    fn cached_handle(&self, ref_id: i32) -> Option<IUIAutomationElement> {
+        self.ref_handles
+            .lock()
+            .expect("ref_handles mutex poisoned")
+            .get(ref_id)
+            .cloned()
     }
 }
 
@@ -65,7 +86,10 @@ impl DesktopProvider for WindowsProvider {
         window: Option<&WindowTarget>,
         options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
-        snapshot::snapshot(app, window, options)
+        let (tree, ref_handles) = snapshot::snapshot(app, window, options)?;
+        // Replace the ref→handle cache from this snapshot's walk.
+        *self.ref_handles.lock().expect("ref_handles mutex poisoned") = ref_handles;
+        Ok(tree)
     }
 
     fn screenshot(
@@ -101,12 +125,11 @@ impl DesktopProvider for WindowsProvider {
     fn click_ref(
         &self,
         reference: crate::core::element_tree::ElementRef,
-        _app: &AppTarget,
-        _options: &crate::core::key_combo::ClickOptions,
+        app: &AppTarget,
+        options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(format!(
-            "click not yet implemented on Windows (ref: {reference})"
-        )))
+        let cached = self.cached_handle(reference.id);
+        input::click_ref(reference, app, options, cached)
     }
 
     fn click_at_point(
@@ -131,11 +154,10 @@ impl DesktopProvider for WindowsProvider {
     fn hover_ref(
         &self,
         reference: crate::core::element_tree::ElementRef,
-        _app: &AppTarget,
+        app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(format!(
-            "hover not yet implemented on Windows (ref: {reference})"
-        )))
+        let cached = self.cached_handle(reference.id);
+        input::hover_ref(reference, app, cached)
     }
 
     fn hover_at_point(
@@ -172,12 +194,11 @@ impl DesktopProvider for WindowsProvider {
     fn type_ref(
         &self,
         reference: crate::core::element_tree::ElementRef,
-        _text: &str,
-        _app: &AppTarget,
+        text: &str,
+        app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(format!(
-            "type not yet implemented on Windows (ref: {reference})"
-        )))
+        let cached = self.cached_handle(reference.id);
+        input::type_ref(reference, text, app, cached)
     }
 
     fn keyboard_type(
@@ -263,22 +284,20 @@ impl DesktopProvider for WindowsProvider {
 
     fn resolve_ref_position(
         &self,
-        _ref: crate::core::element_tree::ElementRef,
-        _app: &AppTarget,
+        reference: crate::core::element_tree::ElementRef,
+        app: &AppTarget,
     ) -> Result<crate::core::types::Point, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "resolve_ref_position not yet implemented on Windows".into(),
-        ))
+        let cached = self.cached_handle(reference.id);
+        snapshot::resolve_ref_position(reference.id, app, cached)
     }
 
     fn resolve_ref_bounds(
         &self,
-        _ref: crate::core::element_tree::ElementRef,
-        _app: &AppTarget,
+        reference: crate::core::element_tree::ElementRef,
+        app: &AppTarget,
     ) -> Result<crate::core::types::Rect, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "resolve_ref_bounds not yet implemented on Windows".into(),
-        ))
+        let cached = self.cached_handle(reference.id);
+        snapshot::resolve_ref_bounds(reference.id, app, cached)
     }
 
     fn element_at_point(

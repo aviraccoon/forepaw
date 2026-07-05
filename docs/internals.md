@@ -206,7 +206,7 @@ Refs are assigned by `RefAssigner` (`crates/forepaw/src/core/ref_assigner.rs`), 
 
 The `interactive_only` flag controls whether non-interactive elements get refs. In snapshot mode, only interactive elements get `@eN` labels. The `--interactive` flag includes all elements if needed.
 
-During tree construction on macOS, `AXUIElement` handles are collected alongside ref positions and cached on the provider (`DarwinProvider`), so ref resolution is an O(1) map lookup instead of a tree re-walk. The cache is replaced wholesale on each `snapshot`; handles are retained on insertion and released on eviction. Windows and Linux keep no such cache (their resolve paths are not yet implemented).
+During tree construction, native element handles are collected alongside ref positions and cached on the provider, so ref resolution is an O(1) map lookup instead of a tree re-walk. The cache is replaced wholesale on each `snapshot`. macOS (`DarwinProvider`) retains `AXUIElementRef` (manual `CFRetain`/`CFRelease` on the map's `Drop`); Windows (`WindowsProvider`) holds owned `IUIAutomationElement` (RAII `AddRef`/`Release`). Both share the same numbering walk in `core::ref_cache` (`HandleNode<H>` + `flatten_handles`). Linux has no cache yet.
 
 ### Ref resolution across invocations
 
@@ -218,13 +218,15 @@ A ref is only valid against the snapshot that produced it. If the UI changed bet
 
 > **The raccoon version:** Raccoons don't just observe — they manipulate. Twist lids, pull latches, press buttons. forepaw simulates keyboard and mouse input through macOS's CGEvent system, which is like having invisible raccoon paws that the OS can't distinguish from real human input.
 
-Action commands are implemented on macOS. On Windows, keyboard input (`keyboard-type`, `press`), app activation, and coordinate-based click/hover are implemented; scroll, drag, ref-based actions, and region clicks remain stubbed. Linux stubs all action methods. Each stub returns a clear `ActionFailed` error rather than crashing.
+Action commands are fully implemented on macOS. On Windows, click/type/hover (by ref and by coordinates), `press`, `keyboard-type`, and app activation are implemented; scroll and drag remain stubbed. Linux stubs all action methods. Each stub returns a clear `ActionFailed` error rather than crashing.
 
 ### Click
 
 For most roles, tries `AXPress` first (the accessibility action). For `AXLink` elements, right-clicks, and double-clicks, uses mouse click directly — browsers don't navigate on `AXPress` for web content links, and `AXPress` can't express right-click or double-click. Falls back to CGEvent mouse click at the element's center coordinates.
 
 The click path: move cursor to target via `mouseMoved` event (50ms settle time), then `leftMouseDown` + `leftMouseUp`. The pre-move ensures the click routes to the correct window under the cursor. Double-click uses `mouseEventClickState` to signal the click sequence number. Right-click uses `rightMouseDown` + `rightMouseUp`.
+
+On Windows, the same two-tier model applies: `click @ref` tries `InvokePattern.Invoke()` first, then falls back to `SetCursorPos` + `SendInput` mouse click at the element's center. Right-click and double-click skip Invoke (it takes no arguments, so it can't convey button or count) and go straight to the mouse path.
 
 ### App activation
 
@@ -236,7 +238,7 @@ On Windows, `SetForegroundWindow` brings the target window forward with the same
 
 Tries `AXUIElementSetAttributeValue` on the element's value first. Falls back to focusing the element via `AXRaise` + `AXFocused` and simulating keystrokes.
 
-On Windows, `type @ref` is not yet implemented.
+On Windows, `type @ref` tries `ValuePattern.SetValue()` first, then falls back to `SetFocus()` + `keyboard-type`.
 
 ### Keyboard input (Windows)
 

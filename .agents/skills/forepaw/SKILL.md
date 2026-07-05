@@ -17,7 +17,7 @@ description: Control desktop apps (macOS, Windows, Linux) for the user. Use when
 | Screenshot | ✅ | ✅ | ❌ |
 | OCR | ✅ (Vision) | ✅ (WinRT) | ❌ |
 | Hit test | ✅ | ✅ | ✅ |
-| Click, type, press, scroll, drag, hover | ✅ | 🟡 type, press, click/hover (coords) | ❌ |
+| Click, type, press, scroll, drag, hover | ✅ | 🟡 scroll, drag pending | ❌ |
 | Permissions check | ✅ | ✅ (always yes) | ✅ (always yes) |
 
 Observation works on all three platforms. Actions are fully implemented on macOS; Windows/Linux have partial or stubbed actions (clear error messages, not crashes). Cross-platform actions are in progress.
@@ -170,6 +170,9 @@ forepaw click @e3 --app "App Name"
 forepaw click @e3 --app "App Name" --right    # right-click (context menu)
 forepaw click @e3 --app "App Name" --double   # double-click
 ```
+
+On Windows PowerShell, quote the ref (`"@e3"`) — bare `@e3` is PowerShell splatting
+and expands to nothing. (`click "@e3"`.) Bash/zsh are unaffected.
 
 ### Click by coordinates (from snapshot bounds)
 
