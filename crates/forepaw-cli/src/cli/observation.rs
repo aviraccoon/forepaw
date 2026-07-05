@@ -487,8 +487,11 @@ impl ListDisplays {
                     (Some(true), _) => "  HDR",
                     _ => "",
                 };
+                // Two decimals only when the scale needs it (1.75, 1.25);
+                // otherwise one, matching the "2.0x" convention elsewhere.
+                let scale = format_scale(d.scale_factor);
                 println!(
-                    "{}{}{}{}  [{:.0},{:.0} {:.0}x{:.0}]  {:.1}x{}{}",
+                    "{}{}{}{}  [{:.0},{:.0} {:.0}x{:.0}]  {}x{}{}",
                     d.id,
                     name,
                     primary,
@@ -497,13 +500,24 @@ impl ListDisplays {
                     d.logical_bounds.y,
                     d.logical_bounds.width,
                     d.logical_bounds.height,
-                    d.scale_factor,
+                    scale,
                     extras,
                     hdr
                 );
             }
         }
         Ok(())
+    }
+}
+
+/// Format a display scale factor with minimal decimals: two when needed
+/// (1.75, 1.25), one otherwise (2.0, 1.5). Drops a single trailing zero so
+/// 2.0 doesn't render as 2.00.
+fn format_scale(scale: f64) -> String {
+    let s = format!("{scale:.2}");
+    match s.strip_suffix('0') {
+        Some(stripped) => stripped.to_owned(),
+        None => s,
     }
 }
 
