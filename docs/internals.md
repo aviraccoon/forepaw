@@ -218,7 +218,7 @@ A ref is only valid against the snapshot that produced it. If the UI changed bet
 
 > **The raccoon version:** Raccoons don't just observe — they manipulate. Twist lids, pull latches, press buttons. forepaw simulates keyboard and mouse input through macOS's CGEvent system, which is like having invisible raccoon paws that the OS can't distinguish from real human input.
 
-Action commands are implemented on macOS. On Windows, keyboard input (`keyboard-type`, `press`) and app activation are implemented; click, hover, scroll, drag, and ref-based `type @ref` remain stubbed. Linux stubs all action methods. Each stub returns a clear `ActionFailed` error rather than crashing.
+Action commands are implemented on macOS. On Windows, keyboard input (`keyboard-type`, `press`), app activation, and coordinate-based click/hover are implemented; scroll, drag, ref-based actions, and region clicks remain stubbed. Linux stubs all action methods. Each stub returns a clear `ActionFailed` error rather than crashing.
 
 ### Click
 
@@ -243,6 +243,10 @@ On Windows, `type @ref` is not yet implemented.
 `keyboard-type` and `press` use Win32 `SendInput`, the Windows parallel to macOS's CGEvent. Text is sent as Unicode key events so any character types regardless of keyboard layout.
 
 **Modifier mapping:** `Modifier::Command` maps to `VK_CONTROL` on Windows, not the Windows key, so `cmd+s` resolves to Ctrl+S — matching macOS Cmd+S semantically and keeping agent scripts portable across platforms. `Control` is also Ctrl, `Option` is Alt (`VK_MENU`), `Shift` is `VK_SHIFT`.
+
+### Mouse input (Windows)
+
+Coordinate-based click and hover position the cursor with `SetCursorPos` (physical pixels, multi-monitor-correct, no 0..65535 normalization) and post button down/up events with `SendInput`. Multi-click relies on the OS's down/up-timing detection (`MOUSEINPUT` has no click-count field). Ref-based click/hover and region clicks are not yet implemented.
 
 ### Hover
 

@@ -16,7 +16,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::core::errors::ForepawError;
-use crate::core::types::Rect;
+use crate::core::types::{Point, Rect};
 use crate::platform::AppTarget;
 use crate::platform::{AppInfo, WindowInfo, WindowTarget};
 
@@ -339,6 +339,39 @@ pub fn activate_window(hwnd: HWND) {
 pub fn activate_app(app: &AppTarget) -> Result<(), ForepawError> {
     let (hwnd, _) = find_app_hwnd(app, None)?;
     activate_window(hwnd);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Coordinate conversion
+// ---------------------------------------------------------------------------
+
+/// Convert window-relative coordinates to screen-absolute physical pixels.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the process has no window.
+pub fn to_screen_point(point: &Point, app: &AppTarget) -> Result<Point, ForepawError> {
+    let (_, bounds) = find_app_hwnd(app, None)?;
+    Ok(Point {
+        x: point.x + bounds.x,
+        y: point.y + bounds.y,
+    })
+}
+
+/// Validate that a window-relative point is within the window bounds.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the point falls outside.
+pub fn validate_point_in_window(point: &Point, app: &AppTarget) -> Result<(), ForepawError> {
+    let (_, bounds) = find_app_hwnd(app, None)?;
+    if point.x < 0.0 || point.y < 0.0 || point.x > bounds.width || point.y > bounds.height {
+        return Err(ForepawError::ActionFailed(format!(
+            "Point ({:.0}, {:.0}) is outside window bounds (0,0)-({:.0},{:.0})",
+            point.x, point.y, bounds.width, bounds.height
+        )));
+    }
     Ok(())
 }
 

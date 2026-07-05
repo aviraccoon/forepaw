@@ -111,13 +111,11 @@ impl DesktopProvider for WindowsProvider {
 
     fn click_at_point(
         &self,
-        _point: crate::core::types::Point,
-        _app: &AppTarget,
-        _options: &crate::core::key_combo::ClickOptions,
+        point: crate::core::types::Point,
+        app: &AppTarget,
+        options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "click not yet implemented on Windows".into(),
-        ))
+        input::click_at_point(point, app, options)
     }
 
     fn click_region(
@@ -144,13 +142,11 @@ impl DesktopProvider for WindowsProvider {
 
     fn hover_at_point(
         &self,
-        _point: crate::core::types::Point,
-        _app: Option<&AppTarget>,
-        _smooth: bool,
+        point: crate::core::types::Point,
+        app: Option<&AppTarget>,
+        smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "hover not yet implemented on Windows".into(),
-        ))
+        input::hover_at_point(point, app, smooth)
     }
 
     fn hover_region(
