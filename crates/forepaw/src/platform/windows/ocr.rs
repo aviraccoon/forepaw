@@ -1,8 +1,8 @@
 //! OCR via Windows.Media.Ocr (`WinRT`).
 //!
 //! Captures a screenshot via GDI, creates a `SoftwareBitmap` from the raw pixels,
-//! and runs `OcrEngine` on it. All coordinates are in physical pixels, matching
-//! UIA bounding rectangles.
+//! and runs `OcrEngine` on it. Coordinates are physical pixels relative to the
+//! captured window's top-left (the `GetWindowRect` origin), not screen-absolute.
 
 use windows::Foundation::Rect as WinRect;
 use windows::Graphics::Imaging::{BitmapBufferAccessMode, BitmapPixelFormat, SoftwareBitmap};
@@ -11,11 +11,14 @@ use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::System::Threading::{CreateEventW, SetEvent, WaitForSingleObject};
 use windows::Win32::System::WinRT::IMemoryBufferByteAccess;
 
+use std::fmt::Write;
+
 use crate::core::encoder_detection::ScreenshotOptions;
 use crate::core::errors::ForepawError;
+use crate::core::key_combo::{ClickOptions, MouseButton};
 use crate::core::ocr_result::{OCROutput, OCRResult};
-use crate::core::types::{Dimensions, Rect};
-use crate::platform::{AppTarget, WindowTarget};
+use crate::core::types::{Dimensions, Point, Rect};
+use crate::platform::{ActionResult, AppTarget, WindowTarget};
 
 /// Run OCR on an app window (or full screen).
 ///
@@ -133,6 +136,167 @@ pub fn ocr(
         results,
         screenshot_path: display_path,
     })
+}
+
+/// Resolve OCR text to a window-relative center point.
+///
+/// OCR coordinates are physical pixels relative to the window's top-left
+/// (the capture origin from `GetWindowRect`), which is exactly the input
+/// `to_screen_point` expects to translate to screen-absolute coordinates.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the text is not found,
+/// or multiple matches exist without an explicit index.
+fn resolve_ocr_text(
+    text: &str,
+    app: &AppTarget,
+    window: Option<&WindowTarget>,
+    index: Option<usize>,
+) -> Result<(String, Point), ForepawError> {
+    let output = ocr(Some(app), window, Some(text), None)?;
+    let matches = output.results;
+
+    if matches.is_empty() {
+        return Err(ForepawError::ActionFailed(format!(
+            "No text matching '{text}' found on screen"
+        )));
+    }
+
+    if matches.len() > 1 && index.is_none() {
+        let mut listing = format!("Multiple matches for '{text}':\n");
+        for (i, m) in matches.iter().enumerate() {
+            // write! to String is infallible, discard is intentional.
+            #[expect(clippy::let_underscore_must_use)]
+            let _ = writeln!(
+                listing,
+                "  --index {}: '{}' at {:.0},{:.0}",
+                i + 1,
+                m.text,
+                m.center().0,
+                m.center().1
+            );
+        }
+        listing += "Use --index N to pick one.";
+        return Err(ForepawError::ActionFailed(listing));
+    }
+
+    let resolved_index = index.unwrap_or(1).saturating_sub(1);
+    if resolved_index >= matches.len() {
+        return Err(ForepawError::ActionFailed(format!(
+            "--index {} out of range ({} matches found)",
+            index.unwrap_or(0),
+            matches.len()
+        )));
+    }
+
+    let Some(match_result) = matches.get(resolved_index) else {
+        // Should be unreachable due to bounds check above, but handle defensively
+        return Err(ForepawError::ActionFailed(format!(
+            "OCR index {resolved_index} out of range ({} results)",
+            matches.len()
+        )));
+    };
+    Ok((
+        match_result.text.clone(),
+        Point::new(match_result.center().0, match_result.center().1),
+    ))
+}
+
+/// OCR-click: find text on screen and click it.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the text is not found in OCR results,
+/// or the underlying click fails.
+pub fn ocr_click(
+    text: &str,
+    app: &AppTarget,
+    window: Option<&WindowTarget>,
+    options: &ClickOptions,
+    index: Option<usize>,
+) -> Result<ActionResult, ForepawError> {
+    let (matched_text, window_point) = resolve_ocr_text(text, app, window, index)?;
+
+    super::app::activate_app(app)?;
+    let screen_point = super::app::to_screen_point(&window_point, app)?;
+    super::input::perform_mouse_click(screen_point, options.button, options.click_count)?;
+
+    let label = match (options.button, options.click_count) {
+        (MouseButton::Right, _) => "right-clicked",
+        (MouseButton::Left, n) if n > 1 => "double-clicked",
+        (MouseButton::Left, _) => "clicked",
+    };
+    Ok(ActionResult::ok_msg(format!(
+        "{label} '{matched_text}' at {:.0},{:.0}",
+        window_point.x, window_point.y
+    )))
+}
+
+/// OCR-hover: find text on screen and hover at its position.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the text is not found in OCR results,
+/// or the underlying hover fails.
+pub fn ocr_hover(
+    text: &str,
+    app: &AppTarget,
+    window: Option<&WindowTarget>,
+    index: Option<usize>,
+) -> Result<ActionResult, ForepawError> {
+    let (matched_text, window_point) = resolve_ocr_text(text, app, window, index)?;
+
+    super::app::activate_app(app)?;
+    let screen_point = super::app::to_screen_point(&window_point, app)?;
+    super::input::hover_move(screen_point)?;
+
+    Ok(ActionResult::ok_msg(format!(
+        "hovered '{matched_text}' at {:.0},{:.0}",
+        window_point.x, window_point.y
+    )))
+}
+
+/// Wait for text to appear on screen via OCR polling.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the text is not found before the timeout,
+/// or if screen capture fails.
+pub fn wait(
+    text: &str,
+    app: &AppTarget,
+    window: Option<&WindowTarget>,
+    timeout: f64,
+    interval: f64,
+) -> Result<ActionResult, ForepawError> {
+    let start = std::time::Instant::now();
+    let timeout_dur = std::time::Duration::from_secs_f64(timeout);
+    let interval_dur = std::time::Duration::from_secs_f64(interval);
+
+    loop {
+        match ocr(Some(app), window, Some(text), None) {
+            Ok(output) if !output.results.is_empty() => {
+                let Some(matched) = output.results.first() else {
+                    continue;
+                };
+                return Ok(ActionResult::ok_msg(format!(
+                    "found '{}' after waiting",
+                    matched.text
+                )));
+            }
+            _ => {}
+        }
+
+        if start.elapsed() >= timeout_dur {
+            break;
+        }
+        std::thread::sleep(interval_dur);
+    }
+
+    Err(ForepawError::ActionFailed(format!(
+        "Timed out after {timeout:.0}s waiting for '{text}'"
+    )))
 }
 
 /// Create a `SoftwareBitmap` from RGBA pixel data.

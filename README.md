@@ -8,7 +8,7 @@ Named after the raccoon's dexterous forepaws: precise manipulation of UI element
 
 forepaw lets programs (and people, through programs) interact with any desktop application the same way a human would: reading what's on screen, clicking buttons, typing text, scrolling around. On macOS it reads the same accessibility tree that VoiceOver uses. On Windows it uses UI Automation. On Linux it uses AT-SPI2.
 
-Observation (snapshot, screenshot, OCR, hit-test) works on all three platforms. Actions are fully implemented on macOS; Windows and Linux have partial or stubbed action support.
+Observation (snapshot, screenshot, OCR, hit-test) works on all three platforms. Actions are fully implemented on macOS and Windows; Linux has stubbed action support.
 
 The original motivation was curiosity about what it would take to let an AI agent use a desktop app? But the interesting part turned out to be bigger than that. An LLM with forepaw can operate applications on behalf of anyone: navigating complex UIs, filling out forms, reading screen content aloud, automating repetitive tasks. For blind and low-vision users, this means an AI assistant that can see and describe what's on screen, click the right buttons, and read back results, using the same accessibility infrastructure that was always there with a more capable intermediary.
 

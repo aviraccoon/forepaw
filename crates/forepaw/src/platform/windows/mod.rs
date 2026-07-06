@@ -5,7 +5,7 @@
 //! - `IUIAutomation` + `ControlView` `TreeWalker` for accessibility tree walking
 //! - GDI `BitBlt` for screenshots (physical pixels, DPI-aware)
 //! - Windows.Media.Ocr (`WinRT`) for OCR
-//! - `SendInput` for keyboard/mouse input (future)
+//! - `SendInput` for keyboard/mouse input
 
 pub mod app;
 pub mod display;
@@ -78,7 +78,7 @@ impl DesktopProvider for WindowsProvider {
         display::displays()
     }
 
-    // --- Observation (stubs for now) ---
+    // --- Observation ---
 
     fn snapshot(
         &self,
@@ -120,7 +120,7 @@ impl DesktopProvider for WindowsProvider {
         app::activate_app(app)
     }
 
-    // --- Actions (stubs) ---
+    // --- Actions ---
 
     fn click_ref(
         &self,
@@ -181,14 +181,12 @@ impl DesktopProvider for WindowsProvider {
 
     fn ocr_hover(
         &self,
-        _text: &str,
-        _app: &AppTarget,
-        _window: Option<&WindowTarget>,
-        _index: Option<usize>,
+        text: &str,
+        app: &AppTarget,
+        window: Option<&WindowTarget>,
+        index: Option<usize>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "ocr_hover not yet implemented on Windows".into(),
-        ))
+        ocr::ocr_hover(text, app, window, index)
     }
 
     fn type_ref(
@@ -253,28 +251,24 @@ impl DesktopProvider for WindowsProvider {
 
     fn ocr_click(
         &self,
-        _text: &str,
-        _app: &AppTarget,
-        _window: Option<&WindowTarget>,
-        _options: &crate::core::key_combo::ClickOptions,
-        _index: Option<usize>,
+        text: &str,
+        app: &AppTarget,
+        window: Option<&WindowTarget>,
+        options: &crate::core::key_combo::ClickOptions,
+        index: Option<usize>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "ocr_click not yet implemented on Windows".into(),
-        ))
+        ocr::ocr_click(text, app, window, options, index)
     }
 
     fn wait(
         &self,
-        _text: &str,
-        _app: &AppTarget,
-        _window: Option<&WindowTarget>,
-        _timeout: f64,
-        _interval: f64,
+        text: &str,
+        app: &AppTarget,
+        window: Option<&WindowTarget>,
+        timeout: f64,
+        interval: f64,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "wait not yet implemented on Windows".into(),
-        ))
+        ocr::wait(text, app, window, timeout, interval)
     }
 
     // --- Utility ---

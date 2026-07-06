@@ -218,7 +218,7 @@ A ref is only valid against the snapshot that produced it. If the UI changed bet
 
 > **The raccoon version:** Raccoons don't just observe — they manipulate. Twist lids, pull latches, press buttons. forepaw simulates keyboard and mouse input through macOS's CGEvent system, which is like having invisible raccoon paws that the OS can't distinguish from real human input.
 
-Action commands are fully implemented on macOS. On Windows, click/type/hover (by ref and by coordinates), `press`, `keyboard-type`, scroll, drag, and app activation are all implemented. Linux stubs all action methods. Each stub returns a clear `ActionFailed` error rather than crashing.
+Action commands are fully implemented on macOS and Windows (click/type/hover by ref and by coordinates, `press`, `keyboard-type`, scroll, drag, OCR actions, app activation). Linux stubs all action methods. Each stub returns a clear `ActionFailed` error rather than crashing.
 
 ### Click
 
@@ -248,11 +248,13 @@ On Windows, `type @ref` tries `ValuePattern.SetValue()` first, then falls back t
 
 ### Mouse input (Windows)
 
-Coordinate-based click and hover position the cursor with `SetCursorPos` (physical pixels, multi-monitor-correct, no 0..65535 normalization) and post button down/up events with `SendInput`. Multi-click relies on the OS's down/up-timing detection (`MOUSEINPUT` has no click-count field). Ref-based click/hover tries the UIA pattern first (`InvokePattern.Invoke` for click, `ValuePattern.SetValue` for type), then falls back to the mouse/keyboard path. Region clicks use geometric center (saliency not yet wired).
+Coordinate-based **clicks** position the cursor with `SetCursorPos` (physical pixels, multi-monitor-correct) and post button down/up events with `SendInput`. **Hover** uses `MOUSEEVENTF_ABSOLUTE` moves instead (see [Hover](#hover)). Multi-click relies on the OS's down/up-timing detection (`MOUSEINPUT` has no click-count field). Ref-based click/hover tries the UIA pattern first (`InvokePattern.Invoke` for click, `ValuePattern.SetValue` for type), then falls back to the mouse/keyboard path. Region clicks use geometric center (saliency not yet wired).
 
 ### Hover
 
 `moveMouse` posts a single `mouseMoved` event with 50ms settle time. `smoothMoveMouse` interpolates 20 intermediate `mouseMoved` events over 150ms for apps that track `mouseEnter`/`mouseLeave` (e.g., Orion's auto-hiding sidebar). Without smooth movement, teleporting the cursor doesn't trigger tracking area events.
+
+**Hover on Windows**: `SetCursorPos` alone doesn't trigger hover effects — a Win10 build-16299+ regression stops its synthesized `WM_MOUSEMOVE` reaching many apps (Start menu, Edge). Relative `SendInput` moves overshoot when mouse-speed/acceleration is non-default. So hover uses `MOUSEEVENTF_ABSOLUTE` moves: normalized to 0..65535 over the virtual desktop, they hit the exact pixel (no acceleration) *and* inject a real, honored event. `hover_move` interpolates ~15 absolute moves to the target, then dwells. `--smooth` is a no-op for Windows hover (it always interpolates); macOS still honors the flag.
 
 ### Scroll
 
@@ -268,7 +270,11 @@ Scroll events use `CGEvent(scrollWheelEvent2Source:...)` with line units. The mo
 
 Move to start, post `mouseDown`, interpolate through path segments with `mouseDragged` events, then post `mouseUp`. Steps per segment (default 30) and total duration (default 0.3s) control smoothness. Modifier keys and pressure are applied to every event in the drag.
 
-**Drag on Windows**: Same two-tier approach as macOS. `SetCursorPos` for the exact start point, then relative `SendInput` `MOUSEEVENTF_MOVE` deltas for the interpolated body (real injected input, not synthesized `WM_MOUSEMOVE`), then `SetCursorPos` to snap to the exact endpoint before button-up. The relative-move form matters: an earlier `SetCursorPos`-only version moved the cursor but didn't draw in Paint — modern apps ignore synthesized moves for drag operations. Modifiers held for the entire drag.
+**Drag on Windows**: Same two-tier approach as macOS. `SetCursorPos` for the exact start point, then relative `SendInput` `MOUSEEVENTF_MOVE` deltas for the interpolated body (real injected input, not synthesized `WM_MOUSEMOVE`), then `SetCursorPos` to snap to the exact endpoint before button-up. The relative-move form matters: an earlier `SetCursorPos`-only version moved the cursor but didn't draw in Paint — modern apps ignore synthesized moves for drag operations. Modifiers held for the entire drag. (Relative moves scale with mouse speed; endpoints are `SetCursorPos`-pinned regardless. Hover moved off relative moves for this reason — see [Hover](#hover).)
+
+### OCR actions
+
+`ocr-click` finds text via OCR and clicks its center; `hover "text"` does the same for hover; `wait` polls OCR until text appears. Each composes the OCR engine with the click/hover primitives. On Windows, OCR coordinates are physical pixels relative to the captured window's top-left (`GetWindowRect` origin), translated to screen-absolute via `to_screen_point` — the same conversion coordinate clicks use.
 
 ## Coordinates
 
