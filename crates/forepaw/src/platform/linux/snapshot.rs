@@ -7,11 +7,14 @@
 
 use zbus::blocking::Connection;
 
+use std::collections::HashMap;
+
 use crate::core::element_tree::{
-    ElementData, ElementNode, ElementTree, NameSource, SnapshotTiming,
+    ElementData, ElementNode, ElementRef, ElementTree, NameSource, SnapshotTiming,
 };
 use crate::core::errors::ForepawError;
 use crate::core::ref_assigner::RefAssigner;
+use crate::core::ref_cache::build_ref_handle_map;
 use crate::core::role::Role;
 use crate::core::types::Rect;
 use crate::platform::{AppTarget, SnapshotOptions, WindowTarget};
@@ -24,6 +27,43 @@ use super::role::atspi_role_to_role;
 
 // AT-SPI2 role mapping is generated from res/atspi-constants.h.
 // See src/platform/linux/role.rs.
+
+// ---------------------------------------------------------------------------
+// Ref → handle cache
+// ---------------------------------------------------------------------------
+
+/// The `(D-Bus bus name, object path)` identifying an AT-SPI2 accessible
+/// element — the handle type for the ref→handle cache. Cheap to clone (two
+/// strings); `Send + Sync` natively, so the cache needs no `unsafe impl Send`
+/// (unlike macOS' `AXUIElementRef` and Windows' `IUIAutomationElement`).
+#[derive(Debug, Clone)]
+pub(super) struct AtspiRef {
+    /// D-Bus bus name owning the element (the app's bus, or a per-child bus for Qt apps).
+    pub(super) bus: String,
+    /// Object path of the accessible element.
+    pub(super) path: String,
+}
+
+/// Linux's parallel handle tree: the generic `core::ref_cache::HandleNode`
+/// carrying an `AtspiRef` per node. Built in lockstep with `ElementNode`.
+type HandleNode = crate::core::ref_cache::HandleNode<AtspiRef>;
+
+/// Map from ref id to the retained `AtspiRef`, captured during the snapshot
+/// walk. Stored on `LinuxProvider` for O(1) ref resolution.
+#[derive(Debug, Default)]
+pub(super) struct RefHandleMap(HashMap<i32, AtspiRef>);
+
+impl RefHandleMap {
+    /// Create an empty map.
+    pub(super) fn empty() -> Self {
+        Self(HashMap::new())
+    }
+
+    /// Look up the retained handle for a ref (cloned — `AtspiRef` is cheap).
+    pub(super) fn get(&self, ref_id: i32) -> Option<AtspiRef> {
+        self.0.get(&ref_id).cloned()
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Name resolution helpers
@@ -58,11 +98,11 @@ struct TreePruning {
 /// Returns [`ForepawError::AppNotFound`] if the application is not running,
 /// [`ForepawError::WindowNotFound`] if the specified window is not found,
 /// or [`ForepawError::ActionFailed`] if the AT-SPI2 bus is unreachable.
-pub fn snapshot(
+pub(super) fn snapshot(
     app: &AppTarget,
     window: Option<&WindowTarget>,
     options: &SnapshotOptions,
-) -> Result<ElementTree, ForepawError> {
+) -> Result<(ElementTree, RefHandleMap), ForepawError> {
     let conn = connect_atspi_bus()?;
 
     // Find the target app's bus name.
@@ -90,11 +130,16 @@ pub fn snapshot(
     };
 
     let walk_start = std::time::Instant::now();
-    let root = build_tree(&conn, &app_bus, &root_path, 0, options.max_depth, &pruning);
+    let (root, handle_root) =
+        build_tree(&conn, &app_bus, &root_path, 0, options.max_depth, &pruning);
     let walk_ms = walk_start.elapsed().as_secs_f64() * 1000.0;
 
     let assigner = RefAssigner::new();
     let result = assigner.assign(&root, options.interactive_only);
+
+    // Capture ref→handle from the same walk that produced the tree (interactive
+    // nodes only, mirroring `RefAssigner`), so resolve calls are O(1).
+    let ref_handles = RefHandleMap(build_ref_handle_map(&root, &handle_root));
 
     let timing = if options.timing {
         let node_count = SnapshotTiming::count_nodes(&result.root);
@@ -115,7 +160,7 @@ pub fn snapshot(
         timing,
     };
     tree.enrich();
-    Ok(tree)
+    Ok((tree, ref_handles))
 }
 
 // ---------------------------------------------------------------------------
@@ -129,9 +174,12 @@ fn build_tree(
     depth: usize,
     max_depth: usize,
     pruning: &TreePruning,
-) -> ElementNode {
+) -> (ElementNode, HandleNode) {
     if depth >= max_depth {
-        return ElementNode::new(ElementData::new(Role::Group));
+        return (
+            ElementNode::new(ElementData::new(Role::Group)),
+            HandleNode::default(),
+        );
     }
 
     let role_num = get_role(conn, app_bus, path);
@@ -142,14 +190,23 @@ fn build_tree(
     let value = get_value(conn, app_bus, path);
     let bounds = get_bounds(conn, app_bus, path);
 
-    // Check pruning conditions (zero-size and offscreen).
+    // Handle for this node: the (bus, path) needed to address it for actions.
+    let atspi_ref = AtspiRef {
+        bus: app_bus.to_owned(),
+        path: path.to_owned(),
+    };
+
+    // Check pruning conditions (zero-size and offscreen). A pruned interactive
+    // leaf keeps its role (so it still gets a ref) and carries its handle,
+    // mirroring `RefAssigner`.
     if let Some(pruned) = check_pruned(role, name.as_ref(), bounds.as_ref(), depth, pruning) {
-        return pruned;
+        return (pruned, HandleNode::leaf(atspi_ref));
     }
 
-    // Build children first (so name resolution can use them)
+    // Build children first (so name resolution can use them), with parallel
+    // handle nodes in lockstep.
     let children_paths = get_children(conn, app_bus, path).unwrap_or_default();
-    let children: Vec<ElementNode> = children_paths
+    let (children, child_handles): (Vec<ElementNode>, Vec<HandleNode>) = children_paths
         .iter()
         .map(|(child_bus, child_path)| {
             // Qt apps use per-app bus names; GTK apps may share the registry bus.
@@ -167,7 +224,7 @@ fn build_tree(
                 pruning,
             )
         })
-        .collect();
+        .unzip();
 
     // Name resolution: Name → Description → HelpText → first text child
     let (final_name, name_source) =
@@ -183,7 +240,7 @@ fn build_tree(
         attributes.push(("state".to_owned(), state));
     }
 
-    ElementNode {
+    let node = ElementNode {
         data: ElementData {
             role,
             name: final_name,
@@ -205,7 +262,14 @@ fn build_tree(
             attributes,
         },
         children,
-    }
+    };
+    (
+        node,
+        HandleNode {
+            handle: Some(atspi_ref),
+            children: child_handles,
+        },
+    )
 }
 
 /// Check if this element should be pruned (zero-size or offscreen).
@@ -349,64 +413,97 @@ fn get_state_info(conn: &Connection, destination: &str, path: &str) -> String {
 // Ref resolution (for action dispatch)
 // ---------------------------------------------------------------------------
 
-/// Re-walk the AT-SPI2 tree to count interactive elements up to a given ref ID.
-/// Returns true if the ref exists in the tree.
-#[must_use]
-pub fn ref_exists(app_bus: &str, ref_id: i32, conn: &Connection) -> bool {
-    let mut counter: i32 = 1;
-    ref_exists_recursive(
-        conn,
-        app_bus,
-        "/org/a11y/atspi/accessible/root",
-        0,
-        15,
-        ref_id,
-        &mut counter,
-    )
+/// Resolve a ref to its `(bus, path)` handle, using a retained handle from the
+/// last snapshot when available (O(1)), else a full tree re-walk.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::StaleRef`] if the ref no longer exists in the tree.
+pub(super) fn resolve_ref_atspi(
+    ref_id: i32,
+    app: &AppTarget,
+    cached: Option<AtspiRef>,
+) -> Result<AtspiRef, ForepawError> {
+    if let Some(handle) = cached {
+        return Ok(handle);
+    }
+    resolve_ref_atspi_rewalk(ref_id, app)
 }
 
-fn ref_exists_recursive(
+/// Fallback re-walk when no retained handle is cached (e.g. resolve before any
+/// snapshot on this provider). Best-effort: walks from the app's root at the
+/// default depth, numbering interactive nodes like `RefAssigner`.
+///
+/// This cannot reproduce the pruning a caller's `snapshot` used (depth,
+/// zero-size, offscreen): `resolve_ref_*` takes only the ref and app, and
+/// `forepaw` is a library, so the caller may have snapshotted with any
+/// `SnapshotOptions`. The cached path is exact (same walk that built the tree);
+/// when it's absent, treat re-walk resolution as approximate.
+fn resolve_ref_atspi_rewalk(ref_id: i32, app: &AppTarget) -> Result<AtspiRef, ForepawError> {
+    let conn = connect_atspi_bus()?;
+    let app_bus = find_app_bus(&conn, app)?;
+    let mut handles: HashMap<i32, AtspiRef> = HashMap::new();
+    let mut counter: i32 = 1;
+    collect_atspi_refs(
+        &conn,
+        &app_bus,
+        "/org/a11y/atspi/accessible/root",
+        0,
+        SnapshotOptions::default().max_depth,
+        &mut counter,
+        &mut handles,
+    );
+    handles
+        .remove(&ref_id)
+        .ok_or_else(|| ForepawError::StaleRef(ElementRef::new(ref_id)))
+}
+
+/// Walk the AT-SPI2 tree, collecting `(bus, path)` handles for interactive
+/// elements in depth-first order. Must mirror the order used by `RefAssigner`.
+fn collect_atspi_refs(
     conn: &Connection,
     app_bus: &str,
     path: &str,
     depth: usize,
     max_depth: usize,
-    target: i32,
     counter: &mut i32,
-) -> bool {
+    handles: &mut HashMap<i32, AtspiRef>,
+) {
     if depth >= max_depth {
-        return false;
+        return;
     }
-
     let role_num = get_role(conn, app_bus, path);
     let role = atspi_role_to_role(role_num);
-
     if role.is_interactive() {
-        if *counter == target {
-            return true;
-        }
+        handles.insert(
+            *counter,
+            AtspiRef {
+                bus: app_bus.to_owned(),
+                path: path.to_owned(),
+            },
+        );
         *counter += 1;
     }
-
     let Ok(children) = get_children(conn, app_bus, path) else {
-        return false;
+        return;
     };
-
-    for (_bus, child_path) in &children {
-        if ref_exists_recursive(
+    for (child_bus, child_path) in &children {
+        // Mirror build_tree's bus resolution: Qt apps use per-app bus names.
+        let bus = if child_bus.starts_with(':') && child_bus != app_bus {
+            child_bus.clone()
+        } else {
+            app_bus.to_owned()
+        };
+        collect_atspi_refs(
             conn,
-            app_bus,
-            child_path.as_str(),
+            &bus,
+            child_path,
             depth + 1,
             max_depth,
-            target,
             counter,
-        ) {
-            return true;
-        }
+            handles,
+        );
     }
-
-    false
 }
 
 #[cfg(test)]

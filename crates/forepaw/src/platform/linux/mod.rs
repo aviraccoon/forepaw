@@ -16,31 +16,51 @@
 //! is obtained by calling `org.a11y.Bus.GetAddress` on the session bus,
 //! then connecting to that address for all subsequent AT-SPI2 calls.
 
+pub mod action;
 pub mod app;
 pub mod hit_test;
 pub mod role;
 pub mod snapshot;
 
+use std::sync::Mutex;
+
 use crate::core::errors::ForepawError;
 use crate::platform::{AppTarget, DesktopProvider, WindowTarget};
+
+use snapshot::AtspiRef;
+use snapshot::RefHandleMap;
 
 /// Linux implementation of `DesktopProvider`.
 ///
 /// Connects to the AT-SPI2 accessibility bus (discovered from the
 /// session bus at `org.a11y.Bus`) and uses `zbus::blocking` for
 /// all D-Bus communication.
+///
+/// Holds a ref→handle cache from the last snapshot for O(1) ref resolution.
+/// Connections themselves are still established per-call, so the binary can be
+/// inspected (`--help`, `--version`) without requiring an AT-SPI2 bus.
 #[derive(Debug)]
 pub struct LinuxProvider {
-    // No cached connection -- connections are established per-call
-    // so the binary can be inspected (`--help`, `--version`)
-    // without requiring an AT-SPI2 bus.
+    /// Ref→`(bus, path)` cache from the last snapshot. Replaced wholesale on
+    /// each snapshot.
+    ref_handles: Mutex<RefHandleMap>,
 }
 
 impl LinuxProvider {
     /// Creates a new `LinuxProvider`.
     #[must_use]
     pub fn new() -> Self {
-        Self {}
+        Self {
+            ref_handles: Mutex::new(RefHandleMap::empty()),
+        }
+    }
+
+    /// Look up the retained handle for `ref_id` from the last snapshot's cache.
+    fn cached_handle(&self, ref_id: i32) -> Option<AtspiRef> {
+        self.ref_handles
+            .lock()
+            .expect("ref_handles mutex poisoned")
+            .get(ref_id)
     }
 }
 
@@ -76,7 +96,9 @@ impl DesktopProvider for LinuxProvider {
         window: Option<&WindowTarget>,
         options: &crate::platform::SnapshotOptions,
     ) -> Result<crate::core::element_tree::ElementTree, ForepawError> {
-        snapshot::snapshot(app, window, options)
+        let (tree, ref_handles) = snapshot::snapshot(app, window, options)?;
+        *self.ref_handles.lock().expect("ref_handles mutex poisoned") = ref_handles;
+        Ok(tree)
     }
 
     fn screenshot(
@@ -107,12 +129,11 @@ impl DesktopProvider for LinuxProvider {
     fn click_ref(
         &self,
         reference: crate::core::element_tree::ElementRef,
-        _app: &AppTarget,
-        _options: &crate::core::key_combo::ClickOptions,
+        app: &AppTarget,
+        options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(format!(
-            "click not yet implemented on Linux (ref: {reference})"
-        )))
+        let cached = self.cached_handle(reference.id);
+        action::click_ref(reference, app, options, cached)
     }
 
     fn click_at_point(
@@ -186,12 +207,11 @@ impl DesktopProvider for LinuxProvider {
     fn type_ref(
         &self,
         reference: crate::core::element_tree::ElementRef,
-        _text: &str,
-        _app: &AppTarget,
+        text: &str,
+        app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(format!(
-            "type not yet implemented on Linux (ref: {reference})"
-        )))
+        let cached = self.cached_handle(reference.id);
+        action::type_ref(reference, text, app, cached)
     }
 
     fn keyboard_type(
@@ -281,22 +301,20 @@ impl DesktopProvider for LinuxProvider {
 
     fn resolve_ref_position(
         &self,
-        _ref: crate::core::element_tree::ElementRef,
-        _app: &AppTarget,
+        reference: crate::core::element_tree::ElementRef,
+        app: &AppTarget,
     ) -> Result<crate::core::types::Point, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "resolve_ref_position not yet implemented on Linux".into(),
-        ))
+        let cached = self.cached_handle(reference.id);
+        action::resolve_ref_position(reference, app, cached)
     }
 
     fn resolve_ref_bounds(
         &self,
-        _ref: crate::core::element_tree::ElementRef,
-        _app: &AppTarget,
+        reference: crate::core::element_tree::ElementRef,
+        app: &AppTarget,
     ) -> Result<crate::core::types::Rect, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "resolve_ref_bounds not yet implemented on Linux".into(),
-        ))
+        let cached = self.cached_handle(reference.id);
+        action::resolve_ref_bounds(reference, app, cached)
     }
 
     fn element_at_point(
