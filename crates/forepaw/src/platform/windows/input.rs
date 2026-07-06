@@ -1,9 +1,10 @@
 //! Input simulation via `SendInput` and `SetCursorPos` (keyboard, mouse,
 //! and later scroll/drag).
 //!
-//! Keyboard and mouse-button events go through `SendInput`; cursor
-//! positioning uses `SetCursorPos`, which takes physical pixels directly
-//! (no 0..65535 normalization) and is correct at any DPI and on any monitor.
+//! Keyboard and mouse-button events go through `SendInput`; click/scroll
+//! positioning uses `SetCursorPos` (physical pixels, exact), while hover
+//! injects `MOUSEEVENTF_ABSOLUTE` moves -- real input apps honor for hover
+//! state, unlike `SetCursorPos`'s synthesized `WM_MOUSEMOVE`.
 
 use std::mem::size_of;
 use std::thread;
@@ -17,11 +18,15 @@ use windows::Win32::UI::Accessibility::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-    KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN,
-    MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
-    MOUSEEVENTF_WHEEL, MOUSEINPUT, MOUSE_EVENT_FLAGS, VIRTUAL_KEY,
+    KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_HWHEEL,
+    MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
+    MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL, MOUSEINPUT, MOUSE_EVENT_FLAGS,
+    VIRTUAL_KEY,
 };
-use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos, WHEEL_DELTA};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetCursorPos, GetSystemMetrics, SetCursorPos, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+    SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SYSTEM_METRICS_INDEX, WHEEL_DELTA,
+};
 
 use crate::core::element_tree::ElementRef;
 use crate::core::errors::ForepawError;
@@ -142,25 +147,30 @@ fn set_cursor_pos(point: Point) -> Result<(), ForepawError> {
 }
 
 /// Move the cursor and let it settle (50ms). For one-shot positioning
-/// (click/hover/scroll target) where hover/enter handlers need time to fire.
-fn move_mouse_to(point: Point) -> Result<(), ForepawError> {
+/// (click/scroll target).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the cursor move fails.
+pub fn move_mouse_to(point: Point) -> Result<(), ForepawError> {
     set_cursor_pos(point)?;
     thread::sleep(Duration::from_millis(50));
     Ok(())
 }
 
-/// Move the cursor smoothly from its current position to `target`, posting
-/// intermediate `SetCursorPos` calls so hover/enter handlers fire along the
-/// path.
+/// Move the cursor to `target` via interpolated absolute moves so hover/enter
+/// handlers fire along the path. Absolute moves hit the exact pixel regardless
+/// of mouse-speed/acceleration (relative moves overshoot when those are
+/// non-default) and inject real input apps honor.
 ///
 /// # Errors
 ///
-/// Returns [`ForepawError::ActionFailed`] if a `SetCursorPos` call fails.
+/// Returns [`ForepawError::ActionFailed`] if a move fails.
 fn smooth_move_mouse(target: Point, steps: usize, duration: Duration) -> Result<(), ForepawError> {
     let mut current = POINT::default();
     // SAFETY: GetCursorPos writes to a valid POINT.
     if unsafe { GetCursorPos(&raw mut current) }.is_err() {
-        return move_mouse_to(target);
+        return absolute_move(target);
     }
     let start = Point::new(f64::from(current.x), f64::from(current.y));
 
@@ -176,12 +186,24 @@ fn smooth_move_mouse(target: Point, steps: usize, duration: Duration) -> Result<
             start.x + (target.x - start.x) * t,
             start.y + (target.y - start.y) * t,
         );
-        let (x, y) = to_pixels(&p);
-        // SAFETY: SetCursorPos with physical pixel coords.
-        unsafe { SetCursorPos(x, y) }
-            .map_err(|e| ForepawError::ActionFailed(format!("SetCursorPos failed: {e}")))?;
+        absolute_move(p)?;
         thread::sleep(step_delay);
     }
+    Ok(())
+}
+
+/// Hover-move: an interpolated absolute move to `target` ending with a dwell.
+///
+/// Absolute moves (not `SetCursorPos` or relative) inject real input apps
+/// honor for hover/enter state and hit the exact pixel. The interpolation +
+/// dwell give hover timers time to fire.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if a move fails.
+pub fn hover_move(target: Point) -> Result<(), ForepawError> {
+    smooth_move_mouse(target, 15, Duration::from_millis(200))?;
+    thread::sleep(Duration::from_millis(150));
     Ok(())
 }
 
@@ -193,7 +215,7 @@ fn smooth_move_mouse(target: Point, steps: usize, duration: Duration) -> Result<
 /// # Errors
 ///
 /// Returns [`ForepawError::ActionFailed`] if the move or a click event fails.
-fn perform_mouse_click(
+pub fn perform_mouse_click(
     point: Point,
     button: MouseButton,
     click_count: u32,
@@ -250,7 +272,7 @@ pub fn click_at_point(
 pub fn hover_at_point(
     point: Point,
     app: Option<&AppTarget>,
-    smooth: bool,
+    _smooth: bool,
 ) -> Result<ActionResult, ForepawError> {
     let target = if let Some(app) = app {
         app::activate_app(app)?;
@@ -259,11 +281,7 @@ pub fn hover_at_point(
     } else {
         point
     };
-    if smooth {
-        smooth_move_mouse(target, 20, Duration::from_millis(150))?;
-    } else {
-        move_mouse_to(target)?;
-    }
+    hover_move(target)?;
     Ok(ActionResult::ok_msg(format!(
         "hovered at {:.0},{:.0}",
         point.x, point.y
@@ -435,7 +453,7 @@ pub fn hover_ref(
             ForepawError::ActionFailed(format!("Cannot determine bounds of {reference}"))
         })?
         .center();
-    move_mouse_to(center)?;
+    hover_move(center)?;
     let rel = window_relative(center, app);
     Ok(ActionResult::ok_msg(format!(
         "hovered at {:.0},{:.0}",
@@ -628,9 +646,10 @@ pub fn drag_refs(
 }
 
 /// Interpolated mouse drag along `path` (screen-absolute, physical px). Holds
-/// the button down between the first and last point, posting intermediate
-/// `SetCursorPos` moves per step (Windows tracks the move as a drag while the
-/// button is held). Modifiers are held for the whole drag.
+/// the button down between the first and last point, with intermediate
+/// `MOUSEEVENTF_ABSOLUTE` moves per step (exact pixel; relative moves overshoot
+/// under non-default mouse speed). Endpoints use `SetCursorPos` for exact
+/// button down/up. Modifiers are held for the whole drag.
 #[expect(
     clippy::indexing_slicing,
     reason = "path indexing after len >= 2 check"
@@ -664,10 +683,10 @@ fn perform_mouse_drag(path: &[Point], options: &DragOptions) -> Result<(), Forep
         reason = "segment count to f64 for delay math"
     )]
     let step_delay = options.duration / (segments as f64) / f64::from(options.steps);
-    // Move via relative SendInput events (injected input) rather than SetCursorPos
-    // (which only synthesizes WM_MOUSEMOVE) so apps that only process real input
-    // register the drag. Endpoints still use SetCursorPos for exact positioning.
-    let mut prev = first;
+    // Move via absolute SendInput moves (real input the app honors while
+    // tracking the drag) at the exact pixel -- relative moves overshoot when
+    // mouse-speed/acceleration is non-default. Endpoints use SetCursorPos for
+    // pixel-exact button down/up.
     for seg_idx in 0..segments {
         let (seg_from, seg_to) = (path[seg_idx], path[seg_idx + 1]);
         for i in 1..=options.steps {
@@ -676,25 +695,12 @@ fn perform_mouse_drag(path: &[Point], options: &DragOptions) -> Result<(), Forep
                 seg_from.x + (seg_to.x - seg_from.x) * t,
                 seg_from.y + (seg_to.y - seg_from.y) * t,
             );
-            #[expect(
-                clippy::cast_possible_truncation,
-                reason = "sub-pixel delta fits in i32"
-            )]
-            let dx = (point.x - prev.x).round() as i32;
-            #[expect(
-                clippy::cast_possible_truncation,
-                reason = "sub-pixel delta fits in i32"
-            )]
-            let dy = (point.y - prev.y).round() as i32;
-            if dx != 0 || dy != 0 {
-                send_inputs(&[mouse_move_input(dx, dy)])?;
-            }
-            prev = point;
+            absolute_move(point)?;
             thread::sleep(Duration::from_secs_f64(step_delay));
         }
     }
 
-    // Snap to the exact endpoint before release (relative-move rounding).
+    // Snap to the exact endpoint before release.
     set_cursor_pos(last)?;
     send_inputs(&[mouse_input(up)])?;
     if !mod_ups.is_empty() {
@@ -775,23 +781,52 @@ fn mouse_wheel_input(flags: MOUSE_EVENT_FLAGS, mouse_data: u32) -> INPUT {
     }
 }
 
-/// Build a relative mouse-move `INPUT` (no ABSOLUTE -- delta in pixels at
-/// default mouse speed). Used for drag interpolation so the motion is injected
-/// as real input, not a synthesized position.
-fn mouse_move_input(dx: i32, dy: i32) -> INPUT {
-    INPUT {
+/// Read a system metric (wrapper so call sites stay `unsafe`-free).
+fn metric(idx: SYSTEM_METRICS_INDEX) -> i32 {
+    // SAFETY: `GetSystemMetrics` is a read-only query with no side effects.
+    unsafe { GetSystemMetrics(idx) }
+}
+
+/// Absolute `SendInput` mouse move to `point` (screen-absolute physical px).
+///
+/// Injects a real input event apps honor for hover/enter state (unlike
+/// `SetCursorPos`'s synthesized `WM_MOUSEMOVE`) and hits the exact pixel
+/// regardless of mouse-speed/acceleration (unlike relative moves). Normalized
+/// to 0..65535 over the virtual desktop so it works across multi-monitor setups.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if `SendInput` rejects the event.
+fn absolute_move(point: Point) -> Result<(), ForepawError> {
+    let (x, y) = to_pixels(&point);
+    let vw = i64::from(metric(SM_CXVIRTUALSCREEN).max(1));
+    let vh = i64::from(metric(SM_CYVIRTUALSCREEN).max(1));
+    let ox = i64::from(metric(SM_XVIRTUALSCREEN));
+    let oy = i64::from(metric(SM_YVIRTUALSCREEN));
+    // Map screen-absolute physical px onto 0..65535 over the virtual desktop.
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "normalized coordinate is 0..65535"
+    )]
+    let dx = (((i64::from(x) - ox) * 65535) / vw) as i32;
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "normalized coordinate is 0..65535"
+    )]
+    let dy = (((i64::from(y) - oy) * 65535) / vh) as i32;
+    send_inputs(&[INPUT {
         r#type: INPUT_MOUSE,
         Anonymous: INPUT_0 {
             mi: MOUSEINPUT {
                 dx,
                 dy,
                 mouseData: 0,
-                dwFlags: MOUSEEVENTF_MOVE,
+                dwFlags: MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
                 time: 0,
                 dwExtraInfo: 0,
             },
         },
-    }
+    }])
 }
 
 /// Round a [`Point`] to integer pixels (screen coordinates are physical pixels).
