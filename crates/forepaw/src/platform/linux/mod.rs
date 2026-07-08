@@ -19,6 +19,8 @@
 pub mod action;
 pub mod app;
 pub mod hit_test;
+pub mod input;
+pub mod key_code;
 pub mod role;
 pub mod snapshot;
 
@@ -44,6 +46,10 @@ pub struct LinuxProvider {
     /// Ref→`(bus, path)` cache from the last snapshot. Replaced wholesale on
     /// each snapshot.
     ref_handles: Mutex<RefHandleMap>,
+    /// Lazily-created `/dev/uinput` device, held for the session so the
+    /// compositor-recognition delay is paid once (under the first action's
+    /// setup). `None` until the first raw-input action.
+    uinput: Mutex<Option<input::UinputDevice>>,
 }
 
 impl LinuxProvider {
@@ -52,6 +58,7 @@ impl LinuxProvider {
     pub fn new() -> Self {
         Self {
             ref_handles: Mutex::new(RefHandleMap::empty()),
+            uinput: Mutex::new(None),
         }
     }
 
@@ -61,6 +68,21 @@ impl LinuxProvider {
             .lock()
             .expect("ref_handles mutex poisoned")
             .get(ref_id)
+    }
+
+    /// Run `f` with the lazily-created uinput device. The device (and its
+    /// compositor-recognition settle) is created on first use and held for the
+    /// session. The lock is held for the duration of `f`, which is fine for the
+    /// synchronous, single-caller trait usage.
+    fn with_uinput<R>(
+        &self,
+        f: impl FnOnce(&input::UinputDevice) -> Result<R, ForepawError>,
+    ) -> Result<R, ForepawError> {
+        let mut guard = self.uinput.lock().expect("uinput mutex poisoned");
+        if guard.is_none() {
+            *guard = Some(input::UinputDevice::open()?);
+        }
+        f(guard.as_ref().expect("uinput device just initialized"))
     }
 }
 
@@ -124,7 +146,11 @@ impl DesktopProvider for LinuxProvider {
         ))
     }
 
-    // --- Actions (stubs) ---
+    // --- Actions ---
+
+    fn activate_app(&self, app: &AppTarget) -> Result<(), ForepawError> {
+        action::activate(app)
+    }
 
     fn click_ref(
         &self,
@@ -216,22 +242,26 @@ impl DesktopProvider for LinuxProvider {
 
     fn keyboard_type(
         &self,
-        _text: &str,
-        _app: Option<&AppTarget>,
+        text: &str,
+        app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "keyboard_type not yet implemented on Linux".into(),
-        ))
+        if let Some(app) = app {
+            action::activate(app)?;
+        }
+        let msg = self.with_uinput(|dev| input::type_text(dev, text))?;
+        Ok(crate::platform::ActionResult::ok_msg(msg))
     }
 
     fn press(
         &self,
-        _keys: &crate::core::key_combo::KeyCombo,
-        _app: Option<&AppTarget>,
+        keys: &crate::core::key_combo::KeyCombo,
+        app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "press not yet implemented on Linux".into(),
-        ))
+        if let Some(app) = app {
+            action::activate(app)?;
+        }
+        self.with_uinput(|dev| input::press(dev, keys))?;
+        Ok(crate::platform::ActionResult::ok())
     }
 
     fn scroll(

@@ -18,12 +18,40 @@ use crate::core::key_combo::{ClickOptions, MouseButton};
 use crate::core::types::{Point, Rect};
 use crate::platform::{ActionResult, AppTarget};
 
-use super::app::{connect_atspi_bus, get_bounds};
+use super::app::{
+    connect_atspi_bus, find_app_bus, get_bounds, get_children, get_role, ROLE_FRAME, ROLE_WINDOW,
+};
 use super::snapshot::{resolve_ref_atspi, AtspiRef};
 
 // ---------------------------------------------------------------------------
 // Ref → position / bounds
 // ---------------------------------------------------------------------------
+
+/// Activate an app by requesting keyboard focus on its main window via
+/// AT-SPI2 `Component.GrabFocus`. Raw uinput events go to whichever window has
+/// keyboard focus, so the target must be focused before injecting. This is
+/// compositor-agnostic (goes through the a11y bus); whether it also *raises*
+/// the window is compositor-dependent.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// or [`ForepawError::ActionFailed`] if the AT-SPI2 bus is unreachable.
+pub(super) fn activate(app: &AppTarget) -> Result<(), ForepawError> {
+    let conn = connect_atspi_bus()?;
+    let app_bus = find_app_bus(&conn, app)?;
+    let children = get_children(&conn, &app_bus, "/org/a11y/atspi/accessible/root")?;
+    for (_child_bus, path) in &children {
+        let role = get_role(&conn, &app_bus, path.as_str());
+        if role == ROLE_FRAME || role == ROLE_WINDOW {
+            // Best-effort: GrabFocus reports unreliable booleans (see
+            // `grab_focus`), but completing the call is what focuses the window.
+            let _ = grab_focus(&conn, &app_bus, path.as_str());
+            return Ok(());
+        }
+    }
+    Ok(())
+}
 
 /// Resolve a ref to its center point in screen coordinates.
 ///

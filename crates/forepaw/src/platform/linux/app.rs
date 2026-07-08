@@ -277,10 +277,10 @@ pub(super) fn find_app_bus(conn: &Connection, app: &AppTarget) -> Result<String,
 // ---------------------------------------------------------------------------
 
 /// AT-SPI2 role for top-level window frames (Qt/KDE).
-const ROLE_FRAME: u32 = 23;
+pub(super) const ROLE_FRAME: u32 = 23;
 
 /// AT-SPI2 role for top-level windows (GTK).
-const ROLE_WINDOW: u32 = 69;
+pub(super) const ROLE_WINDOW: u32 = 69;
 
 // ---------------------------------------------------------------------------
 // Public API
