@@ -127,8 +127,10 @@ jobs:
       - name: Check formatting
         run: nix develop .# --command cargo fmt --check
 
-      - name: Check generated AT-SPI roles
-        run: diff <(bash res/generate_atspi_roles.sh) crates/forepaw/src/platform/linux/role.rs
+      - name: Check generated AT-SPI constants
+        run: |
+          bash res/generate_atspi_data.sh
+          git diff --exit-code -- crates/forepaw/src/platform/linux/role.rs crates/forepaw/src/platform/linux/state.rs
 
       - name: Check musl x86_64
         run: nix develop .# --command cargo check --target x86_64-unknown-linux-musl
