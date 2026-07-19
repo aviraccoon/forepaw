@@ -7,7 +7,7 @@
 
 use zbus::blocking::Connection;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::core::element_tree::{
     ElementData, ElementNode, ElementRef, ElementTree, NameSource, SnapshotTiming,
@@ -24,6 +24,11 @@ use super::app::{
     get_children, get_property, get_role, get_value,
 };
 use super::role::atspi_role_to_role;
+use super::state::{
+    STATE_CHECKABLE, STATE_CHECKED, STATE_COLLAPSED, STATE_EDITABLE, STATE_ENABLED, STATE_EXPANDED,
+    STATE_FOCUSED, STATE_HAS_POPUP, STATE_INDETERMINATE, STATE_IS_DEFAULT, STATE_MODAL,
+    STATE_PRESSED, STATE_READ_ONLY, STATE_SELECTABLE, STATE_SELECTED, STATE_SHOWING,
+};
 
 // AT-SPI2 role mapping is generated from res/atspi-constants.h.
 // See src/platform/linux/role.rs.
@@ -224,6 +229,17 @@ fn build_tree(
                 pruning,
             )
         })
+        .filter(|(node, _)| {
+            // Drop interactive elements with no bounds (0×0 / no Component).
+            // Qt's AT-SPI2 bridge exposes hidden duplicate toolbars (e.g. Kate
+            // surfaces a non-showing "New"/"Open"/"Save" set alongside the
+            // visible Main Toolbar); the hidden set reports 0×0 and isn't
+            // coordinate-actionable. Dropping it lets the visible duplicates
+            // take the refs. Non-interactive containers are kept (they may
+            // have showing children), and closed-menu items — which report
+            // non-zero offscreen bounds — are kept too.
+            !(node.data.role.is_interactive() && node.data.bounds.is_none())
+        })
         .unzip();
 
     // Name resolution: Name → Description → HelpText → first text child
@@ -272,6 +288,16 @@ fn build_tree(
     )
 }
 
+/// Whether `bounds` lies entirely outside `window` (no overlap). Shared by
+/// `check_pruned` (snapshot) and `collect_atspi_refs` (rewalk) so the two walks
+/// agree on what counts as offscreen — the rewalk must leaf-prune the same
+/// subtrees the snapshot prunes, or ref numbering desyncs.
+fn is_offscreen(bounds: &Rect, window: &Rect) -> bool {
+    let no_horizontal = bounds.x + bounds.width <= window.x || bounds.x >= window.x + window.width;
+    let no_vertical = bounds.y + bounds.height <= window.y || bounds.y >= window.y + window.height;
+    no_horizontal || no_vertical
+}
+
 /// Check if this element should be pruned (zero-size or offscreen).
 /// Returns `Some(pruned_node)` if the element should be skipped.
 fn check_pruned(
@@ -301,9 +327,7 @@ fn check_pruned(
     // Prune offscreen elements
     if pruning.skip_offscreen && depth > 1 {
         if let (Some(wb), Some(b)) = (&pruning.window_bounds, bounds) {
-            let no_horizontal = b.x + b.width <= wb.x || b.x >= wb.x + wb.width;
-            let no_vertical = b.y + b.height <= wb.y || b.y >= wb.y + wb.height;
-            if no_horizontal || no_vertical {
+            if is_offscreen(b, wb) {
                 return Some(ElementNode::new(
                     ElementData::new(role)
                         .with_resolved_name(
@@ -369,44 +393,70 @@ fn first_text_child_name(children: &[ElementNode]) -> Option<String> {
     None
 }
 
+/// Notable positive states to display. The defaults for a healthy interactive
+/// element (enabled, showing, visible, sensitive, focusable) are omitted as
+/// noise; `get_state_info` reports their absence (`disabled`/`hidden`) plus any
+/// of these that are set.
+const NOTABLE_STATES: [(u32, &str); 14] = [
+    (STATE_FOCUSED, "focused"),
+    (STATE_SELECTED, "selected"),
+    (STATE_SELECTABLE, "selectable"),
+    (STATE_CHECKED, "checked"),
+    (STATE_CHECKABLE, "checkable"),
+    (STATE_PRESSED, "pressed"),
+    (STATE_EXPANDED, "expanded"),
+    (STATE_COLLAPSED, "collapsed"),
+    (STATE_EDITABLE, "editable"),
+    (STATE_MODAL, "modal"),
+    (STATE_READ_ONLY, "readonly"),
+    (STATE_INDETERMINATE, "indeterminate"),
+    (STATE_IS_DEFAULT, "default"),
+    (STATE_HAS_POPUP, "has-popup"),
+];
+
+/// Decode the `StateSet` bitmask (`au` words) into the set of `StateType` values.
+fn decode_state_set(words: &[u32]) -> HashSet<u32> {
+    let mut set = HashSet::new();
+    for (word_idx, &word) in words.iter().enumerate() {
+        for bit in 0..32_u32 {
+            if word & (1_u32 << bit) != 0 {
+                set.insert(u32::try_from(word_idx).unwrap_or(0) * 32 + bit);
+            }
+        }
+    }
+    set
+}
+
 /// Get state info as a compact string for the attributes list.
+///
+/// Reports deviations from the defaults (`disabled` if not enabled, `hidden` if
+/// not showing) plus notable positive states. A normal enabled, on-screen
+/// element with no notable state returns an empty string.
 fn get_state_info(conn: &Connection, destination: &str, path: &str) -> String {
-    let reply = conn.call_method(
+    let Ok(reply) = conn.call_method(
         Some(destination),
         path,
         Some("org.a11y.atspi.Accessible"),
         "GetState",
         &(),
-    );
-    match reply {
-        Ok(r) => {
-            let states: Vec<u32> = r.body().deserialize().unwrap_or_default();
-            // Convert state bits to readable names
-            let state_names: Vec<&str> = states
-                .iter()
-                .filter_map(|&bit| match bit {
-                    0 => Some("sticky"),
-                    1 => Some("visible"),
-                    2 => Some("manages-descendants"),
-                    3 => Some("critical-focus"),
-                    4 => Some("focused"),
-                    5 => Some("selectable"),
-                    6 => Some("selected"),
-                    7 => Some("enabled"),
-                    8 => Some("required"),
-                    9 => Some("tristate"),
-                    10 => Some("editable"),
-                    11 => Some("expandable"),
-                    12 => Some("expanded"),
-                    13 => Some("modal"),
-                    14 => Some("checkable"),
-                    _ => None,
-                })
-                .collect();
-            state_names.join(",")
-        }
-        Err(_) => String::new(),
+    ) else {
+        return String::new();
+    };
+    let words: Vec<u32> = reply.body().deserialize().unwrap_or_default();
+    let set = decode_state_set(&words);
+    let mut names: Vec<&str> = Vec::new();
+    if !set.contains(&STATE_ENABLED) {
+        names.push("disabled");
     }
+    if !set.contains(&STATE_SHOWING) {
+        names.push("hidden");
+    }
+    for &(state, label) in &NOTABLE_STATES {
+        if set.contains(&state) {
+            names.push(label);
+        }
+    }
+    names.join(",")
 }
 
 // ---------------------------------------------------------------------------
@@ -442,6 +492,12 @@ pub(super) fn resolve_ref_atspi(
 fn resolve_ref_atspi_rewalk(ref_id: i32, app: &AppTarget) -> Result<AtspiRef, ForepawError> {
     let conn = connect_atspi_bus()?;
     let app_bus = find_app_bus(&conn, app)?;
+    // Match the default snapshot's pruning: offscreen elements are leaf-pruned.
+    // Qt exposes closed menus fully in the AT-SPI2 tree, so descending into
+    // offscreen subtrees would number their items and desync the rewalk from
+    // the snapshot. Use the app's main window bounds, same as `snapshot()` does
+    // when no explicit override is given.
+    let window_bounds = find_main_window_bounds(&conn, &app_bus);
     let mut handles: HashMap<i32, AtspiRef> = HashMap::new();
     let mut counter: i32 = 1;
     collect_atspi_refs(
@@ -450,6 +506,7 @@ fn resolve_ref_atspi_rewalk(ref_id: i32, app: &AppTarget) -> Result<AtspiRef, Fo
         "/org/a11y/atspi/accessible/root",
         0,
         SnapshotOptions::default().max_depth,
+        window_bounds,
         &mut counter,
         &mut handles,
     );
@@ -459,21 +516,39 @@ fn resolve_ref_atspi_rewalk(ref_id: i32, app: &AppTarget) -> Result<AtspiRef, Fo
 }
 
 /// Walk the AT-SPI2 tree, collecting `(bus, path)` handles for interactive
-/// elements in depth-first order. Must mirror the order used by `RefAssigner`.
+/// elements in depth-first order. Must mirror the order used by `RefAssigner`
+/// on `build_tree`'s output, including the offscreen leaf-prune and the
+/// exclusion of interactive elements with no bounds (Qt's hidden duplicates).
+#[expect(clippy::too_many_arguments, reason = "recursive tree-walk helper")]
 fn collect_atspi_refs(
     conn: &Connection,
     app_bus: &str,
     path: &str,
     depth: usize,
     max_depth: usize,
+    window_bounds: Option<Rect>,
     counter: &mut i32,
     handles: &mut HashMap<i32, AtspiRef>,
 ) {
     if depth >= max_depth {
         return;
     }
-    let role_num = get_role(conn, app_bus, path);
-    let role = atspi_role_to_role(role_num);
+    let role = atspi_role_to_role(get_role(conn, app_bus, path));
+    let bounds = get_bounds(conn, app_bus, path);
+    // Match `build_tree`'s parent-level filter: interactive elements with no
+    // bounds (Qt's hidden duplicate toolbars report 0×0) are excluded entirely.
+    if role.is_interactive() && bounds.is_none() {
+        return;
+    }
+    // Match `check_pruned`'s offscreen leaf-prune: an offscreen element keeps
+    // its ref (if interactive) but its subtree isn't expanded. Without this the
+    // rewalk descends into offscreen closed menus and numbers their items,
+    // desyncing from the default snapshot.
+    let offscreen = depth > 1
+        && match (&window_bounds, &bounds) {
+            (Some(wb), Some(b)) => is_offscreen(b, wb),
+            _ => false,
+        };
     if role.is_interactive() {
         handles.insert(
             *counter,
@@ -483,6 +558,9 @@ fn collect_atspi_refs(
             },
         );
         *counter += 1;
+    }
+    if offscreen {
+        return;
     }
     let Ok(children) = get_children(conn, app_bus, path) else {
         return;
@@ -500,6 +578,7 @@ fn collect_atspi_refs(
             child_path,
             depth + 1,
             max_depth,
+            window_bounds,
             counter,
             handles,
         );

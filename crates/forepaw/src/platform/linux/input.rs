@@ -42,14 +42,24 @@ use std::time::Duration;
 
 use crate::core::encoder_detection::is_command_available;
 use crate::core::errors::ForepawError;
-use crate::core::key_combo::{KeyCombo, Modifier};
+use crate::core::key_combo::{KeyCombo, Modifier, MouseButton};
+use crate::core::types::Point;
 
+use super::compositor;
 use super::key_code::{char_to_evdev, evdev_key_code, modifier_code, KeyStroke};
 
 // --- evdev event codes (linux/input-event-codes.h, verified 6.18.7) ---
 const EV_SYN: u16 = 0x00; // :39
 const EV_KEY: u16 = 0x01; // :40
+const EV_REL: u16 = 0x02; // :41
+const EV_ABS: u16 = 0x03; // :42
 const SYN_REPORT: u16 = 0; // :58
+const ABS_X: u16 = 0x00; // :922
+const ABS_Y: u16 = 0x01; // :923
+const BTN_LEFT: u16 = 0x110; // :357
+const BTN_RIGHT: u16 = 0x111; // :358
+const REL_WHEEL: u16 = 0x08; // :943
+const REL_HWHEEL: u16 = 0x06; // :841
 
 // Highest evdev keycode advertised on the device. Every `KEY_*` used by typing
 // or key combos (letters, digits, symbols, function keys, modifiers) is < 256.
@@ -57,7 +67,11 @@ const MAX_KEY_CODE: u16 = 0xff;
 
 /// Sleep after `UI_DEV_CREATE` so libinput/KWin binds the device before the
 /// first event (else it is dropped). See module docs.
-const DEVICE_RECOGNITION_DELAY: Duration = Duration::from_millis(120);
+///
+/// A full-capability device (keyboard + absolute pointer + relative wheel)
+/// takes longer to enumerate than a key-only one; 300ms is a safe floor. The
+/// device is held for the session, so this is paid once.
+const DEVICE_RECOGNITION_DELAY: Duration = Duration::from_millis(300);
 
 /// Per-keystroke delay, matching the macOS/Windows backends: events arriving
 /// too fast are dropped by some apps (Electron/Chromium).
@@ -110,12 +124,37 @@ const fn ioc(dir: u32, type_: u32, nr: u32, size: u32) -> u32 {
 // Pin the struct size the kernel's _IOW macro was defined against.
 const _: () = assert!(size_of::<UinputSetup>() == 92);
 
+/// `struct input_absinfo` (input.h:106): six `__s32`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct InputAbsinfo {
+    value: i32,
+    minimum: i32,
+    maximum: i32,
+    fuzz: i32,
+    flat: i32,
+    resolution: i32,
+}
+
+/// `struct uinput_abs_setup` (uinput.h:81): `__u16 code` + (2-byte pad) +
+/// `input_absinfo`.
+#[repr(C)]
+struct UinputAbsSetup {
+    code: u16,
+    absinfo: InputAbsinfo,
+}
+const _: () = assert!(size_of::<InputAbsinfo>() == 24);
+const _: () = assert!(size_of::<UinputAbsSetup>() == 28);
+
 // uinput request codes, derived from the _IOC formula + verified struct sizes.
 const UI_DEV_CREATE: u32 = ioc(IOC_NONE, UINPUT_IOCTL_BASE, 1, 0); // _IO('U',1)
 const UI_DEV_DESTROY: u32 = ioc(IOC_NONE, UINPUT_IOCTL_BASE, 2, 0); // _IO('U',2)
 const UI_SET_EVBIT: u32 = ioc(IOC_WRITE, UINPUT_IOCTL_BASE, 100, 4); // _IOW('U',100,int)
 const UI_SET_KEYBIT: u32 = ioc(IOC_WRITE, UINPUT_IOCTL_BASE, 101, 4); // _IOW('U',101,int)
+const UI_SET_RELBIT: u32 = ioc(IOC_WRITE, UINPUT_IOCTL_BASE, 102, 4); // _IOW('U',102,int)
+const UI_SET_ABSBIT: u32 = ioc(IOC_WRITE, UINPUT_IOCTL_BASE, 103, 4); // _IOW('U',103,int)
 const UI_DEV_SETUP: u32 = ioc(IOC_WRITE, UINPUT_IOCTL_BASE, 3, 92); // _IOW('U',3,uinput_setup)
+const UI_ABS_SETUP: u32 = ioc(IOC_WRITE, UINPUT_IOCTL_BASE, 4, 28); // _IOW('U',4,uinput_abs_setup)
 
 /// A kernel virtual input device (`/dev/uinput`) for emitting evdev events.
 ///
@@ -124,11 +163,19 @@ const UI_DEV_SETUP: u32 = ioc(IOC_WRITE, UINPUT_IOCTL_BASE, 3, 92); // _IOW('U',
 #[derive(Debug)]
 pub struct UinputDevice {
     fd: OwnedFd,
+    /// Whether absolute-pointer capability was declared (requires the
+    /// compositor's screen geometry at creation).
+    has_pointer: bool,
 }
 
 impl UinputDevice {
-    /// Open `/dev/uinput`, declare keyboard capabilities, create the device,
-    /// and wait out the recognition delay.
+    /// Open `/dev/uinput`, declare keyboard + pointer capabilities, create the
+    /// device, and wait out the recognition delay.
+    ///
+    /// Pointer (absolute move + buttons + wheel) requires the compositor's
+    /// screen geometry to set the absolute-axis range; on compositors where
+    /// that's unavailable, `has_pointer` stays `false` and mouse actions will
+    /// error (keyboard input still works).
     ///
     /// # Errors
     ///
@@ -136,15 +183,41 @@ impl UinputDevice {
     /// (needs root or the `uinput` group) or a kernel ioctl fails.
     pub fn open() -> Result<Self, ForepawError> {
         let fd = open_fd()?;
+        // Keyboard capabilities (always available).
         set_bit(&fd, UI_SET_EVBIT, i32::from(EV_SYN))?;
         set_bit(&fd, UI_SET_EVBIT, i32::from(EV_KEY))?;
         for code in 1..=MAX_KEY_CODE {
             set_bit(&fd, UI_SET_KEYBIT, i32::from(code))?;
         }
+        // Pointer capabilities: absolute move + buttons + relative wheel. The
+        // absolute-axis range comes from the compositor's screen geometry
+        // (physical pixels). libinput classifies an EV_ABS-only device as a
+        // non-pointer, so EV_KEY + BTN_LEFT are required here even though the
+        // keyboard section already declares EV_KEY.
+        let has_pointer = match compositor::screen_geometry() {
+            Ok(g) => {
+                set_bit(&fd, UI_SET_EVBIT, i32::from(EV_ABS))?;
+                set_bit(&fd, UI_SET_EVBIT, i32::from(EV_REL))?;
+                set_bit(&fd, UI_SET_KEYBIT, i32::from(BTN_LEFT))?;
+                set_bit(&fd, UI_SET_KEYBIT, i32::from(BTN_RIGHT))?;
+                set_bit(&fd, UI_SET_ABSBIT, i32::from(ABS_X))?;
+                set_bit(&fd, UI_SET_ABSBIT, i32::from(ABS_Y))?;
+                set_bit(&fd, UI_SET_RELBIT, i32::from(REL_WHEEL))?;
+                set_bit(&fd, UI_SET_RELBIT, i32::from(REL_HWHEEL))?;
+                #[expect(clippy::cast_possible_truncation, reason = "screen pixels fit in i32")]
+                let max_x = (g.width.round() as i32).max(1) - 1;
+                #[expect(clippy::cast_possible_truncation, reason = "screen pixels fit in i32")]
+                let max_y = (g.height.round() as i32).max(1) - 1;
+                abs_setup(&fd, ABS_X, axis_range(max_x))?;
+                abs_setup(&fd, ABS_Y, axis_range(max_y))?;
+                true
+            }
+            Err(_) => false,
+        };
         setup_device(&fd, "forepaw-uinput")?;
         ioctl0(&fd, UI_DEV_CREATE)?;
         thread::sleep(DEVICE_RECOGNITION_DELAY);
-        Ok(Self { fd })
+        Ok(Self { fd, has_pointer })
     }
 
     /// Emit a key event (`value` 1 = press, 0 = release) followed by a sync.
@@ -195,6 +268,80 @@ impl UinputDevice {
     pub fn key_up(&self, code: u16) -> Result<(), ForepawError> {
         self.key_event(code, false)
     }
+
+    /// Whether the device has absolute-pointer capability.
+    #[must_use]
+    pub fn has_pointer(&self) -> bool {
+        self.has_pointer
+    }
+
+    /// Move the pointer to a screen-absolute point (physical pixels) via an
+    /// absolute event, then sync.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if the device has no pointer
+    /// capability or a uinput write fails.
+    pub fn move_to(&self, point: Point) -> Result<(), ForepawError> {
+        if !self.has_pointer {
+            return Err(ForepawError::ActionFailed(
+                "uinput device has no pointer capability \
+                 (compositor screen geometry unavailable)"
+                    .into(),
+            ));
+        }
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "screen coordinates fit in i32"
+        )]
+        let x = point.x.round() as i32;
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "screen coordinates fit in i32"
+        )]
+        let y = point.y.round() as i32;
+        write_event(&self.fd, EV_ABS, ABS_X, x)?;
+        write_event(&self.fd, EV_ABS, ABS_Y, y)?;
+        write_event(&self.fd, EV_SYN, SYN_REPORT, 0)?;
+        Ok(())
+    }
+
+    /// Press a mouse button down. Pair with [`Self::button_up`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if a uinput write fails.
+    pub fn button_down(&self, button: MouseButton) -> Result<(), ForepawError> {
+        self.button_event(pointer_button_code(button), true)
+    }
+
+    /// Release a mouse button previously held with [`Self::button_down`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if a uinput write fails.
+    pub fn button_up(&self, button: MouseButton) -> Result<(), ForepawError> {
+        self.button_event(pointer_button_code(button), false)
+    }
+
+    /// Emit a button event (`value` 1 = press, 0 = release) followed by a sync.
+    fn button_event(&self, code: u16, down: bool) -> Result<(), ForepawError> {
+        write_event(&self.fd, EV_KEY, code, i32::from(down))?;
+        write_event(&self.fd, EV_SYN, SYN_REPORT, 0)?;
+        Ok(())
+    }
+
+    /// Scroll by `notches` (positive = up/right, negative = down/left).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForepawError::ActionFailed`] if a uinput write fails.
+    pub fn wheel(&self, notches: i32, horizontal: bool) -> Result<(), ForepawError> {
+        let axis = if horizontal { REL_HWHEEL } else { REL_WHEEL };
+        write_event(&self.fd, EV_REL, axis, notches)?;
+        write_event(&self.fd, EV_SYN, SYN_REPORT, 0)?;
+        Ok(())
+    }
 }
 
 impl Drop for UinputDevice {
@@ -202,6 +349,93 @@ impl Drop for UinputDevice {
         // Best-effort destroy; the fd closes via OwnedFd regardless.
         let _destroy_result = ioctl0(&self.fd, UI_DEV_DESTROY);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Mouse action composites
+// ---------------------------------------------------------------------------
+
+/// Move to `point`, then click (button down/up) `count` times.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the device has no pointer or a
+/// uinput write fails.
+pub fn perform_click(
+    dev: &UinputDevice,
+    point: Point,
+    button: MouseButton,
+    count: u32,
+) -> Result<(), ForepawError> {
+    dev.move_to(point)?;
+    thread::sleep(Duration::from_millis(30));
+    for i in 1..=count {
+        dev.button_down(button)?;
+        thread::sleep(Duration::from_millis(20));
+        dev.button_up(button)?;
+        if i < count {
+            thread::sleep(Duration::from_millis(40));
+        }
+    }
+    Ok(())
+}
+
+/// Move to `target` via a short interpolated path so hover/enter handlers fire
+/// (a single absolute teleport can miss them). Wayland exposes no cursor query,
+/// so the path starts from a point offset from the target rather than the
+/// actual current position. Ends with a dwell for hover timers.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the device has no pointer or a
+/// uinput write fails.
+pub fn hover_move(dev: &UinputDevice, target: Point) -> Result<(), ForepawError> {
+    let start = Point::new((target.x - 40.0).max(0.0), (target.y - 40.0).max(0.0));
+    let steps: u8 = 5;
+    for i in 1..=steps {
+        let t = f64::from(i) / f64::from(steps);
+        dev.move_to(Point::new(
+            start.x + (target.x - start.x) * t,
+            start.y + (target.y - start.y) * t,
+        ))?;
+        thread::sleep(Duration::from_millis(20));
+    }
+    thread::sleep(Duration::from_millis(120));
+    Ok(())
+}
+
+/// Map a [`MouseButton`] to its evdev code.
+fn pointer_button_code(button: MouseButton) -> u16 {
+    match button {
+        MouseButton::Left => BTN_LEFT,
+        MouseButton::Right => BTN_RIGHT,
+    }
+}
+
+/// Build an `input_absinfo` spanning `0..=max` (value=0, zero fuzz/flat/flat/resolution).
+fn axis_range(max: i32) -> InputAbsinfo {
+    InputAbsinfo {
+        value: 0,
+        minimum: 0,
+        maximum: max,
+        fuzz: 0,
+        flat: 0,
+        resolution: 0,
+    }
+}
+
+/// `ioctl(fd, UI_ABS_SETUP, &setup)` — configure an absolute-axis range.
+fn abs_setup(fd: &OwnedFd, code: u16, absinfo: InputAbsinfo) -> Result<(), ForepawError> {
+    let setup = UinputAbsSetup { code, absinfo };
+    // SAFETY: UI_ABS_SETUP reads a uinput_abs_setup from userspace; fd is valid.
+    let rc = unsafe { libc::ioctl(fd.as_raw_fd(), ioctl_req(UI_ABS_SETUP), &raw const setup) };
+    if rc < 0 {
+        return Err(ForepawError::ActionFailed(format!(
+            "UI_ABS_SETUP failed: {}",
+            io::Error::last_os_error()
+        )));
+    }
+    Ok(())
 }
 
 /// Type `text`, routing to the best available method and returning a short

@@ -18,11 +18,13 @@
 
 pub mod action;
 pub mod app;
+pub mod compositor;
 pub mod hit_test;
 pub mod input;
 pub mod key_code;
 pub mod role;
 pub mod snapshot;
+pub mod state;
 
 use std::sync::Mutex;
 
@@ -164,58 +166,49 @@ impl DesktopProvider for LinuxProvider {
 
     fn click_at_point(
         &self,
-        _point: crate::core::types::Point,
-        _app: &AppTarget,
-        _options: &crate::core::key_combo::ClickOptions,
+        point: crate::core::types::Point,
+        app: &AppTarget,
+        options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "click not yet implemented on Linux".into(),
-        ))
+        self.with_uinput(|dev| action::click_at_point(point, app, options, dev))
     }
 
     fn click_region(
         &self,
-        _region: crate::core::types::Rect,
-        _app: &AppTarget,
+        region: crate::core::types::Rect,
+        app: &AppTarget,
         _window: Option<&WindowTarget>,
-        _options: &crate::core::key_combo::ClickOptions,
+        options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "click_region not yet implemented on Linux".into(),
-        ))
+        self.with_uinput(|dev| action::click_region(region, app, options, dev))
     }
 
     fn hover_ref(
         &self,
         reference: crate::core::element_tree::ElementRef,
-        _app: &AppTarget,
+        app: &AppTarget,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(format!(
-            "hover not yet implemented on Linux (ref: {reference})"
-        )))
+        let cached = self.cached_handle(reference.id);
+        self.with_uinput(|dev| action::hover_ref(reference, app, cached, dev))
     }
 
     fn hover_at_point(
         &self,
-        _point: crate::core::types::Point,
-        _app: Option<&AppTarget>,
+        point: crate::core::types::Point,
+        app: Option<&AppTarget>,
         _smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "hover not yet implemented on Linux".into(),
-        ))
+        self.with_uinput(|dev| action::hover_at_point(point, app, dev))
     }
 
     fn hover_region(
         &self,
-        _region: crate::core::types::Rect,
-        _app: &AppTarget,
+        region: crate::core::types::Rect,
+        app: &AppTarget,
         _window: Option<&WindowTarget>,
         _smooth: bool,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "hover_region not yet implemented on Linux".into(),
-        ))
+        self.with_uinput(|dev| action::hover_region(region, app, dev))
     }
 
     fn ocr_hover(
