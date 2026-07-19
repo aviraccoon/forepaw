@@ -711,10 +711,7 @@ fn build_tree(
     // Native role: the raw AX string (e.g. "AXButton"). Useful for
     // debugging, especially when mapping to Unknown.
     let native_role = Some(role_str);
-    let identifier =
-        attrs
-            .string(Attr::Identifier)
-            .and_then(|id| if id.is_empty() { None } else { Some(id) });
+    let identifier = attrs.string(Attr::Identifier).filter(|id| !id.is_empty());
 
     // Retain the AX handle for every node. Two lookups derive from the
     // resulting tree: ref-keyed resolve (interactive nodes, mirrors
@@ -784,7 +781,7 @@ fn build_tree(
     // different from the resolved name — i.e. not consumed by name resolution.)
     let description = attrs
         .string(Attr::Description)
-        .and_then(|d| if d.is_empty() { None } else { Some(d) })
+        .filter(|d| !d.is_empty())
         .filter(|d| name.as_ref() != Some(d));
 
     let node = ElementNode {

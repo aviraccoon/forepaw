@@ -63,7 +63,8 @@
             inherit system;
             overlays = [ rust-overlay.overlays.default ];
           };
-          rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+          rustChannel = (builtins.fromTOML (builtins.readFile ./rust-toolchain.toml)).toolchain.channel;
+          rustToolchain = pkgs.rust-bin.stable.${rustChannel}.default.override {
             targets = [
               "aarch64-apple-darwin"
               "x86_64-apple-darwin"

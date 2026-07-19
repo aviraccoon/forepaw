@@ -779,10 +779,6 @@ fn write_event(fd: &OwnedFd, kind: u16, code: u16, value: i32) -> Result<(), For
 /// Widen the computed u32 request code to the libc `ioctl` request type.
 /// On musl this is `c_int` (glibc: `c_ulong`); the value always fits i32.
 fn ioctl_req(request: u32) -> libc::Ioctl {
-    #[expect(
-        clippy::cast_possible_wrap,
-        reason = "ioctl request codes are < 2^31 (dir field is bits 30-31)"
-    )]
     let r: libc::Ioctl = request as libc::Ioctl;
     r
 }
