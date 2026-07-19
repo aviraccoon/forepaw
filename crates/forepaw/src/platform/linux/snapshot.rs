@@ -76,6 +76,7 @@ impl RefHandleMap {
 
 /// Get the help text property for name resolution.
 fn get_help_text(conn: &Connection, destination: &str, path: &str) -> Option<String> {
+    crate::trace!("ENTER get_help_text {path}");
     get_property(conn, destination, path, "HelpText")
 }
 
@@ -86,6 +87,7 @@ fn get_help_text(conn: &Connection, destination: &str, path: &str) -> Option<Str
 struct TreePruning {
     skip_zero_size: bool,
     skip_offscreen: bool,
+    skip_menu_bar: bool,
     window_bounds: Option<Rect>,
 }
 
@@ -131,6 +133,7 @@ pub(super) fn snapshot(
     let pruning = TreePruning {
         skip_zero_size: options.skip_zero_size,
         skip_offscreen: options.skip_offscreen,
+        skip_menu_bar: options.skip_menu_bar,
         window_bounds,
     };
 
@@ -172,6 +175,10 @@ pub(super) fn snapshot(
 // Tree walk
 // ---------------------------------------------------------------------------
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "recursive tree-walk; hard to shrink without obscuring the per-node flow"
+)]
 fn build_tree(
     conn: &Connection,
     app_bus: &str,
@@ -190,10 +197,27 @@ fn build_tree(
     let role_num = get_role(conn, app_bus, path);
     let role = atspi_role_to_role(role_num);
 
+    // Skip menu bar subtree when requested (matches Darwin; the menu items are
+    // addressable via keyboard shortcuts or after opening the menu, so walking
+    // a closed menu bar only adds noise — and on Qt 6.x it stresses a fragile
+    // atspi bridge that can SIGSEGV in QSortFilterProxyModel::parent).
+    if pruning.skip_menu_bar && role == Role::MenuBar {
+        return (
+            ElementNode::new(ElementData::new(role)),
+            HandleNode::default(),
+        );
+    }
+
+    crate::trace!("name   d={depth} {path}");
     // Get properties
     let name = get_property(conn, app_bus, path, "Name");
+    crate::trace!("value  d={depth} {path}");
     let value = get_value(conn, app_bus, path);
+    crate::trace!("bounds d={depth} {path}");
     let bounds = get_bounds(conn, app_bus, path);
+    crate::trace!("state_set d={depth} {path}");
+    let state_set = get_state_set(conn, app_bus, path).unwrap_or_default();
+    let is_showing = state_set.contains(&STATE_SHOWING);
 
     // Handle for this node: the (bus, path) needed to address it for actions.
     let atspi_ref = AtspiRef {
@@ -208,8 +232,31 @@ fn build_tree(
         return (pruned, HandleNode::leaf(atspi_ref));
     }
 
+    // Skip descent into non-showing containers. Collapsed toolviews, hidden
+    // background-tab content, and closed-menu subtrees are all !SHOWING and
+    // not actionable until opened — and on Qt 6.x, descending into their
+    // model-backed widgets (QSortFilterProxyModel) can SIGSEGV the atspi
+    // bridge when the app is in a fragile state (e.g. Kate post-close-tab).
+    // The element itself stays (visible parent or interactive leaf keeps its
+    // ref); only its children aren't walked.
+    if !is_showing && depth > 1 {
+        return (
+            ElementNode::new(
+                ElementData::new(role)
+                    .with_resolved_name(
+                        name.clone()
+                            .filter(|s| !s.is_empty())
+                            .map(|n| (n, NameSource::Title)),
+                    )
+                    .with_bounds_opt(bounds),
+            ),
+            HandleNode::leaf(atspi_ref),
+        );
+    }
+
     // Build children first (so name resolution can use them), with parallel
     // handle nodes in lockstep.
+    crate::trace!("children d={depth} {path}");
     let children_paths = get_children(conn, app_bus, path).unwrap_or_default();
     let (children, child_handles): (Vec<ElementNode>, Vec<HandleNode>) = children_paths
         .iter()
@@ -243,6 +290,7 @@ fn build_tree(
         .unzip();
 
     // Name resolution: Name → Description → HelpText → first text child
+    crate::trace!("resolve_name d={depth} {path}");
     let (final_name, name_source) =
         match resolve_name(conn, app_bus, path, name.as_ref(), &children) {
             Some((n, s)) => (Some(n), Some(s)),
@@ -251,7 +299,7 @@ fn build_tree(
 
     // Collect attributes (state, interfaces, etc.)
     let mut attributes: Vec<(String, String)> = Vec::new();
-    let state = get_state_info(conn, app_bus, path);
+    let state = format_state(&state_set);
     if !state.is_empty() {
         attributes.push(("state".to_owned(), state));
     }
@@ -362,11 +410,13 @@ fn resolve_name(
     }
 
     // 2. Description
+    crate::trace!("name:description {path}");
     if let Some(desc) = get_property(conn, app_bus, path, "Description").filter(|s| !s.is_empty()) {
         return Some((desc, NameSource::Description));
     }
 
     // 3. HelpText
+    crate::trace!("name:helptext {path}");
     if let Some(help) = get_help_text(conn, app_bus, path).filter(|s| !s.is_empty()) {
         return Some((help, NameSource::HelpText));
     }
@@ -427,23 +477,27 @@ fn decode_state_set(words: &[u32]) -> HashSet<u32> {
     set
 }
 
-/// Get state info as a compact string for the attributes list.
-///
-/// Reports deviations from the defaults (`disabled` if not enabled, `hidden` if
-/// not showing) plus notable positive states. A normal enabled, on-screen
-/// element with no notable state returns an empty string.
-fn get_state_info(conn: &Connection, destination: &str, path: &str) -> String {
-    let Ok(reply) = conn.call_method(
+/// Query the raw `StateSet` bitmask for an accessible. Returns `None` if the
+/// D-Bus call fails or the body can't be deserialized.
+fn get_state_set(conn: &Connection, destination: &str, path: &str) -> Option<HashSet<u32>> {
+    crate::trace!("ENTER get_state_set {path}");
+    let reply = conn.call_method(
         Some(destination),
         path,
         Some("org.a11y.atspi.Accessible"),
         "GetState",
         &(),
-    ) else {
-        return String::new();
-    };
-    let words: Vec<u32> = reply.body().deserialize().unwrap_or_default();
-    let set = decode_state_set(&words);
+    );
+    let reply = reply.ok()?;
+    let words: Vec<u32> = reply.body().deserialize().ok()?;
+    Some(decode_state_set(&words))
+}
+
+/// Format a decoded `StateSet` as the compact state string for the attributes
+/// list. Reports deviations from the defaults (`disabled` if not enabled,
+/// `hidden` if not showing) plus notable positive states. A normal enabled,
+/// on-screen element with no notable state returns an empty string.
+fn format_state(set: &HashSet<u32>) -> String {
     let mut names: Vec<&str> = Vec::new();
     if !set.contains(&STATE_ENABLED) {
         names.push("disabled");
@@ -534,6 +588,13 @@ fn collect_atspi_refs(
         return;
     }
     let role = atspi_role_to_role(get_role(conn, app_bus, path));
+    // Match `build_tree`'s menu-bar skip (the common `-i` case). Without this
+    // the rewalk numbers menu items the snapshot pruned, desyncing every ref.
+    // Like the offscreen leaf-prune below, this matches the common case; the
+    // proper fix is threading SnapshotOptions through resolve_ref_*.
+    if role == Role::MenuBar {
+        return;
+    }
     let bounds = get_bounds(conn, app_bus, path);
     // Match `build_tree`'s parent-level filter: interactive elements with no
     // bounds (Qt's hidden duplicate toolbars report 0×0) are excluded entirely.

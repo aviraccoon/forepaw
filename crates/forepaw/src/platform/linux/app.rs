@@ -107,6 +107,7 @@ pub(super) fn get_children(
     destination: &str,
     path: &str,
 ) -> Result<Vec<(String, ObjectPath<'static>)>, ForepawError> {
+    crate::trace!("ENTER get_children {path}");
     let reply = conn
         .call_method(
             Some(destination),
@@ -138,6 +139,7 @@ pub(super) fn get_property(
     path: &str,
     property: &str,
 ) -> Option<String> {
+    crate::trace!("ENTER get_property {property} {path}");
     let reply = conn
         .call_method(
             Some(destination),
@@ -169,6 +171,7 @@ pub(super) fn get_property(
 
 /// Get the role of an accessible element.
 pub(super) fn get_role(conn: &Connection, destination: &str, path: &str) -> u32 {
+    crate::trace!("ENTER get_role {path}");
     let reply = conn.call_method(
         Some(destination),
         path,
@@ -184,6 +187,7 @@ pub(super) fn get_role(conn: &Connection, destination: &str, path: &str) -> u32 
 
 /// Get the bounds (x, y, width, height) of a component.
 pub(super) fn get_bounds(conn: &Connection, destination: &str, path: &str) -> Option<Rect> {
+    crate::trace!("ENTER get_bounds {path}");
     let reply = conn.call_method(
         Some(destination),
         path,
@@ -212,6 +216,7 @@ pub(super) fn get_bounds(conn: &Connection, destination: &str, path: &str) -> Op
 
 /// Get the value of an accessible element (for text fields, sliders, etc).
 pub(super) fn get_value(conn: &Connection, destination: &str, path: &str) -> Option<String> {
+    crate::trace!("ENTER get_value {path}");
     // Try the Value interface first (CurrentValue)
     let reply = conn.call_method(
         Some(destination),
