@@ -84,6 +84,41 @@ pub(super) fn window_origin_for_caption(title: &str) -> Result<Option<Point>, Fo
     Ok(None)
 }
 
+/// Bring the `KWin` window whose caption matches `title` to the front via
+/// `org.kde.krunner1.Run("0_{uuid}", "")` — the default "Activate" action.
+/// KDE-only; returns `Ok(false)` if no window matches so the caller can fall
+/// back to AT-SPI2 `GrabFocus` (which focuses but does not raise on Wayland,
+/// so mouse-coordinate actions would click through to whatever's on top).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if `KWin` is unreachable or `Run`
+/// fails to deserialize its (unit) reply.
+pub(super) fn activate_window_for_caption(title: &str) -> Result<bool, ForepawError> {
+    let conn = connect()?;
+    let needle = title.to_lowercase();
+    for (uuid, caption) in list_windows(&conn)? {
+        let cap = caption.to_lowercase();
+        if cap.contains(&needle) || needle.contains(&cap) {
+            let match_id = format!("0_{{{uuid}}}");
+            let _: () = conn
+                .call_method(
+                    Some("org.kde.KWin"),
+                    "/WindowsRunner",
+                    Some("org.kde.krunner1"),
+                    "Run",
+                    &(&match_id, ""),
+                )
+                .map_err(|e| ForepawError::ActionFailed(format!("WindowsRunner.Run: {e}")))?
+                .body()
+                .deserialize()
+                .map_err(|e| ForepawError::ActionFailed(format!("Run body: {e}")))?;
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Parse `supportInformation` → `(logical_width, logical_height, scale)`.
 fn parse_display_info(conn: &Connection) -> Result<(i32, i32, f64), ForepawError> {
     let reply = conn

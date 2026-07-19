@@ -86,6 +86,22 @@ impl LinuxProvider {
         }
         f(guard.as_ref().expect("uinput device just initialized"))
     }
+
+    /// Lock the uinput slot and lazily create the device best-effort, returning
+    /// a guard that yields `Option<&UinputDevice>`. Used by `click_ref`, whose
+    /// AT-SPI2 `DoAction` path needs no uinput and must stay usable without
+    /// `/dev/uinput` access (e.g. SSH sessions with no perms). Creation errors
+    /// are swallowed: a missing device only matters for the coordinate
+    /// fallback, which surfaces a clear error via the action layer.
+    fn uinput_slot(&self) -> std::sync::MutexGuard<'_, Option<input::UinputDevice>> {
+        let mut guard = self.uinput.lock().expect("uinput mutex poisoned");
+        if guard.is_none() {
+            if let Ok(dev) = input::UinputDevice::open() {
+                *guard = Some(dev);
+            }
+        }
+        guard
+    }
 }
 
 impl Default for LinuxProvider {
@@ -161,7 +177,8 @@ impl DesktopProvider for LinuxProvider {
         options: &crate::core::key_combo::ClickOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
         let cached = self.cached_handle(reference.id);
-        action::click_ref(reference, app, options, cached)
+        let guard = self.uinput_slot();
+        action::click_ref(reference, app, options, cached, guard.as_ref())
     }
 
     fn click_at_point(
@@ -273,25 +290,25 @@ impl DesktopProvider for LinuxProvider {
 
     fn drag_path(
         &self,
-        _path: &[crate::core::types::Point],
-        _options: &crate::core::key_combo::DragOptions,
-        _app: Option<&AppTarget>,
+        path: &[crate::core::types::Point],
+        options: &crate::core::key_combo::DragOptions,
+        app: Option<&AppTarget>,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "drag not yet implemented on Linux".into(),
-        ))
+        self.with_uinput(|dev| action::drag_path(path, options, app, dev))
     }
 
     fn drag_refs(
         &self,
-        _from: crate::core::element_tree::ElementRef,
-        _to: crate::core::element_tree::ElementRef,
-        _app: &AppTarget,
-        _options: &crate::core::key_combo::DragOptions,
+        from: crate::core::element_tree::ElementRef,
+        to: crate::core::element_tree::ElementRef,
+        app: &AppTarget,
+        options: &crate::core::key_combo::DragOptions,
     ) -> Result<crate::platform::ActionResult, ForepawError> {
-        Err(ForepawError::ActionFailed(
-            "drag not yet implemented on Linux".into(),
-        ))
+        let from_cached = self.cached_handle(from.id);
+        let to_cached = self.cached_handle(to.id);
+        self.with_uinput(|dev| {
+            action::drag_refs(from, to, app, options, from_cached, to_cached, dev)
+        })
     }
 
     fn ocr_click(

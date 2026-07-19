@@ -14,7 +14,7 @@ use zbus::blocking::Connection;
 
 use crate::core::element_tree::ElementRef;
 use crate::core::errors::ForepawError;
-use crate::core::key_combo::{ClickOptions, MouseButton};
+use crate::core::key_combo::{ClickOptions, DragOptions, MouseButton};
 use crate::core::types::{Point, Rect};
 use crate::platform::{ActionResult, AppTarget};
 
@@ -31,11 +31,18 @@ use super::snapshot::{resolve_ref_atspi, AtspiRef};
 // Ref → position / bounds
 // ---------------------------------------------------------------------------
 
-/// Activate an app by requesting keyboard focus on its main window via
-/// AT-SPI2 `Component.GrabFocus`. Raw uinput events go to whichever window has
-/// keyboard focus, so the target must be focused before injecting. This is
-/// compositor-agnostic (goes through the a11y bus); whether it also *raises*
-/// the window is compositor-dependent.
+/// Activate an app: bring its main window to the front (compositor raise)
+/// and give it keyboard focus (AT-SPI2 `GrabFocus`). Both are needed:
+/// - The compositor raise ensures mouse-coordinate actions land on the target
+///   window. `GrabFocus` alone may focus without raising on Wayland, so a
+///   coordinate click would hit whatever is on top (e.g. a terminal).
+/// - `GrabFocus` ensures keyboard input reaches the window's text fields. The
+///   compositor activation focuses the window but not necessarily a child
+///   input, so a `keyboard-type`/`press` right after may otherwise land on the
+///   previously focused control.
+///
+/// The raise is KDE-specific (`krunner1.Run`); on other compositors only
+/// `GrabFocus` fires, with the no-raise caveat above.
 ///
 /// # Errors
 ///
@@ -48,8 +55,11 @@ pub(super) fn activate(app: &AppTarget) -> Result<(), ForepawError> {
     for (_child_bus, path) in &children {
         let role = get_role(&conn, &app_bus, path.as_str());
         if role == ROLE_FRAME || role == ROLE_WINDOW {
-            // Best-effort: GrabFocus reports unreliable booleans (see
-            // `grab_focus`), but completing the call is what focuses the window.
+            let title = get_property(&conn, &app_bus, path.as_str(), "Name").unwrap_or_default();
+            // Best-effort raise (KDE-only). GrabFocus below is the
+            // compositor-agnostic keyboard-focus path. Both report unreliable
+            // booleans; completing the calls is what does the work.
+            drop(compositor::activate_window_for_caption(&title));
             let _ = grab_focus(&conn, &app_bus, path.as_str());
             return Ok(());
         }
@@ -105,46 +115,88 @@ pub(super) fn resolve_ref_bounds(
 // Click via AT-SPI2 Action.DoAction
 // ---------------------------------------------------------------------------
 
-/// Click an element identified by ref, via its AT-SPI2 action.
+/// Click an element identified by ref, via AT-SPI2 `DoAction` when possible
+/// and a coordinate click via uinput otherwise.
 ///
-/// `DoAction` conveys no button or click count, so only a plain left-click is
-/// supported on this path; right-click and double-click return an error.
+/// `DoAction` conveys no button or click count, so the AT-SPI2 path only
+/// covers a plain left-click on an element that exposes an Action interface.
+/// Right-click, double-click, and elements with no Action interface fall back
+/// to a real button event at the element's center — which needs `/dev/uinput`
+/// access. Elements with no bounds (some Qt toolbar items) error out, matching
+/// macOS/Windows behavior.
+///
+/// Pass `dev = None` to keep the `DoAction` path off uinput entirely (it goes
+/// through the a11y D-Bus, so it works from any process with D-Bus access,
+/// including SSH sessions with no `/dev/uinput` perms). If a fallback is then
+/// required, the function errors with a pointer to the deployment docs.
 ///
 /// # Errors
 ///
 /// Returns [`ForepawError::AppNotFound`] if the application is not running,
 /// [`ForepawError::StaleRef`] if the ref no longer exists, or
-/// [`ForepawError::ActionFailed`] if the element exposes no action or
-/// `DoAction` reports failure.
+/// [`ForepawError::ActionFailed`] if `DoAction` reports failure, the element
+/// has no bounds (fallback case), or a fallback is required with no device.
 pub(super) fn click_ref(
     reference: ElementRef,
     app: &AppTarget,
     options: &ClickOptions,
     cached: Option<AtspiRef>,
+    dev: Option<&input::UinputDevice>,
 ) -> Result<ActionResult, ForepawError> {
     activate(app)?;
-    if options.button == MouseButton::Right || options.click_count > 1 {
+    let needs_fallback = options.button == MouseButton::Right || options.click_count > 1;
+    if !needs_fallback {
+        let conn = connect_atspi_bus()?;
+        let atspi_ref = resolve_ref_atspi(reference.id, app, cached.clone())?;
+        let identity = element_identity(&conn, &atspi_ref);
+        // No Action interface → fall through to coordinate click.
+        if let Ok(index) = best_action_index(&conn, &atspi_ref) {
+            if do_action(&conn, &atspi_ref.bus, &atspi_ref.path, index) {
+                let action = get_action_name(&conn, &atspi_ref.bus, &atspi_ref.path, index)
+                    .unwrap_or_else(|| "action".to_owned());
+                return Ok(ActionResult::ok_msg(format!(
+                    "invoked {reference} {identity} via AT-SPI2 {action}"
+                )));
+            }
+            return Err(ForepawError::ActionFailed(format!(
+                "DoAction D-Bus call failed on {reference} {identity}"
+            )));
+        }
+    }
+    let Some(dev) = dev else {
         return Err(ForepawError::ActionFailed(format!(
-            "{reference}: right-click/double-click cannot be expressed as an AT-SPI2 \
-             DoAction (it takes only an index)"
+            "{reference}: coordinate click fallback requires /dev/uinput access \
+             (right-click/double-click/no AT-SPI2 action); add the user to the \
+             uinput group or run with /dev/uinput write access"
         )));
-    }
+    };
+    click_ref_via_coords(reference, app, options, cached, dev)
+}
 
-    let conn = connect_atspi_bus()?;
-    let atspi_ref = resolve_ref_atspi(reference.id, app, cached)?;
-    let identity = element_identity(&conn, &atspi_ref);
-    let index = best_action_index(&conn, &atspi_ref)?;
-    if do_action(&conn, &atspi_ref.bus, &atspi_ref.path, index) {
-        let action = get_action_name(&conn, &atspi_ref.bus, &atspi_ref.path, index)
-            .unwrap_or_else(|| "action".to_owned());
-        Ok(ActionResult::ok_msg(format!(
-            "invoked {reference} {identity} via AT-SPI2 {action}"
-        )))
-    } else {
-        Err(ForepawError::ActionFailed(format!(
-            "DoAction D-Bus call failed on {reference} {identity}"
-        )))
-    }
+/// Coordinate-click fallback for [`click_ref`]: resolve the ref's bounds to a
+/// screen-absolute center, then emit a real button event via uinput.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the element has no bounds or a
+/// uinput write fails.
+fn click_ref_via_coords(
+    reference: ElementRef,
+    app: &AppTarget,
+    options: &ClickOptions,
+    cached: Option<AtspiRef>,
+    dev: &input::UinputDevice,
+) -> Result<ActionResult, ForepawError> {
+    let (screen, identity) = ref_screen_center(reference, app, cached)?;
+    input::perform_click(dev, screen, options.button, options.click_count)?;
+    let label = match (options.button, options.click_count) {
+        (MouseButton::Right, _) => "right-clicked",
+        (MouseButton::Left, n) if n > 1 => "double-clicked",
+        (MouseButton::Left, _) => "clicked",
+    };
+    Ok(ActionResult::ok_msg(format!(
+        "{label} {reference} {identity} via coordinate fallback"
+    )))
 }
 
 /// Pick the action index to invoke. Most elements expose a single action; for
@@ -502,23 +554,22 @@ pub(super) fn hover_region(
     )))
 }
 
-/// Hover over an element identified by ref. The ref's AT-SPI2 bounds are
-/// surface-local for app windows (origin `[0,0]`), so the app window's
-/// compositor origin is added to land on the real screen position.
+/// Resolve a ref to its center in screen-absolute physical pixels, plus the
+/// element identity for result messages. AT-SPI2 bounds are surface-local for
+/// app windows (origin `[0,0]`); this offsets by the app window's compositor
+/// origin to land on the real screen position. Used by hover and the
+/// [`click_ref`] coordinate fallback.
 ///
 /// # Errors
 ///
-/// Returns [`ForepawError::AppNotFound`] if the application is not running,
-/// [`ForepawError::StaleRef`] if the ref no longer exists, or
-/// [`ForepawError::ActionFailed`] if the compositor position is unavailable
-/// or a uinput write fails.
-pub(super) fn hover_ref(
+/// Returns [`ForepawError::AppNotFound`] / [`ForepawError::StaleRef`] /
+/// [`ForepawError::ActionFailed`] (no bounds, or no resolvable compositor
+/// position) per the underlying calls.
+fn ref_screen_center(
     reference: ElementRef,
     app: &AppTarget,
     cached: Option<AtspiRef>,
-    dev: &input::UinputDevice,
-) -> Result<ActionResult, ForepawError> {
-    activate(app)?;
+) -> Result<(Point, String), ForepawError> {
     let conn = connect_atspi_bus()?;
     let atspi_ref = resolve_ref_atspi(reference.id, app, cached)?;
     let identity = element_identity(&conn, &atspi_ref);
@@ -526,9 +577,144 @@ pub(super) fn hover_ref(
         .ok_or_else(|| ForepawError::ActionFailed(format!("{reference} has no bounds")))?
         .center();
     let frame = window_frame_screen_bounds(app)?;
-    let screen = Point::new(frame.x + center.x, frame.y + center.y);
+    Ok((Point::new(frame.x + center.x, frame.y + center.y), identity))
+}
+
+/// Hover over an element identified by ref. Resolves to a screen-absolute
+/// point via [`ref_screen_center`] and moves there with the interpolated
+/// [`input::hover_move`] so hover/enter handlers fire.
+///
+/// # Errors
+///
+/// See [`ref_screen_center`].
+pub(super) fn hover_ref(
+    reference: ElementRef,
+    app: &AppTarget,
+    cached: Option<AtspiRef>,
+    dev: &input::UinputDevice,
+) -> Result<ActionResult, ForepawError> {
+    activate(app)?;
+    let (screen, identity) = ref_screen_center(reference, app, cached)?;
     input::hover_move(dev, screen)?;
     Ok(ActionResult::ok_msg(format!(
         "hovered {reference} {identity}"
     )))
+}
+
+// ---------------------------------------------------------------------------
+// Drag (uinput interpolated move with button held)
+// ---------------------------------------------------------------------------
+
+/// Drag along a path of points. Coordinates are window-relative when `app` is
+/// given, else screen-absolute. Validates each window-relative point against
+/// the app's window bounds (the same coordinate space the snapshot reports),
+/// converts to screen-absolute, and delegates to [`input::perform_drag`].
+/// `close_path` appends the start point (3+ points only).
+///
+/// Reporting uses the caller's input coordinates (window-relative when `app`
+/// was given), matching macOS/Windows drag output.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the path has fewer than 2 points,
+/// a point is outside the window, or a uinput write fails.
+pub(super) fn drag_path(
+    path: &[Point],
+    options: &DragOptions,
+    app: Option<&AppTarget>,
+    dev: &input::UinputDevice,
+) -> Result<ActionResult, ForepawError> {
+    if path.len() < 2 {
+        return Err(ForepawError::ActionFailed(
+            "Drag path requires at least 2 points".into(),
+        ));
+    }
+    let mut screen_path: Vec<Point> = if let Some(app) = app {
+        activate(app)?;
+        let bounds = window_frame_screen_bounds(app)?;
+        path.iter()
+            .map(|p| {
+                validate_point_in_window(p, &bounds)?;
+                Ok(Point::new(bounds.x + p.x, bounds.y + p.y))
+            })
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        path.to_vec()
+    };
+    if options.close_path && screen_path.len() >= 3 {
+        if let Some(first) = screen_path.first().copied() {
+            screen_path.push(first);
+        }
+    }
+    input::perform_drag(dev, &screen_path, options)?;
+
+    let msg = match path {
+        [from, to] => format!(
+            "dragged from {:.0},{:.0} to {:.0},{:.0} ({} steps, {:.1}s)",
+            from.x, from.y, to.x, to.y, options.steps, options.duration,
+        ),
+        _ => format!(
+            "dragged through {} points ({} steps/segment, {:.1}s)",
+            path.len(),
+            options.steps,
+            options.duration,
+        ),
+    };
+    Ok(ActionResult::ok_msg(msg))
+}
+
+/// Drag from one element to another, identified by refs. Resolves both refs
+/// to screen-absolute centers (AT-SPI2 bounds, surface-local for app windows,
+/// offset by the window's compositor origin), then delegates to
+/// [`input::perform_drag`]. Reporting uses the window-relative centers (what
+/// the snapshot shows).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::AppNotFound`] if the application is not running,
+/// [`ForepawError::StaleRef`] if either ref no longer exists, or
+/// [`ForepawError::ActionFailed`] if either element has no bounds or a uinput
+/// write fails.
+pub(super) fn drag_refs(
+    from_ref: ElementRef,
+    to_ref: ElementRef,
+    app: &AppTarget,
+    options: &DragOptions,
+    from_cached: Option<AtspiRef>,
+    to_cached: Option<AtspiRef>,
+    dev: &input::UinputDevice,
+) -> Result<ActionResult, ForepawError> {
+    activate(app)?;
+    let conn = connect_atspi_bus()?;
+    let frame = window_frame_screen_bounds(app)?;
+    let (start_screen, start_window) = ref_center(&conn, from_ref, app, from_cached, &frame)?;
+    let (end_screen, end_window) = ref_center(&conn, to_ref, app, to_cached, &frame)?;
+    input::perform_drag(dev, &[start_screen, end_screen], options)?;
+    Ok(ActionResult::ok_msg(format!(
+        "dragged {from_ref} to {to_ref} ({:.0},{:.0} → {:.0},{:.0}, {} steps, {:.1}s)",
+        start_window.x, start_window.y, end_window.x, end_window.y, options.steps, options.duration,
+    )))
+}
+
+/// Resolve a ref to (screen-absolute center, window-relative center). Used by
+/// [`drag_refs`] which needs both: screen coords for the input primitive,
+/// window-relative for the result message. `frame` is the caller-resolved
+/// window origin (shared across both refs to avoid a second compositor lookup).
+///
+/// # Errors
+///
+/// Returns [`ForepawError::StaleRef`] if the ref no longer exists, or
+/// [`ForepawError::ActionFailed`] if the element has no bounds.
+fn ref_center(
+    conn: &Connection,
+    reference: ElementRef,
+    app: &AppTarget,
+    cached: Option<AtspiRef>,
+    frame: &Rect,
+) -> Result<(Point, Point), ForepawError> {
+    let atspi_ref = resolve_ref_atspi(reference.id, app, cached)?;
+    let rel = get_bounds(conn, &atspi_ref.bus, &atspi_ref.path)
+        .ok_or_else(|| ForepawError::ActionFailed(format!("{reference} has no bounds")))?
+        .center();
+    Ok((Point::new(frame.x + rel.x, frame.y + rel.y), rel))
 }

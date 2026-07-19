@@ -42,7 +42,7 @@ use std::time::Duration;
 
 use crate::core::encoder_detection::is_command_available;
 use crate::core::errors::ForepawError;
-use crate::core::key_combo::{KeyCombo, Modifier, MouseButton};
+use crate::core::key_combo::{DragOptions, KeyCombo, Modifier, MouseButton};
 use crate::core::types::Point;
 
 use super::compositor;
@@ -401,6 +401,76 @@ pub fn hover_move(dev: &UinputDevice, target: Point) -> Result<(), ForepawError>
         thread::sleep(Duration::from_millis(20));
     }
     thread::sleep(Duration::from_millis(120));
+    Ok(())
+}
+
+/// Drag along `path` (screen-absolute physical px). Holds the button from
+/// the first point to the last, with `options.steps` interpolated moves per
+/// segment at an even cadence. Modifiers are held for the whole drag and
+/// released in reverse at the end. `options.pressure` is macOS-only and
+/// ignored here. The caller validates path length and applies `close_path`.
+///
+/// On a `< 2`-element path this is a no-op early return, matching the
+/// macOS/Windows primitives; all slice indexing below is in bounds after that
+/// check.
+///
+/// # Errors
+///
+/// Returns [`ForepawError::ActionFailed`] if the device has no pointer
+/// capability or a uinput write fails.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "path indexing after len >= 2 check"
+)]
+pub fn perform_drag(
+    dev: &UinputDevice,
+    path: &[Point],
+    options: &DragOptions,
+) -> Result<(), ForepawError> {
+    if path.len() < 2 {
+        return Ok(());
+    }
+    let button = if options.right_button {
+        MouseButton::Right
+    } else {
+        MouseButton::Left
+    };
+    let mods: Vec<u16> = options.modifiers.iter().filter_map(modifier_code).collect();
+
+    for &m in &mods {
+        dev.key_down(m)?;
+    }
+
+    let first = path[0];
+    dev.move_to(first)?;
+    thread::sleep(Duration::from_millis(20));
+    dev.button_down(button)?;
+
+    let segments = path.len() - 1;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "segment count to f64 for delay math"
+    )]
+    let step_delay = options.duration / (segments as f64) / f64::from(options.steps);
+    for seg_idx in 0..segments {
+        let (seg_from, seg_to) = (path[seg_idx], path[seg_idx + 1]);
+        for i in 1..=options.steps {
+            let t = f64::from(i) / f64::from(options.steps);
+            dev.move_to(Point::new(
+                seg_from.x + (seg_to.x - seg_from.x) * t,
+                seg_from.y + (seg_to.y - seg_from.y) * t,
+            ))?;
+            thread::sleep(Duration::from_secs_f64(step_delay));
+        }
+    }
+
+    // Snap to the exact endpoint (path[segments] == path.last(), both in bounds
+    // after the len >= 2 early return) before release.
+    dev.move_to(path[segments])?;
+    dev.button_up(button)?;
+    for &m in mods.iter().rev() {
+        dev.key_up(m)?;
+    }
     Ok(())
 }
 
